@@ -1,0 +1,9 @@
+#!/bin/sh
+
+grep -qs " /tmp tmpfs " /proc/mounts || \
+  mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /tmp
+
+grep -qs " /run tmpfs " /proc/mounts || \
+  mount -t tmpfs -o mode=0755,nosuid,nodev,size=16M tmpfs /run
+
+swapoff -a >/dev/null 2>&1 || true

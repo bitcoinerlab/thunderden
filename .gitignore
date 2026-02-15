@@ -1,0 +1,8 @@
+out/
+third_party/
+*.img
+*.img.sha256
+SHA256SUMS
+SHA256SUMS.asc
+OVMF_VARS.fd
+.DS_Store
