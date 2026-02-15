@@ -59,8 +59,7 @@ THUNDERDEN_SHOW_QR="$PWD/scripts/thunderden_show_qr.sh" \
 ./scripts/thunderden_tui.sh
 ```
 
-For camera-less testing, test signing via `thunderden_sign_psbt.sh` directly,
-or provide a reachable video device path with `THUNDERDEN_CAMERA_DEVICE`.
+For camera-less testing, test signing via `thunderden_sign_psbt.sh` directly.
 
 ## 4) PSBT test vectors (recommended)
 

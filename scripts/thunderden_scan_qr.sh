@@ -6,6 +6,27 @@ die() {
   exit 1
 }
 
+scan_psbt_qr() {
+  local line=""
+
+  printf 'Scanning on %s. Hold QR in front of camera. Press Ctrl+C to cancel.\n' "$DEVICE" >&2
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      cHNidP*)
+        printf '%s\n' "$line"
+        return 0
+        ;;
+      *)
+        printf 'Ignoring non-PSBT QR payload. Expected base64 PSBT (cHNidP...).\n' >&2
+        ;;
+    esac
+  done < <(zbarcam --raw --quiet "$DEVICE" 2>/dev/null)
+
+  return 1
+}
+
 detect_default_device() {
   local dev=""
 
@@ -23,7 +44,7 @@ DEVICE="${1:-}"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   cat <<'EOF'
-Scan a single QR code and print base64 PSBT.
+Scan camera continuously until a base64 PSBT QR is found.
 
 Usage:
   thunderden_scan_qr.sh [video_device]
@@ -33,6 +54,8 @@ EOF
   exit 0
 fi
 
+trap 'die "Scan cancelled"' INT TERM
+
 command -v zbarcam >/dev/null 2>&1 || die "zbarcam is not available in this image"
 
 if [ -z "$DEVICE" ]; then
@@ -41,13 +64,4 @@ fi
 
 [ -c "$DEVICE" ] || die "Camera device is not available: $DEVICE"
 
-PSBT="$(zbarcam --raw --quiet --oneshot "$DEVICE" 2>/dev/null | sed -n '/^cHNidP/p' | sed -n '1p')"
-
-case "$PSBT" in
-  cHNidP*)
-    printf '%s\n' "$PSBT"
-    ;;
-  *)
-    die "No valid base64 PSBT found"
-    ;;
-esac
+scan_psbt_qr || die "No valid base64 PSBT found"
