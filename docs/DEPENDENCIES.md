@@ -20,6 +20,11 @@ Thunder Den keeps runtime dependencies intentionally small.
 - `bitcoin-bash-tools`: `7fa496aa2004c55f7845a6cbd003007fb40694fc`
 - Linux kernel version in defconfig: `6.12.65`
 
+## Runtime storage model
+
+- Root filesystem runs from initramfs in RAM.
+- Boot runtime guard enforces RAM-only runtime policy before launching TUI.
+
 ## Build host dependencies (Linux)
 
 Required build + image assembly packages:
@@ -28,7 +33,7 @@ Required build + image assembly packages:
 - `xz-utils tar python3 libncurses-dev gawk patch pkg-config`
 - `meson ninja-build cmake`
 - `gpg gpg-agent dirmngr`
-- `parted dosfstools e2fsprogs util-linux`
+- `parted dosfstools util-linux`
 
 Optional (local image boot testing only):
 

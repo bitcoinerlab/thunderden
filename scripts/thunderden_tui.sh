@@ -7,6 +7,7 @@ SIGNER="${THUNDERDEN_SIGNER:-/usr/bin/thunderden_sign_psbt.sh}"
 SCANNER="${THUNDERDEN_SCANNER:-/usr/bin/thunderden_scan_qr.sh}"
 SHOW_QR="${THUNDERDEN_SHOW_QR:-/usr/bin/thunderden_show_qr.sh}"
 NETWORK="${THUNDERDEN_NETWORK:-main}"
+CAMERA_DEVICE="${THUNDERDEN_CAMERA_DEVICE:-}"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   cat <<'EOF'
@@ -17,6 +18,7 @@ Environment:
   THUNDERDEN_SCANNER  Path to scanner script
   THUNDERDEN_SHOW_QR  Path to QR output script
   THUNDERDEN_NETWORK  main|testnet|signet|regtest
+  THUNDERDEN_CAMERA_DEVICE Optional camera device path
 EOF
   exit 0
 fi
@@ -97,7 +99,7 @@ menu() {
 Offline PSBT signer (BIP84, single-frame QR)
 
 1) Scan unsigned PSBT from camera
-2) Paste unsigned PSBT manually
+2) Set camera device
 3) Power off
 
 EOF
@@ -107,6 +109,7 @@ EOF
 main() {
   local choice=""
   local psbt=""
+  local device_input=""
 
   command -v "$SIGNER" >/dev/null 2>&1 || {
     printf 'Signer script not found: %s\n' "$SIGNER" >&2
@@ -118,7 +121,13 @@ main() {
     IFS= read -r choice || true
     case "$choice" in
       1)
-        if ! psbt="$($SCANNER)"; then
+        if [ -n "$CAMERA_DEVICE" ]; then
+          if ! psbt="$($SCANNER "$CAMERA_DEVICE")"; then
+            printf 'QR scan failed on %s.\n' "$CAMERA_DEVICE" >&2
+            press_enter
+            continue
+          fi
+        elif ! psbt="$($SCANNER)"; then
           printf 'QR scan failed.\n' >&2
           press_enter
           continue
@@ -128,10 +137,14 @@ main() {
         fi
         ;;
       2)
-        psbt="$(prompt_visible 'Paste unsigned PSBT (base64): ')"
-        if ! sign_flow "$psbt"; then
-          press_enter
+        device_input="$(prompt_visible 'Camera device path (empty for auto): ')"
+        CAMERA_DEVICE="$device_input"
+        if [ -n "$CAMERA_DEVICE" ]; then
+          printf 'Camera device set to: %s\n' "$CAMERA_DEVICE"
+        else
+          printf 'Camera device set to auto-detect.\n'
         fi
+        press_enter
         ;;
       3)
         poweroff

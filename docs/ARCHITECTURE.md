@@ -8,6 +8,7 @@ auditable and strict enough to be trusted.
 ## Security goals
 
 - Never require persistent secret storage.
+- Keep root filesystem RAM-backed during runtime.
 - Never need outbound network access for signing.
 - Never mount host machine disks.
 - Keep dependency graph small, explicit, and pinned.
@@ -54,6 +55,12 @@ v1 default:
 - Disable USB storage runtime modules (`usb_storage`, `uas`) after boot.
 - Disable Bluetooth and Wi-Fi stacks.
 - No automount daemon and no host disk mounts.
+
+## Runtime storage model
+
+- Kernel embeds initramfs rootfs (`BR2_TARGET_ROOTFS_INITRAMFS`).
+- Boot image only provides EFI partition and kernel payload.
+- Boot runtime guard enforces RAM-backed root, tmpfs `/tmp` + `/run`, and swap-off before TUI launch.
 
 ## Why `descriptorprocesspsbt`
 

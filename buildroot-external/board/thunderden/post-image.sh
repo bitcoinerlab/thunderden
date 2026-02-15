@@ -23,9 +23,8 @@ install -m 0755 \
   for f in \
     bzImage \
     grub.img \
-    rootfs.ext2 \
-    rootfs.ext4 \
-    rootfs.tar \
+    rootfs.cpio \
+    rootfs.cpio.gz \
     efi-part/EFI/BOOT/bootx64.efi \
     efi-part/EFI/BOOT/grub.cfg; do
     if [ -f "$f" ]; then

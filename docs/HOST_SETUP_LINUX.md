@@ -21,7 +21,7 @@ sudo apt install -y \
   xz-utils tar python3 libncurses-dev gawk patch pkg-config \
   meson ninja-build cmake \
   gpg gpg-agent dirmngr \
-  parted dosfstools e2fsprogs util-linux
+  parted dosfstools util-linux
 ```
 
 ## Optional packages (local VM image boot test)
@@ -37,7 +37,7 @@ sudo apt install -y qemu-system-x86 ovmf
 ```bash
 for cmd in \
   git make gcc gpg curl tar xz \
-  parted losetup mkfs.vfat mkfs.ext4 mount umount mountpoint; do
+  parted losetup mkfs.vfat mount umount mountpoint; do
   command -v "$cmd" >/dev/null || echo "missing: $cmd"
 done
 ```

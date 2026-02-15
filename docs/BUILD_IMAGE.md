@@ -64,7 +64,7 @@ cd "$HOME/thunderden_new"
 
 Artifacts land in:
 
-- `out/buildroot/images/rootfs.tar`
+- `out/buildroot/images/rootfs.cpio`
 - `out/buildroot/images/bzImage`
 - `out/buildroot/images/efi-part/`
 - `out/buildroot/images/thunderden.SHA256SUMS`
@@ -78,6 +78,9 @@ cd "$HOME/thunderden_new"
   --binaries-dir ./out/buildroot/images \
   --output thunderden-uefi.img
 ```
+
+The generated image includes only an EFI partition and boots a kernel with
+embedded initramfs rootfs (RAM-backed runtime root).
 
 Generate hash for release/testing:
 

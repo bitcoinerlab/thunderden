@@ -14,8 +14,6 @@ check_dir() {
 
 check_dir "${ROOT_DIR}/scripts"
 check_dir "${ROOT_DIR}/buildroot-external"
-
-bash -n "${ROOT_DIR}/entropy2Mnemonic.bash"
-bash -n "${ROOT_DIR}/makeRandom.bash"
+check_dir "${ROOT_DIR}/experiments"
 
 echo "All shell syntax checks passed."

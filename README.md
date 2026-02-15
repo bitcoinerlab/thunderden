@@ -7,11 +7,17 @@ minimal dependencies, and stateless operation.
 
 - Boot from USB into text mode only.
 - No login flow; launch a signer TUI directly.
-- Stateless runtime: root is read-only, runtime state in tmpfs, reboot clears all secrets.
+- Stateless runtime: initramfs root in RAM, `/tmp` and `/run` on tmpfs, reboot clears all secrets.
 - Network disabled for the signing workflow.
 - Use Bitcoin Core for PSBT signing through `descriptorprocesspsbt`.
 - Use `bitcoin-bash-tools` only for BIP39 (`mnemonic -> seed -> BIP84 descriptors`).
 - QR-only transport (scan unsigned PSBT, display signed PSBT).
+- TUI flow is camera-first for unsigned PSBT input.
+
+System runtime guardrails:
+
+- Boot guard checks runtime policy before launching the TUI (`/` RAM-backed, `/tmp` + `/run` tmpfs, swap off).
+- On guard failure, Thunder Den stays on an error screen and waits for user action.
 
 ## Distribution paths
 
@@ -36,13 +42,13 @@ typing while reducing attack surface.
 - `buildroot-external/`: Buildroot external tree (`thunderden_x86_64_defconfig`).
 - `scripts/thunderden_tui.sh`: no-login text menu for signing.
 - `scripts/thunderden_sign_psbt.sh`: BIP84 descriptor signing pipeline.
+- `scripts/thunderden_runtime_guard.sh`: boot-time runtime policy checks.
 - `scripts/thunderden_scan_qr.sh`: camera scanner helper.
 - `scripts/thunderden_show_qr.sh`: terminal QR display helper.
 - `scripts/build_thunderden.sh`: build helper for Buildroot external tree.
 - `scripts/fetch_bitcoin_bash_tools.sh`: pin/fetch helper for `bitcoin-bash-tools`.
 - `scripts/test_shell_syntax.sh`: shell syntax checks.
-- `entropy2Mnemonic.bash`: mnemonic conversion prototype.
-- `makeRandom.bash`: early entropy prototype.
+- `experiments/`: quarantined prototype scripts not used in runtime image.
 
 ## Fast path (after source verification)
 

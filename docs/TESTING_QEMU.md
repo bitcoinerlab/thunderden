@@ -59,7 +59,8 @@ THUNDERDEN_SHOW_QR="$PWD/scripts/thunderden_show_qr.sh" \
 ./scripts/thunderden_tui.sh
 ```
 
-For camera-less testing, choose manual PSBT paste mode.
+For camera-less testing, test signing via `thunderden_sign_psbt.sh` directly,
+or provide a reachable video device path with `THUNDERDEN_CAMERA_DEVICE`.
 
 ## 4) PSBT test vectors (recommended)
 
@@ -101,7 +102,18 @@ qemu-system-x86_64 \
 Validate inside guest:
 
 - TUI starts automatically.
+- if runtime policy fails, a guard error screen is shown (system does not auto-poweroff).
 - no active network path is used by signer flow (`cat /proc/net/dev`, `rfkill list` if available).
+- runtime root is RAM-backed (`awk '$2=="/"{print $3}' /proc/mounts`).
+- `/tmp` and `/run` are tmpfs before signing.
 - `mount` shows no host disk mounts.
 - Signing works and output QR renders.
 - Reboot clears prior sensitive data.
+
+## 6) UTM notes (macOS test only)
+
+- Use an emulated `x86_64` VM with UEFI firmware.
+- Attach `thunderden-uefi.img` as a disk (not ISO).
+- Keep a single production GRUB entry; no hidden debug entry is shipped.
+- If display output is blank, add a serial console device and use it only for
+  debugging; production cmdline remains `tty1` only.
