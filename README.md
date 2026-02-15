@@ -9,6 +9,7 @@ minimal dependencies, and stateless operation.
 - No login flow; launch a signer TUI directly.
 - Stateless runtime: initramfs root in RAM, `/tmp` and `/run` on tmpfs, reboot clears all secrets.
 - Network disabled for the signing workflow.
+- TUI includes network selection for signing context (mainnet/testnet).
 - Use Bitcoin Core for PSBT signing through `descriptorprocesspsbt`.
 - Use `bitcoin-bash-tools` only for BIP39 (`mnemonic -> seed -> BIP84 descriptors`).
 - QR-only transport (scan unsigned PSBT, display signed PSBT).

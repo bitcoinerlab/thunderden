@@ -25,14 +25,15 @@ auditable and strict enough to be trusted.
 
 1. User boots Thunder Den image.
 2. Text menu starts automatically (no login).
-3. User enters BIP39 mnemonic (and optional passphrase).
-4. Tool derives BIP84 account key (`m/84h/0h/0h`) using `bitcoin-bash-tools`.
-5. Tool builds descriptors:
+3. User selects signing network context (mainnet/testnet).
+4. User enters BIP39 mnemonic (and optional passphrase).
+5. Tool derives BIP84 account key (`m/84h/0h/0h` for mainnet, `m/84h/1h/0h` for testnet) using `bitcoin-bash-tools`.
+6. Tool builds descriptors:
    - `wpkh(<account_xprv>/0/*)`
    - `wpkh(<account_xprv>/1/*)`
-6. Tool calls Bitcoin Core `descriptorprocesspsbt` offline.
-7. Signed PSBT is shown as text and QR.
-8. Reboot wipes runtime state.
+7. Tool calls Bitcoin Core `descriptorprocesspsbt` offline.
+8. Signed PSBT is shown as text and QR.
+9. Reboot wipes runtime state.
 
 ## Dependency policy
 
