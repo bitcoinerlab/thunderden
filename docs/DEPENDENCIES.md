@@ -18,6 +18,7 @@ Thunder Den keeps runtime dependencies intentionally small.
 - Buildroot: `2025.02.10`
 - Bitcoin Core release line: `30.2` (tracked in release verification records)
 - `bitcoin-bash-tools`: `7fa496aa2004c55f7845a6cbd003007fb40694fc`
+- `bitcoin-bash-tools/bitcoin.sh` sha256: `772d8d38f0cc215000815176deb555733fa22ff59e3154e280d6fb228af9397e`
 - Linux kernel version in defconfig: `6.12.65`
 
 ## Runtime storage model
