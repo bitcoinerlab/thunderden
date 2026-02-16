@@ -53,9 +53,40 @@ Anything else should be treated as an exception and justified in review.
 v1 default:
 
 - Keep USB keyboard and USB camera usable.
-- Disable USB storage runtime modules (`usb_storage`, `uas`) after boot.
+- Compile out USB storage support (`CONFIG_USB_STORAGE=n`, `CONFIG_UAS=n`).
 - Disable Bluetooth and Wi-Fi stacks.
 - No automount daemon and no host disk mounts.
+
+## Kernel-level exfiltration reduction
+
+Common concern: "Can the signer leak seed data through radios or storage that
+I accidentally leave connected?"
+
+Thunder Den tries to reduce those paths directly in kernel configuration:
+
+- No Wi-Fi/Bluetooth stack (`WIRELESS`, `WLAN`, `BT`, `CFG80211`, `MAC80211` disabled).
+- No wired NIC driver families (`ETHERNET`, `VIRTIO_NET`, `E1000*`, `R8169`, etc. disabled).
+- USB mass-storage disabled (`USB_STORAGE`, `UAS` disabled) while keyboard/camera remain enabled.
+- Block-storage stack for host disks disabled (`SCSI`, `ATA`, `VIRTIO_BLK`, `BLK_DEV_SD` disabled).
+- Runtime disk filesystems and automount paths disabled (`EXT4_FS`, `AUTOFS4_FS` disabled).
+- Kernel modules disabled (`MODULES=n`) so these surfaces cannot be re-enabled at runtime.
+
+What remains enabled is the minimum Linux runtime plumbing (for example
+`proc`, `sysfs`, `tmpfs`) needed for userspace and guard checks.
+
+This is an attack-surface reduction layer, not an absolute guarantee against
+all hardware/firmware compromise scenarios.
+
+The source of truth for exact kernel toggles is
+`buildroot-external/board/thunderden/linux.config`.
+
+## Entropy policy (selected default)
+
+- Kernel command line sets `random.trust_cpu=off random.trust_bootloader=off`.
+- Keep hardware RNG support enabled (`HW_RANDOM_*`, including `HW_RANDOM_VIRTIO`).
+- Keep `virtio-rng` for VM test coverage; real hardware does not depend on virtio.
+- Any future seed/mnemonic generation flow must run `thunderden_entropy_guard.sh` first.
+- Entropy guard uses a strict infinite wait (no timeout) until kernel CSPRNG is initialized.
 
 ## Runtime storage model
 

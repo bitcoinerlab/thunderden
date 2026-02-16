@@ -26,6 +26,12 @@ Thunder Den keeps runtime dependencies intentionally small.
 - Root filesystem runs from initramfs in RAM.
 - Boot runtime guard enforces RAM-only runtime policy before launching TUI.
 
+## Runtime entropy defaults
+
+- Kernel cmdline uses `random.trust_cpu=off random.trust_bootloader=off`.
+- Kernel keeps hardware RNG support enabled (including `virtio-rng` for VM tests).
+- Runtime entropy gate script (`thunderden_entropy_guard.sh`) enforces strict infinite wait before any seed-generation flow.
+
 ## Build host dependencies (Linux)
 
 Required build + image assembly packages:

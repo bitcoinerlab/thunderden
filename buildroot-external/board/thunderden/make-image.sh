@@ -235,27 +235,23 @@ create_tiny_uefi_stub_image() {
   efi_staging_dir="${mnt_dir}/efi-staging"
 
   {
-    dd if=/dev/zero of="$output_img" bs=1M count="$size_mb" status=none
-
-    parted -s "$output_img" \
-      mklabel msdos \
-      mkpart primary fat16 1MiB 100% \
-      set 1 boot on
-
-    part_meta="$(extract_partition_start_and_size_bytes "$output_img")"
-    part_start_bytes="${part_meta%%:*}"
-    part_size_bytes="${part_meta##*:}"
-
-    truncate -s "$part_size_bytes" "$esp_img"
-    mkfs.vfat -F 16 -n THUNDEREFI "$esp_img"
-
-    mkdir -p "$efi_staging_dir/EFI/BOOT"
-    cp -f "$KERNEL_IMG" "$efi_staging_dir/EFI/BOOT/BOOTX64.EFI"
-
-    copy_tree_into_fat_image "$esp_img" "$efi_staging_dir"
-
-    dd if="$esp_img" of="$output_img" bs=512 seek="$((part_start_bytes / 512))" conv=notrunc status=none
-    sync
+    dd if=/dev/zero of="$output_img" bs=1M count="$size_mb" status=none &&
+      parted -s "$output_img" \
+        mklabel msdos \
+        mkpart primary fat16 1MiB 100% \
+        set 1 boot on &&
+      part_meta="$(extract_partition_start_and_size_bytes "$output_img")" &&
+      part_start_bytes="${part_meta%%:*}" &&
+      part_size_bytes="${part_meta##*:}" &&
+      truncate -s "$part_size_bytes" "$esp_img" &&
+      mkfs.vfat -F 16 -n THUNDEREFI "$esp_img" &&
+      mkdir -p "$efi_staging_dir/EFI/BOOT" &&
+      cp -f "$KERNEL_IMG" "$efi_staging_dir/EFI/BOOT/BOOTX64.EFI" &&
+      copy_tree_into_fat_image "$esp_img" "$efi_staging_dir" &&
+      dd if="$esp_img" of="$output_img" bs=512 seek="$((part_start_bytes / 512))" conv=notrunc status=none &&
+      mdir -i "$output_img@@${part_start_bytes}" :: >/dev/null &&
+      mdir -i "$output_img@@${part_start_bytes}" ::/EFI/BOOT >/dev/null &&
+      sync
   } || status=$?
 
   rm -rf "$mnt_dir"
@@ -331,6 +327,7 @@ need_cmd dd
 need_cmd parted
 need_cmd mkfs.vfat
 need_cmd mcopy
+need_cmd mdir
 need_cmd truncate
 need_cmd cp
 need_cmd wc

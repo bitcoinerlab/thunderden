@@ -10,8 +10,10 @@ This board directory wires the Buildroot image to boot directly into Thunder Den
 - Pins Bitcoin Core package source to 30.2 with verified hashes.
 - Narrows Bitcoin Core build outputs to daemon + CLI only.
 - Prunes unused Bitcoin Core helper binaries from target rootfs.
-- Uses a minimal `linux.config` fragment file for signer-specific kernel deltas.
-- Kernel override disables unneeded sound, external NIC, and storage filesystems/drivers.
+- Uses a custom `linux.config` baseline for Thunder Den runtime and hardening.
+- Kernel config disables unneeded sound, external NIC, and USB mass-storage paths.
+- Kernel cmdline enforces `random.trust_cpu=off random.trust_bootloader=off`.
+- Installs `thunderden_entropy_guard.sh` for strict entropy gating in seed-generation flows.
 - Replaces BusyBox `inittab` to launch `thunderden_boot.sh` on `tty1`.
 - Blacklists USB storage, Bluetooth, and Wi-Fi modules via `/etc/modprobe.d/`.
 - Overrides GRUB config for shared BIOS+UEFI boot entry.

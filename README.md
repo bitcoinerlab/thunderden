@@ -33,6 +33,34 @@ v1 keeps keyboard and camera support, while disabling USB storage and radio
 stacks (Wi-Fi/Bluetooth). This keeps the machine usable for QR signing and
 typing while reducing attack surface.
 
+## Kernel exfiltration controls (plain language)
+
+People often worry about a signer leaking a seed through radios or by copying
+data to attached storage. Thunder Den reduces those paths at kernel level:
+
+- No Wi-Fi or Bluetooth stack is compiled in.
+- No wired Ethernet driver family is compiled in.
+- USB keyboard/camera support is kept, but USB mass-storage support is compiled out.
+- Host-disk storage paths are compiled out (SCSI/ATA/virtio block stack disabled).
+- Host-disk filesystems are compiled out for runtime policy (`ext4` and automount path disabled).
+- Kernel modules are disabled, so features cannot be re-enabled later by loading modules.
+- Root runtime stays RAM-backed (initramfs + tmpfs), so normal operation does not mount host disks.
+
+Some virtual filesystems (for example `proc`, `sysfs`, `tmpfs`) remain enabled
+because Linux userspace needs them. This is expected and does not re-enable
+host-disk access by itself.
+
+These controls reduce exfiltration surface at kernel level, but they are not a
+replacement for firmware, hardware, and supply-chain trust checks.
+
+For exact switches, see `buildroot-external/board/thunderden/linux.config`.
+
+## Entropy policy (default)
+
+- Kernel boot args explicitly set `random.trust_cpu=off random.trust_bootloader=off`.
+- Hardware RNG paths remain enabled (including `virtio-rng` for VM testing).
+- Future seed/mnemonic generation flows must run `thunderden_entropy_guard.sh` first; it waits indefinitely for kernel RNG readiness.
+
 ## Repo layout
 
 - `docs/ARCHITECTURE.md`: trust model, components, dependency policy.
@@ -45,6 +73,7 @@ typing while reducing attack surface.
 - `scripts/thunderden_tui.sh`: no-login text menu for signing.
 - `scripts/thunderden_sign_psbt.sh`: BIP84 descriptor signing pipeline.
 - `scripts/thunderden_runtime_guard.sh`: boot-time runtime policy checks.
+- `scripts/thunderden_entropy_guard.sh`: strict entropy readiness gate for seed generation flows.
 - `scripts/thunderden_scan_qr.sh`: camera scanner helper.
 - `scripts/thunderden_show_qr.sh`: terminal QR display helper.
 - `scripts/build_thunderden.sh`: build helper for Buildroot external tree.

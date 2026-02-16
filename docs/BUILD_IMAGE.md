@@ -120,6 +120,8 @@ Replace `/dev/sdX` with the real USB device.
 - signing flow works from QR/paste input
 - Wi-Fi/Bluetooth disabled
 - USB keyboard/camera usable
+- `/proc/cmdline` includes `random.trust_cpu=off` and `random.trust_bootloader=off`
+- `/usr/bin/thunderden_entropy_guard.sh --quiet` exits 0 (it may block until RNG is ready)
 - reboot clears runtime secrets
 
 ## 8) Release bundle checklist

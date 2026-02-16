@@ -11,6 +11,7 @@ install -d -m 0755 "${TARGET_DIR}/usr/bin"
 
 for s in \
   thunderden_boot.sh \
+  thunderden_entropy_guard.sh \
   thunderden_hardening.sh \
   thunderden_runtime_guard.sh \
   thunderden_scan_qr.sh \
@@ -58,6 +59,10 @@ fi
 
 rm -f "${TARGET_DIR}/usr/bin/bitcoin-tx" "${TARGET_DIR}/usr/bin/bitcoin-util"
 
+# Thunder Den is built for initramfs-only runtime without kernel modules.
+# Remove any stale module trees left by incremental builds.
+rm -rf "${TARGET_DIR}/lib/modules"
+
 if [ ! -f "${BBT_SRC}/bitcoin.sh" ]; then
   echo "Missing bitcoin-bash-tools at ${BBT_SRC}" >&2
   echo "Run scripts/fetch_bitcoin_bash_tools.sh first or set THUNDERDEN_BBT_SRC." >&2
@@ -73,10 +78,24 @@ fi
 
 install -D -m 0644 "${GRUB_CFG_SRC}" "${TARGET_DIR}/boot/grub/grub.cfg"
 
-if [ ! -f "${TARGET_DIR}/lib/grub/i386-pc/boot.img" ]; then
-  echo "Missing BIOS GRUB stage1 image at /lib/grub/i386-pc/boot.img" >&2
+BOOT_IMG_SRC=""
+
+if [ -f "${TARGET_DIR}/lib/grub/i386-pc/boot.img" ]; then
+  BOOT_IMG_SRC="${TARGET_DIR}/lib/grub/i386-pc/boot.img"
+else
+  for candidate in "${BASE_DIR}"/build/grub2-*/build-i386-pc/grub-core/boot.img; do
+    if [ -f "${candidate}" ]; then
+      BOOT_IMG_SRC="${candidate}"
+      break
+    fi
+  done
+fi
+
+if [ -z "${BOOT_IMG_SRC}" ]; then
+  echo "Missing BIOS GRUB stage1 image (boot.img)." >&2
+  echo "Checked TARGET_DIR and Buildroot grub2 build output paths." >&2
   echo "Enable BR2_TARGET_GRUB2_I386_PC for hybrid BIOS+UEFI image output." >&2
   exit 1
 fi
 
-install -D -m 0644 "${TARGET_DIR}/lib/grub/i386-pc/boot.img" "${BINARIES_DIR}/boot.img"
+install -D -m 0644 "${BOOT_IMG_SRC}" "${BINARIES_DIR}/boot.img"

@@ -1,0 +1,3 @@
+Use this before generating any random number:
+
+thunderden_entropy_guard.sh
