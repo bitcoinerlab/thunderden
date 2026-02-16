@@ -25,4 +25,6 @@ This board directory wires the Buildroot image to boot directly into Thunder Den
 - `output/images/efi-part/`
 - `output/images/bzImage`
 
+The helper uses rootless assembly (no loop devices or mounts).
+
 Runtime root filesystem is embedded into the kernel as initramfs.

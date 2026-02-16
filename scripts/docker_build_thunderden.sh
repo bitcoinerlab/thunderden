@@ -20,10 +20,11 @@ Options:
   -h, --help                 Show this help
 
 Notes:
-  - Designed for macOS, Linux, and Windows users with Docker.
+  - Designed for macOS, Linux, and Windows users running WSL2 with Docker.
   - Source is copied into the container; build is done on container-local fs.
   - Build caches (downloads, sources, build output) are stored in Docker
     volumes for reuse across runs.
+  - Final image assembly is rootless (no loop devices / no privileged mode).
 EOF
 }
 
@@ -95,6 +96,34 @@ need_cmd() {
     exit 1
   }
 }
+
+ensure_supported_host_shell() {
+  local host_uname=""
+
+  host_uname="$(uname -s)"
+  case "$host_uname" in
+    Darwin|Linux)
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      echo "Unsupported shell: $host_uname" >&2
+      echo "Use WSL2 (Linux shell) on Windows." >&2
+      exit 1
+      ;;
+    *)
+      echo "Unsupported host OS: $host_uname" >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "$host_uname" = "Linux" ] && [ -f /proc/sys/kernel/osrelease ]; then
+    if grep -qi microsoft /proc/sys/kernel/osrelease && ! grep -qi wsl2 /proc/sys/kernel/osrelease; then
+      echo "WSL1 detected. Use WSL2 for supported Docker workflow." >&2
+      exit 1
+    fi
+  fi
+}
+
+ensure_supported_host_shell
 
 need_cmd docker
 need_cmd tar
@@ -185,7 +214,12 @@ cd /cache/src
 cd $WORK_REPO_DIR
 export BR2_DL_DIR=/cache/dl
 ./scripts/build_thunderden.sh --buildroot-dir /cache/src/buildroot-${BUILDROOT_VERSION} --output-dir /cache/out
-PATH="/usr/sbin:/sbin:\$PATH" /cache/out/images/make-uefi-image.sh --binaries-dir /cache/out/images --output thunderden-uefi.img
+"
+
+docker exec "$CONTAINER_NAME" bash -lc "
+set -euo pipefail
+cd $WORK_REPO_DIR
+$WORK_REPO_DIR/buildroot-external/board/thunderden/make-uefi-image.sh --binaries-dir /cache/out/images --output thunderden-uefi.img
 sha256sum thunderden-uefi.img > thunderden-uefi.img.sha256
 sha256sum -c thunderden-uefi.img.sha256
 "

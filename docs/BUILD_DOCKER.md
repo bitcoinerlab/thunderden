@@ -1,4 +1,4 @@
-# Docker Build Flow (macOS / Linux / Windows)
+# Docker Build Flow (macOS / Linux / Windows WSL2)
 
 This flow builds Thunder Den inside Docker without compiling on a host-mounted
 source directory. It avoids the most crash-prone file-sharing path on Docker
@@ -10,7 +10,12 @@ Desktop.
 - A shell with `bash` and `tar`
   - macOS: Terminal
   - Linux: shell of choice
-  - Windows: WSL2 or Git Bash
+  - Windows: WSL2 shell (Ubuntu/Debian/etc.)
+
+Windows note:
+
+- Git Bash / MSYS shells are not an officially supported path for this script.
+- Run from WSL2 with Docker Desktop WSL integration enabled.
 
 ## One-command build
 
@@ -43,6 +48,7 @@ Artifacts are written to repository root by default:
   volumes across runs for incremental rebuilds.
 - Build runs as a non-root user inside container to avoid host-tar configure
   failures.
+- Final image assembly is rootless (no privileged mode required).
 
 ## Notes
 

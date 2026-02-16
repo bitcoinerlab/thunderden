@@ -36,7 +36,7 @@ typing while reducing attack surface.
 
 - `docs/ARCHITECTURE.md`: trust model, components, dependency policy.
 - `docs/BUILD_IMAGE.md`: detailed human-followable image build guide.
-- `docs/BUILD_DOCKER.md`: Docker-based build flow for macOS/Linux/Windows users.
+- `docs/BUILD_DOCKER.md`: Docker-based build flow for macOS/Linux/Windows (WSL2).
 - `docs/DEPENDENCIES.md`: minimal dependency set and pinned references.
 - `docs/HOST_SETUP_LINUX.md`: from-scratch Linux host requirements and setup.
 - `docs/RELEASE_VERIFICATION.md`: prebuilt image verification and release signing flow.
@@ -60,6 +60,8 @@ typing while reducing attack surface.
 ./scripts/build_thunderden.sh --buildroot-dir /path/to/buildroot
 ./out/buildroot/images/make-uefi-image.sh --binaries-dir ./out/buildroot/images --output thunderden-uefi.img
 ```
+
+The UEFI image assembly helper is rootless (no loop-mount step).
 
 Then flash `thunderden-uefi.img` to USB and boot.
 

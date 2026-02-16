@@ -21,7 +21,7 @@ sudo apt install -y \
   xz-utils tar python3 libncurses-dev gawk patch pkg-config \
   meson ninja-build cmake \
   gpg gpg-agent dirmngr \
-  parted dosfstools util-linux
+  parted dosfstools
 ```
 
 ## Optional packages (local VM image boot test)
@@ -37,16 +37,19 @@ sudo apt install -y qemu-system-x86 ovmf
 ```bash
 for cmd in \
   git make gcc gpg curl tar xz \
-  parted losetup mkfs.vfat mount umount mountpoint; do
+  parted mkfs.vfat; do
   command -v "$cmd" >/dev/null || echo "missing: $cmd"
 done
 ```
 
 If any command is missing, install the corresponding package first.
 
+`mcopy` is built by Buildroot into `out/buildroot/host/bin` during normal builds,
+and the Thunder Den image assembly helper auto-discovers that path.
+
 ## PATH gotcha for admin tools
 
-On some minimal Debian shells, `parted` and similar tools are under
+On some minimal Debian shells, `parted` and `mkfs.vfat` are under
 `/usr/sbin` and are not present in the default non-root `PATH`.
 
 Use this before running image assembly scripts:

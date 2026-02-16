@@ -17,6 +17,7 @@ Options:
 Notes:
   - Run scripts/fetch_bitcoin_bash_tools.sh first.
   - Linux host only.
+  - Build runs in 3 phases: defconfig, toolchain, full target/image.
   - Resulting binaries are in <output-dir>/images.
 EOF
 }
@@ -118,16 +119,29 @@ mkdir -p "${OUTPUT_DIR}"
 
 sanitize_path_for_buildroot
 
+# Phase 1: load Thunder Den defconfig into Buildroot output directory.
+echo
+echo "== [1/3] Loading Thunder Den defconfig =="
 make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" thunderden_x86_64_defconfig
 
 if [ "${MENUCONFIG}" -eq 1 ]; then
+  echo
+  echo "== [1b/3] Opening menuconfig (optional) =="
   make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" menuconfig
 fi
 
+# Phase 2: build Buildroot internal cross-toolchain and host toolchain bits.
+echo
+echo "== [2/3] Building Buildroot toolchain =="
+make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" toolchain
+
+# Phase 3: build target packages (Bitcoin, zbar, etc.) and image artifacts.
+echo
+echo "== [3/3] Building target packages and images =="
 THUNDERDEN_BBT_SRC="${BBT_SRC}" \
   make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}"
 
 echo
 echo "Build complete. Artifacts: ${OUTPUT_DIR}/images"
-echo "To create UEFI disk image:"
-echo "  ${OUTPUT_DIR}/images/make-uefi-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden-uefi.img"
+echo "To create UEFI disk image (rootless):"
+echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-uefi-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden-uefi.img"

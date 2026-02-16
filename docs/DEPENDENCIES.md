@@ -34,7 +34,7 @@ Required build + image assembly packages:
 - `xz-utils tar python3 libncurses-dev gawk patch pkg-config`
 - `meson ninja-build cmake`
 - `gpg gpg-agent dirmngr`
-- `parted dosfstools util-linux`
+- `parted dosfstools`
 
 Optional (local image boot testing only):
 
@@ -42,7 +42,9 @@ Optional (local image boot testing only):
 
 Admin-path note:
 
-- some hosts require `/usr/sbin:/sbin` in `PATH` for `parted`/`losetup` discovery
+- some hosts require `/usr/sbin:/sbin` in `PATH` for `parted`/`mkfs.vfat` discovery
+- `mcopy` is provided by Buildroot host tools (`<output-dir>/host/bin`) and the image
+  helper prepends that path automatically when available
 
 ## Rules
 

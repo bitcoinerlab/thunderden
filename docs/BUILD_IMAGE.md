@@ -79,6 +79,8 @@ cd "$HOME/thunderden"
   --output thunderden-uefi.img
 ```
 
+This image assembly step is rootless (no `sudo`, no loop mounts).
+
 The generated image includes only an EFI partition and boots a kernel with
 embedded initramfs rootfs (RAM-backed runtime root).
 
