@@ -6,25 +6,60 @@ die() {
   exit 1
 }
 
+status() {
+  printf 'Scanner: %s\n' "$*" >&2
+}
+
+normalize_payload() {
+  local payload="$1"
+
+  payload="${payload//$'\r'/}"
+  payload="${payload#QR-Code: }"
+  payload="${payload#QR-Code:}"
+  printf '%s' "$payload"
+}
+
 scan_psbt_qr() {
   local line=""
+  local payload=""
+  local preview=""
+  local attempt=0
 
-  printf 'Scanning on %s. Hold QR in front of camera. Press Ctrl+C to cancel.\n' "$DEVICE" >&2
+  status "Using camera device: $DEVICE"
+  status 'Hold a single-frame base64 PSBT QR in front of the camera.'
+  status 'Waiting for payload that starts with cHNidP... (Ctrl+C to cancel)'
 
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    case "$line" in
-      cHNidP*)
-        printf '%s\n' "$line"
-        return 0
-        ;;
-      *)
-        printf 'Ignoring non-PSBT QR payload. Expected base64 PSBT (cHNidP...).\n' >&2
-        ;;
-    esac
-  done < <(zbarcam --raw --quiet "$DEVICE" 2>/dev/null)
+  while true; do
+    attempt=$((attempt + 1))
+    status "Opening camera stream (attempt $attempt)..."
 
-  return 1
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      payload="$(normalize_payload "$line")"
+      [ -n "$payload" ] || continue
+
+      case "$payload" in
+        cHNidP*)
+          status 'Detected base64 PSBT payload.'
+          printf '%s\n' "$payload"
+          return 0
+          ;;
+        *)
+          if [ "${#payload}" -gt 36 ]; then
+            preview="${payload:0:36}..."
+          else
+            preview="$payload"
+          fi
+          status "Decoded non-PSBT QR payload: $preview"
+          ;;
+      esac
+    done < <(zbarcam --raw --quiet --nodisplay "$DEVICE")
+
+    status 'Camera stream ended or failed to open. Retrying in 1 second...'
+    sleep 1
+  done
+
+  return 0
 }
 
 detect_default_device() {
@@ -63,5 +98,6 @@ if [ -z "$DEVICE" ]; then
 fi
 
 [ -c "$DEVICE" ] || die "Camera device is not available: $DEVICE"
+[ -r "$DEVICE" ] || die "Camera device is not readable: $DEVICE"
 
 scan_psbt_qr || die "No valid base64 PSBT found"
