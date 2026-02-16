@@ -1,0 +1,45 @@
+{
+  "id": "tv2-testnet-two-inputs",
+  "title": "Testnet multi-input (2 inputs)",
+  "description": "Two-input p2wpkh testnet signing path coverage.",
+  "network": "testnet",
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "passphrase": "",
+  "account_path": "m/84h/1h/0h",
+  "account_xprv": "tprv8fSjiqEQ8YG7Ro7gw2ScwcvweYuuWi1ZzGUtrPz918HvDtBzL5s2voFTrN4y3yUwj5cYD54pLhxk6NKCzHUjcka3zbKjbTEcsuAnkzbjhkL",
+  "master_fingerprint_hex": "73c5da0a",
+  "unsigned_txid": "ff11862f69f1062441a1d168eb0917effb35c7c615ac2fddfd2fd08356d3e814",
+  "unsigned_psbt_sha256": "ba1733964b7611bca1807baf4a65fd8adca352484803776cb2221f816967c22f",
+  "input_count": 2,
+  "output_count": 1,
+  "inputs": [
+    {
+      "txid_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+      "vout": 1,
+      "amount_sat": 80000,
+      "path": "m/84h/1h/0h/0/0",
+      "address": "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
+      "script_pubkey_hex": "0014d0c4a3ef09e997b6e99e397e518fe3e41a118ca1"
+    },
+    {
+      "txid_hex": "3333333333333333333333333333333333333333333333333333333333333333",
+      "vout": 0,
+      "amount_sat": 50000,
+      "path": "m/84h/1h/0h/0/1",
+      "address": "tb1qd7spv5q28348xl4myc8zmh983w5jx32cjhkn97",
+      "script_pubkey_hex": "00146fa016500a3c6a737ebb260e2ddca78ba9234558"
+    }
+  ],
+  "outputs": [
+    {
+      "amount_sat": 128500,
+      "path": "m/84h/1h/0h/1/1",
+      "address": "tb1qkwgskuzmmwwvqajnyr7yp9hgvh5y45kg8wvdmd",
+      "script_pubkey_hex": "0014b3910b705bdb9cc0765320fc4096e865e84ad2c8"
+    }
+  ],
+  "notes": [
+    "Previous outputs are synthetic placeholders for offline signing tests.",
+    "These vectors are not intended for broadcast to Bitcoin network."
+  ]
+}
