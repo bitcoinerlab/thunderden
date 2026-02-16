@@ -50,7 +50,7 @@ export BR_SRC="$HOME/thunderden-build/src/buildroot-${BR_VER}"
 ## 3) Prepare Thunder Den repo
 
 ```bash
-cd "$HOME/thunderden_new"
+cd "$HOME/thunderden"
 ./scripts/fetch_bitcoin_bash_tools.sh
 make syntax
 ```
@@ -58,7 +58,7 @@ make syntax
 ## 4) Build Thunder Den
 
 ```bash
-cd "$HOME/thunderden_new"
+cd "$HOME/thunderden"
 ./scripts/build_thunderden.sh --buildroot-dir "$BR_SRC"
 ```
 
@@ -73,7 +73,7 @@ Artifacts land in:
 ## 5) Assemble bootable UEFI disk image
 
 ```bash
-cd "$HOME/thunderden_new"
+cd "$HOME/thunderden"
 ./out/buildroot/images/make-uefi-image.sh \
   --binaries-dir ./out/buildroot/images \
   --output thunderden-uefi.img

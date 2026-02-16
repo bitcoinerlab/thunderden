@@ -1,4 +1,4 @@
-.PHONY: syntax fetch-bbt build
+.PHONY: syntax fetch-bbt build docker-build
 
 syntax:
 	./scripts/test_shell_syntax.sh
@@ -12,3 +12,6 @@ build:
 		exit 1; \
 	fi
 	./scripts/build_thunderden.sh --buildroot-dir "$(BR_SRC)"
+
+docker-build:
+	./scripts/docker_build_thunderden.sh

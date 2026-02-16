@@ -36,6 +36,7 @@ typing while reducing attack surface.
 
 - `docs/ARCHITECTURE.md`: trust model, components, dependency policy.
 - `docs/BUILD_IMAGE.md`: detailed human-followable image build guide.
+- `docs/BUILD_DOCKER.md`: Docker-based build flow for macOS/Linux/Windows users.
 - `docs/DEPENDENCIES.md`: minimal dependency set and pinned references.
 - `docs/HOST_SETUP_LINUX.md`: from-scratch Linux host requirements and setup.
 - `docs/RELEASE_VERIFICATION.md`: prebuilt image verification and release signing flow.
@@ -47,6 +48,7 @@ typing while reducing attack surface.
 - `scripts/thunderden_scan_qr.sh`: camera scanner helper.
 - `scripts/thunderden_show_qr.sh`: terminal QR display helper.
 - `scripts/build_thunderden.sh`: build helper for Buildroot external tree.
+- `scripts/docker_build_thunderden.sh`: Docker build helper without bind-mount compile.
 - `scripts/fetch_bitcoin_bash_tools.sh`: pin/fetch helper for `bitcoin-bash-tools`.
 - `scripts/test_shell_syntax.sh`: shell syntax checks.
 - `experiments/`: quarantined prototype scripts not used in runtime image.
