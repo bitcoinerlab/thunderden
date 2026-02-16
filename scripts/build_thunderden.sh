@@ -147,5 +147,7 @@ THUNDERDEN_BBT_SRC="${BBT_SRC}" \
 
 echo
 echo "Build complete. Artifacts: ${OUTPUT_DIR}/images"
-echo "To create hybrid BIOS+UEFI disk image (rootless):"
-echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-uefi-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden-uefi.img"
+echo "To create max-compat hybrid BIOS+UEFI image:"
+echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden.img"
+echo "To create smallest current-fit image (UEFI-only):"
+echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden-small.img --small"

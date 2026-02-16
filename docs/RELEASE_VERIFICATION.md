@@ -8,7 +8,8 @@ Thunder Den default user flow is:
 
 ## Expected release artifacts
 
-- `thunderden-uefi.img`
+- `thunderden.img`
+- `thunderden-small.img` (optional tiny UEFI-only variant)
 - `SHA256SUMS`
 - `SHA256SUMS.asc` (GPG detached signature)
 - `thunderden-release-key.asc`
@@ -21,7 +22,8 @@ mkdir -p thunderden-release && cd thunderden-release
 # Replace RELEASE_BASE_URL with the release endpoint
 RELEASE_BASE_URL="https://example.com/thunderden/v1.0.0"
 
-curl -LO "${RELEASE_BASE_URL}/thunderden-uefi.img"
+curl -LO "${RELEASE_BASE_URL}/thunderden.img"
+curl -LO "${RELEASE_BASE_URL}/thunderden-small.img" || true
 curl -LO "${RELEASE_BASE_URL}/SHA256SUMS"
 curl -LO "${RELEASE_BASE_URL}/SHA256SUMS.asc"
 curl -LO "${RELEASE_BASE_URL}/thunderden-release-key.asc"
@@ -30,7 +32,8 @@ gpg --import thunderden-release-key.asc
 gpg --fingerprint --keyid-format long
 gpg --verify SHA256SUMS.asc SHA256SUMS
 
-grep ' thunderden-uefi.img$' SHA256SUMS | sha256sum -c -
+grep ' thunderden.img$' SHA256SUMS | sha256sum -c -
+grep ' thunderden-small.img$' SHA256SUMS | sha256sum -c - || true
 ```
 
 Before trusting the key, compare the release key fingerprint against at
@@ -39,7 +42,7 @@ least two independent channels controlled by the project.
 ## Flash verified image
 
 ```bash
-sudo dd if=thunderden-uefi.img of=/dev/sdX bs=4M status=progress conv=fsync
+sudo dd if=thunderden.img of=/dev/sdX bs=4M status=progress conv=fsync
 sync
 ```
 
@@ -48,7 +51,8 @@ Replace `/dev/sdX` with the real USB device.
 ## Maintainer release signing flow
 
 ```bash
-sha256sum thunderden-uefi.img > SHA256SUMS
+sha256sum thunderden.img > SHA256SUMS
+[ -f thunderden-small.img ] && sha256sum thunderden-small.img >> SHA256SUMS
 gpg --armor --detach-sign --output SHA256SUMS.asc SHA256SUMS
 ```
 

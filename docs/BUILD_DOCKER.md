@@ -27,11 +27,16 @@ From repository root:
 
 Artifacts are written to repository root by default:
 
-- `thunderden-uefi.img` (single hybrid BIOS+UEFI image)
-- `thunderden-uefi.img.sha256`
+- `thunderden.img` (max-compat BIOS+UEFI, FAT32, 64 MiB)
+- `thunderden.img.sha256`
+- `thunderden-small.img` (smallest current payload fit, UEFI-only FAT16 best-effort)
+- `thunderden-small.img.sha256`
 - `thunderden.SHA256SUMS` (if produced)
 
-By default, image assembly uses `64` MiB for firmware compatibility margin.
+By default, the script generates both outputs:
+
+- compatibility image: fixed `64` MiB FAT32 for broad firmware support
+- tiny image: smallest UEFI-only FAT16 size that still fits current payload
 
 ## Useful options
 

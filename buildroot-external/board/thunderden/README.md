@@ -25,7 +25,12 @@ This board directory wires the Buildroot image to boot directly into Thunder Den
 
 ## Output helper
 
-`output/images/make-uefi-image.sh` creates a flashable hybrid BIOS+UEFI disk image from:
+`output/images/make-image.sh` creates:
+
+- max-compat hybrid BIOS+UEFI image (default mode)
+- tiny UEFI-only image (`--small`)
+
+Default mode uses:
 
 - `output/images/efi-part/`
 - `output/images/bzImage`

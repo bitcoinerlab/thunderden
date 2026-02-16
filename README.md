@@ -23,7 +23,7 @@ System runtime guardrails:
 
 ## Distribution paths
 
-- Default users: download prebuilt `thunderden-uefi.img` (hybrid BIOS+UEFI) and verify signatures/hashes.
+- Default users: download prebuilt `thunderden.img` (hybrid BIOS+UEFI) and verify signatures/hashes.
 - Advanced users: reproducible self-build on Linux host/VM.
 - Build host support is Linux-only in this repo flow.
 
@@ -58,7 +58,7 @@ typing while reducing attack surface.
 ```bash
 ./scripts/fetch_bitcoin_bash_tools.sh
 ./scripts/build_thunderden.sh --buildroot-dir /path/to/buildroot
-./out/buildroot/images/make-uefi-image.sh --binaries-dir ./out/buildroot/images --output thunderden-uefi.img
+./out/buildroot/images/make-image.sh --binaries-dir ./out/buildroot/images --output thunderden.img
 ```
 
 The hybrid image assembly helper is rootless (no loop-mount step).
@@ -68,9 +68,12 @@ default output image size is 64 MiB. This keeps a FAT32 boot partition with
 enough headroom for old firmware quirks and supports one image that boots on
 both legacy BIOS and UEFI machines.
 
-If you need lab-only smaller images, override size explicitly with `--size-mb`.
+Docker builds generate two artifacts by default:
 
-Then flash `thunderden-uefi.img` to USB and boot.
+- `thunderden.img`: max-compat BIOS+UEFI image (FAT32, 64 MiB)
+- `thunderden-small.img`: smallest current payload fit (UEFI-only, FAT16, best-effort compatibility)
+
+Then flash `thunderden.img` to USB and boot.
 
 Default prebuilt-image verification flow is documented in
 `docs/RELEASE_VERIFICATION.md`.

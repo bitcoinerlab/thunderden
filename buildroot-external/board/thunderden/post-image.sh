@@ -15,8 +15,8 @@ if [ -d "${BINARIES_DIR}/efi-part" ] && [ -f "${BINARIES_DIR}/bzImage" ]; then
 fi
 
 install -m 0755 \
-  "${EXTERNAL_DIR}/board/thunderden/make-uefi-image.sh" \
-  "${BINARIES_DIR}/make-uefi-image.sh"
+  "${EXTERNAL_DIR}/board/thunderden/make-image.sh" \
+  "${BINARIES_DIR}/make-image.sh"
 
 {
   cd "${BINARIES_DIR}"

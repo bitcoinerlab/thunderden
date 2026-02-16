@@ -4,6 +4,5 @@ third_party/
 *.img.sha256
 SHA256SUMS
 SHA256SUMS.asc
-SHA256SUMS.asc
 thunderden.SHA256SUMS
 .DS_Store

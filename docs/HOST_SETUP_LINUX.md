@@ -12,7 +12,7 @@ so this project documents Linux host setup only.
 ## Install required host packages
 
 These are the minimal packages needed to build and assemble
-`thunderden-uefi.img`:
+`thunderden.img` / `thunderden-small.img`:
 
 ```bash
 sudo apt update

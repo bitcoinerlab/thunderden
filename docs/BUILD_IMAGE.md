@@ -68,36 +68,46 @@ Artifacts land in:
 - `out/buildroot/images/bzImage`
 - `out/buildroot/images/efi-part/`
 - `out/buildroot/images/thunderden.SHA256SUMS`
-- `out/buildroot/images/make-uefi-image.sh`
+- `out/buildroot/images/make-image.sh`
 
 ## 5) Assemble bootable hybrid BIOS+UEFI disk image
 
 ```bash
 cd "$HOME/thunderden"
-./out/buildroot/images/make-uefi-image.sh \
+
+# Max compatibility image (BIOS+UEFI, FAT32, fixed 64 MiB)
+./out/buildroot/images/make-image.sh \
   --binaries-dir ./out/buildroot/images \
-  --output thunderden-uefi.img
+  --output thunderden.img
+
+# Tiny image (smallest UEFI-only FAT16 size that fits current payload)
+./out/buildroot/images/make-image.sh \
+  --binaries-dir ./out/buildroot/images \
+  --output thunderden-small.img \
+  --small
 ```
 
 This image assembly step is rootless (no `sudo`, no loop mounts).
 
-The generated image includes one FAT32 boot partition and boots a kernel with
-embedded initramfs rootfs (RAM-backed runtime root).
+Both images boot a kernel with embedded initramfs rootfs (RAM-backed runtime
+root).
 
-Default output size is `64` MiB for compatibility margin on older firmware.
-If needed for lab testing, you can override with `--size-mb <N>`.
+Use `thunderden.img` as the default release artifact. `thunderden-small.img`
+is a best-effort tiny UEFI-only variant and may be less firmware-compatible.
 
 Generate hash for release/testing:
 
 ```bash
-sha256sum thunderden-uefi.img > thunderden-uefi.img.sha256
-sha256sum -c thunderden-uefi.img.sha256
+sha256sum thunderden.img > thunderden.img.sha256
+sha256sum -c thunderden.img.sha256
+sha256sum thunderden-small.img > thunderden-small.img.sha256
+sha256sum -c thunderden-small.img.sha256
 ```
 
 ## 6) Flash USB image
 
 ```bash
-sudo dd if=thunderden-uefi.img of=/dev/sdX bs=4M status=progress conv=fsync
+sudo dd if=thunderden.img of=/dev/sdX bs=4M status=progress conv=fsync
 sync
 ```
 
@@ -114,8 +124,10 @@ Replace `/dev/sdX` with the real USB device.
 
 ## 8) Release bundle checklist
 
-- `thunderden-uefi.img`
-- `thunderden-uefi.img.sha256`
+- `thunderden.img`
+- `thunderden.img.sha256`
+- `thunderden-small.img` (UEFI-only tiny variant)
+- `thunderden-small.img.sha256`
 - `SHA256SUMS` + `SHA256SUMS.asc`
 - Buildroot version and verification logs
 - Thunder Den repo commit hash

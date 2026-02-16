@@ -219,20 +219,32 @@ export BR2_DL_DIR=/cache/dl
 docker exec "$CONTAINER_NAME" bash -lc "
 set -euo pipefail
 cd $WORK_REPO_DIR
-$WORK_REPO_DIR/buildroot-external/board/thunderden/make-uefi-image.sh --binaries-dir /cache/out/images --output thunderden-uefi.img
-sha256sum thunderden-uefi.img > thunderden-uefi.img.sha256
-sha256sum -c thunderden-uefi.img.sha256
+IMAGE_HELPER=$WORK_REPO_DIR/buildroot-external/board/thunderden/make-image.sh
+
+# Compatibility-first image.
+\"\$IMAGE_HELPER\" --binaries-dir /cache/out/images --output thunderden.img
+sha256sum thunderden.img > thunderden.img.sha256
+sha256sum -c thunderden.img.sha256
+
+# Tiny image (smallest current FAT16 fit, UEFI-only).
+\"\$IMAGE_HELPER\" --binaries-dir /cache/out/images --output thunderden-small.img --small
+sha256sum thunderden-small.img > thunderden-small.img.sha256
+sha256sum -c thunderden-small.img.sha256
 "
 
-docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden-uefi.img" "$OUTPUT_DIR/thunderden-uefi.img"
-docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden-uefi.img.sha256" "$OUTPUT_DIR/thunderden-uefi.img.sha256"
+docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden.img" "$OUTPUT_DIR/thunderden.img"
+docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden.img.sha256" "$OUTPUT_DIR/thunderden.img.sha256"
+docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden-small.img" "$OUTPUT_DIR/thunderden-small.img"
+docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden-small.img.sha256" "$OUTPUT_DIR/thunderden-small.img.sha256"
 docker cp "$CONTAINER_NAME:/cache/out/images/thunderden.SHA256SUMS" "$OUTPUT_DIR/thunderden.SHA256SUMS" >/dev/null 2>&1 || true
 
 echo
 echo "Docker build complete."
 echo "Artifacts:"
-echo "  $OUTPUT_DIR/thunderden-uefi.img"
-echo "  $OUTPUT_DIR/thunderden-uefi.img.sha256"
+echo "  $OUTPUT_DIR/thunderden.img (max compatibility)"
+echo "  $OUTPUT_DIR/thunderden.img.sha256"
+echo "  $OUTPUT_DIR/thunderden-small.img (smallest current payload fit, UEFI-only)"
+echo "  $OUTPUT_DIR/thunderden-small.img.sha256"
 if [ -f "$OUTPUT_DIR/thunderden.SHA256SUMS" ]; then
   echo "  $OUTPUT_DIR/thunderden.SHA256SUMS"
 fi
