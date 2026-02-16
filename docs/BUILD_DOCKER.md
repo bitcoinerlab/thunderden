@@ -27,15 +27,17 @@ From repository root:
 
 Artifacts are written to repository root by default:
 
-- `thunderden-uefi.img`
+- `thunderden-uefi.img` (single hybrid BIOS+UEFI image)
 - `thunderden-uefi.img.sha256`
 - `thunderden.SHA256SUMS` (if produced)
+
+By default, image assembly uses `64` MiB for firmware compatibility margin.
 
 ## Useful options
 
 ```bash
 ./scripts/docker_build_thunderden.sh --output-dir ./artifacts
-./scripts/docker_build_thunderden.sh --buildroot-version 2025.02.10
+./scripts/docker_build_thunderden.sh --buildroot-version 2025.11.1
 ./scripts/docker_build_thunderden.sh --rebuild-image
 ./scripts/docker_build_thunderden.sh --clean-cache
 ```

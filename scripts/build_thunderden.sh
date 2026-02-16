@@ -28,6 +28,7 @@ BUILDROOT_DIR=""
 OUTPUT_DIR="${ROOT_DIR}/out/buildroot"
 MENUCONFIG=0
 BBT_SRC="${THUNDERDEN_BBT_SRC:-${ROOT_DIR}/third_party/bitcoin-bash-tools}"
+THUNDERDEN_BITCOIN_VERSION="30.2"
 
 sanitize_path_for_buildroot() {
   local old_path="$PATH"
@@ -119,29 +120,32 @@ mkdir -p "${OUTPUT_DIR}"
 
 sanitize_path_for_buildroot
 
+echo
+echo "Bitcoin Core pin: ${THUNDERDEN_BITCOIN_VERSION}"
+
 # Phase 1: load Thunder Den defconfig into Buildroot output directory.
 echo
 echo "== [1/3] Loading Thunder Den defconfig =="
-make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" thunderden_x86_64_defconfig
+make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" thunderden_x86_64_defconfig
 
 if [ "${MENUCONFIG}" -eq 1 ]; then
   echo
   echo "== [1b/3] Opening menuconfig (optional) =="
-  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" menuconfig
+  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" menuconfig
 fi
 
 # Phase 2: build Buildroot internal cross-toolchain and host toolchain bits.
 echo
 echo "== [2/3] Building Buildroot toolchain =="
-make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" toolchain
+make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" toolchain
 
 # Phase 3: build target packages (Bitcoin, zbar, etc.) and image artifacts.
 echo
 echo "== [3/3] Building target packages and images =="
 THUNDERDEN_BBT_SRC="${BBT_SRC}" \
-  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}"
+  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}"
 
 echo
 echo "Build complete. Artifacts: ${OUTPUT_DIR}/images"
-echo "To create UEFI disk image (rootless):"
+echo "To create hybrid BIOS+UEFI disk image (rootless):"
 echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-uefi-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden-uefi.img"

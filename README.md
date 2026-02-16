@@ -7,6 +7,7 @@ minimal dependencies, and stateless operation.
 
 - Boot from USB into text mode only.
 - No login flow; launch a signer TUI directly.
+- Ship one hybrid BIOS+UEFI USB image for broad hardware compatibility.
 - Stateless runtime: initramfs root in RAM, `/tmp` and `/run` on tmpfs, reboot clears all secrets.
 - Network disabled for the signing workflow.
 - TUI includes network selection for signing context (mainnet/testnet).
@@ -22,7 +23,7 @@ System runtime guardrails:
 
 ## Distribution paths
 
-- Default users: download prebuilt `thunderden-uefi.img` and verify signatures/hashes.
+- Default users: download prebuilt `thunderden-uefi.img` (hybrid BIOS+UEFI) and verify signatures/hashes.
 - Advanced users: reproducible self-build on Linux host/VM.
 - Build host support is Linux-only in this repo flow.
 
@@ -40,7 +41,6 @@ typing while reducing attack surface.
 - `docs/DEPENDENCIES.md`: minimal dependency set and pinned references.
 - `docs/HOST_SETUP_LINUX.md`: from-scratch Linux host requirements and setup.
 - `docs/RELEASE_VERIFICATION.md`: prebuilt image verification and release signing flow.
-- `docs/TESTING_QEMU.md`: local testing and validation flow.
 - `buildroot-external/`: Buildroot external tree (`thunderden_x86_64_defconfig`).
 - `scripts/thunderden_tui.sh`: no-login text menu for signing.
 - `scripts/thunderden_sign_psbt.sh`: BIP84 descriptor signing pipeline.
@@ -61,20 +61,19 @@ typing while reducing attack surface.
 ./out/buildroot/images/make-uefi-image.sh --binaries-dir ./out/buildroot/images --output thunderden-uefi.img
 ```
 
-The UEFI image assembly helper is rootless (no loop-mount step).
+The hybrid image assembly helper is rootless (no loop-mount step).
+
+Even though the actual boot payload is small (roughly low-20s MiB today), the
+default output image size is 64 MiB. This keeps a FAT32 boot partition with
+enough headroom for old firmware quirks and supports one image that boots on
+both legacy BIOS and UEFI machines.
+
+If you need lab-only smaller images, override size explicitly with `--size-mb`.
 
 Then flash `thunderden-uefi.img` to USB and boot.
 
 Default prebuilt-image verification flow is documented in
 `docs/RELEASE_VERIFICATION.md`.
-
-You can also use shortcuts:
-
-```bash
-make fetch-bbt
-make syntax
-make build BR_SRC=/path/to/buildroot
-```
 
 ## Key references
 

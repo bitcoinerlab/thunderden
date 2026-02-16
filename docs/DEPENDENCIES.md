@@ -7,7 +7,7 @@ Thunder Den keeps runtime dependencies intentionally small.
 - Linux kernel + BusyBox userspace
 - Bash
 - Bitcoin Core (`bitcoind`, `bitcoin-cli`)
-- OpenSSL
+- OpenSSL (`openssl` CLI)
 - `dc` (from `bc`)
 - `libqrencode` tools (`qrencode`)
 - `zbar` (`zbarcam`)
@@ -15,11 +15,11 @@ Thunder Den keeps runtime dependencies intentionally small.
 
 ## Pinned source references
 
-- Buildroot: `2025.02.10`
-- Bitcoin Core release line: `30.2` (tracked in release verification records)
+- Buildroot: `2025.11.1`
+- Bitcoin Core: `30.2` (pinned by `scripts/build_thunderden.sh` + `buildroot-external/patches/bitcoin/30.2/bitcoin.hash`)
 - `bitcoin-bash-tools`: `7fa496aa2004c55f7845a6cbd003007fb40694fc`
 - `bitcoin-bash-tools/bitcoin.sh` sha256: `772d8d38f0cc215000815176deb555733fa22ff59e3154e280d6fb228af9397e`
-- Linux kernel version in defconfig: `6.12.65`
+- Linux kernel: Buildroot latest for pinned release (2025.11.1 currently tracks `6.18`)
 
 ## Runtime storage model
 
@@ -35,10 +35,6 @@ Required build + image assembly packages:
 - `meson ninja-build cmake`
 - `gpg gpg-agent dirmngr`
 - `parted dosfstools`
-
-Optional (local image boot testing only):
-
-- `qemu-system-x86 ovmf`
 
 Admin-path note:
 

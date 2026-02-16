@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Create a Thunder Den GPT UEFI disk image.
+Create a Thunder Den hybrid BIOS+UEFI disk image.
 
 Usage:
   make-uefi-image.sh [--binaries-dir DIR] [--output FILE] [--size-mb N]
@@ -11,16 +11,17 @@ Usage:
 Defaults:
   --binaries-dir  current directory
   --output        thunderden-uefi.img
-  --size-mb       24
+  --size-mb       64
 
 Requirements:
   Linux host tools: dd, parted, mkfs.vfat, mcopy, truncate.
 
 Notes:
-  This image boots a kernel with initramfs rootfs. It contains only an EFI
-  system partition; no writable root partition is created.
+  This image supports both BIOS and UEFI boot from a single USB image.
+  It boots a kernel with initramfs rootfs and contains only one FAT partition;
+  no writable root partition is created.
   Image assembly is rootless and does not use loop devices or mounts.
-  The helper uses FAT16 for very small images and FAT32 for larger images.
+  FAT32 is used for firmware compatibility.
 EOF
 }
 
@@ -131,8 +132,8 @@ copy_tree_into_fat_image() {
 
 BINARIES_DIR="$(pwd)"
 OUTPUT_IMG="thunderden-uefi.img"
-SIZE_MB="24"
-FAT32_MIN_SIZE_MB="34"
+SIZE_MB="64"
+MIN_SIZE_MB="34"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -168,11 +169,17 @@ BINARIES_DIR="$(cd "$BINARIES_DIR" && pwd)"
 
 EFI_DIR="${BINARIES_DIR}/efi-part"
 KERNEL_IMG="${BINARIES_DIR}/bzImage"
+BIOS_BOOT_IMG="${BINARIES_DIR}/boot.img"
+BIOS_GRUB_IMG="${BINARIES_DIR}/grub.img"
+EFI_GRUB_CFG="${EFI_DIR}/EFI/BOOT/grub.cfg"
 
 ensure_host_path
 
 [ -d "$EFI_DIR" ] || { echo "Missing directory: $EFI_DIR" >&2; exit 1; }
 [ -f "$KERNEL_IMG" ] || { echo "Missing file: $KERNEL_IMG" >&2; exit 1; }
+[ -f "$BIOS_BOOT_IMG" ] || { echo "Missing file: $BIOS_BOOT_IMG" >&2; exit 1; }
+[ -f "$BIOS_GRUB_IMG" ] || { echo "Missing file: $BIOS_GRUB_IMG" >&2; exit 1; }
+[ -f "$EFI_GRUB_CFG" ] || { echo "Missing file: $EFI_GRUB_CFG" >&2; exit 1; }
 
 need_cmd dd
 need_cmd parted
@@ -180,6 +187,7 @@ need_cmd mkfs.vfat
 need_cmd mcopy
 need_cmd truncate
 need_cmd cp
+need_cmd wc
 
 case "$SIZE_MB" in
   ''|*[!0-9]*)
@@ -188,19 +196,25 @@ case "$SIZE_MB" in
     ;;
 esac
 
+[ "$SIZE_MB" -ge "$MIN_SIZE_MB" ] || {
+  echo "--size-mb must be >= ${MIN_SIZE_MB} to keep FAT32 valid" >&2
+  exit 1
+}
+
 dd if=/dev/zero of="$OUTPUT_IMG" bs=1M count="$SIZE_MB" status=progress
 
 parted -s "$OUTPUT_IMG" \
-  mklabel gpt \
-  mkpart ESP fat32 1MiB 100% \
-  set 1 esp on
+  mklabel msdos \
+  mkpart primary fat32 1MiB 100% \
+  set 1 boot on
 
 MNT_DIR="$(mktemp -d /tmp/thunderden-image.XXXXXX)"
 ESP_IMG="${MNT_DIR}/esp.vfat"
 EFI_STAGING_DIR="${MNT_DIR}/efi-staging"
 PART_START_BYTES=""
 PART_SIZE_BYTES=""
-FAT_TYPE="32"
+GRUB_CORE_SIZE_BYTES=""
+GRUB_CORE_MAX_BYTES=""
 
 cleanup() {
   rm -rf "${MNT_DIR}"
@@ -212,18 +226,30 @@ PART_META="$(extract_partition_start_and_size_bytes "$OUTPUT_IMG")"
 PART_START_BYTES="${PART_META%%:*}"
 PART_SIZE_BYTES="${PART_META##*:}"
 
-# Very small ESP volumes are invalid/problematic as FAT32 on some firmware,
-# so use FAT16 below this image-size threshold.
-if [ "$SIZE_MB" -lt "$FAT32_MIN_SIZE_MB" ]; then
-  FAT_TYPE="16"
-fi
+GRUB_CORE_SIZE_BYTES="$(wc -c < "$BIOS_GRUB_IMG")"
+GRUB_CORE_MAX_BYTES="$((PART_START_BYTES - 512))"
+
+[ "$GRUB_CORE_MAX_BYTES" -gt 0 ] || {
+  echo "No post-MBR space available for BIOS GRUB core image" >&2
+  exit 1
+}
+
+[ "$GRUB_CORE_SIZE_BYTES" -le "$GRUB_CORE_MAX_BYTES" ] || {
+  echo "grub.img (${GRUB_CORE_SIZE_BYTES} bytes) does not fit in post-MBR gap (${GRUB_CORE_MAX_BYTES} bytes)" >&2
+  exit 1
+}
+
+dd if="$BIOS_BOOT_IMG" of="$OUTPUT_IMG" bs=440 count=1 conv=notrunc status=none
+dd if="$BIOS_GRUB_IMG" of="$OUTPUT_IMG" bs=512 seek=1 conv=notrunc status=none
 
 truncate -s "$PART_SIZE_BYTES" "$ESP_IMG"
-mkfs.vfat -F "$FAT_TYPE" -n THUNDEREFI "$ESP_IMG"
+mkfs.vfat -F 32 -n THUNDEREFI "$ESP_IMG"
 
 mkdir -p "$EFI_STAGING_DIR"
 cp -r "$EFI_DIR/." "$EFI_STAGING_DIR/"
 cp -f "$KERNEL_IMG" "$EFI_STAGING_DIR/bzImage"
+mkdir -p "$EFI_STAGING_DIR/boot/grub"
+cp -f "$EFI_GRUB_CFG" "$EFI_STAGING_DIR/boot/grub/grub.cfg"
 
 copy_tree_into_fat_image "$ESP_IMG" "$EFI_STAGING_DIR"
 
@@ -231,4 +257,4 @@ dd if="$ESP_IMG" of="$OUTPUT_IMG" bs=512 seek="$((PART_START_BYTES / 512))" conv
 
 sync
 
-echo "Created UEFI image: $OUTPUT_IMG"
+echo "Created hybrid BIOS+UEFI image: $OUTPUT_IMG"

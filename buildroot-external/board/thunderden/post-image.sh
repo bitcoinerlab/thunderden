@@ -22,6 +22,7 @@ install -m 0755 \
   cd "${BINARIES_DIR}"
   for f in \
     bzImage \
+    boot.img \
     grub.img \
     rootfs.cpio \
     rootfs.cpio.gz \

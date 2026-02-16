@@ -9,7 +9,7 @@ Usage:
   docker_build_thunderden.sh [options]
 
 Options:
-  --buildroot-version <ver>  Buildroot release version (default: 2025.02.10)
+  --buildroot-version <ver>  Buildroot release version (default: 2025.11.1)
   --builder-image <name>     Docker image used for builds (default: thunderden-builder:debian12)
   --container-name <name>    Container name for current run (default: thunderden-build-run)
   --cache-prefix <prefix>    Prefix for Docker cache volumes (default: thunderden)
@@ -29,7 +29,7 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILDROOT_VERSION="2025.02.10"
+BUILDROOT_VERSION="2025.11.1"
 BUILDER_IMAGE="thunderden-builder:debian12"
 CONTAINER_NAME="thunderden-build-run"
 CACHE_PREFIX="thunderden"

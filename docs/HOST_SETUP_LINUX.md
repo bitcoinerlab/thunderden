@@ -24,14 +24,6 @@ sudo apt install -y \
   parted dosfstools
 ```
 
-## Optional packages (local VM image boot test)
-
-Install only if you want to run local QEMU boot tests on the build host:
-
-```bash
-sudo apt install -y qemu-system-x86 ovmf
-```
-
 ## Preflight checks
 
 ```bash

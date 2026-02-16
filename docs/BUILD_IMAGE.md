@@ -1,4 +1,4 @@
-# Thunder Den Image Build Guide (x86_64 UEFI)
+# Thunder Den Image Build Guide (x86_64 Hybrid BIOS+UEFI)
 
 This guide is the canonical Linux-only self-build flow for Thunder Den v1.
 
@@ -15,7 +15,7 @@ Recommended baseline:
 ## 2) Verify Buildroot source (pinned)
 
 ```bash
-export BR_VER="2025.02.10"
+export BR_VER="2025.11.1"
 mkdir -p "$HOME/thunderden-build/src"
 cd "$HOME/thunderden-build/src"
 
@@ -52,7 +52,7 @@ export BR_SRC="$HOME/thunderden-build/src/buildroot-${BR_VER}"
 ```bash
 cd "$HOME/thunderden"
 ./scripts/fetch_bitcoin_bash_tools.sh
-make syntax
+./scripts/test_shell_syntax.sh
 ```
 
 ## 4) Build Thunder Den
@@ -70,7 +70,7 @@ Artifacts land in:
 - `out/buildroot/images/thunderden.SHA256SUMS`
 - `out/buildroot/images/make-uefi-image.sh`
 
-## 5) Assemble bootable UEFI disk image
+## 5) Assemble bootable hybrid BIOS+UEFI disk image
 
 ```bash
 cd "$HOME/thunderden"
@@ -81,8 +81,11 @@ cd "$HOME/thunderden"
 
 This image assembly step is rootless (no `sudo`, no loop mounts).
 
-The generated image includes only an EFI partition and boots a kernel with
+The generated image includes one FAT32 boot partition and boots a kernel with
 embedded initramfs rootfs (RAM-backed runtime root).
+
+Default output size is `64` MiB for compatibility margin on older firmware.
+If needed for lab testing, you can override with `--size-mb <N>`.
 
 Generate hash for release/testing:
 

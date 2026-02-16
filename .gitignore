@@ -5,6 +5,5 @@ third_party/
 SHA256SUMS
 SHA256SUMS.asc
 SHA256SUMS.asc
-OVMF_VARS.fd
 thunderden.SHA256SUMS
 .DS_Store
