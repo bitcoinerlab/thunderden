@@ -80,6 +80,7 @@ For exact switches, see `buildroot-external/board/thunderden/linux.config`.
 - `scripts/docker_build_thunderden.sh`: Docker build helper without bind-mount compile.
 - `scripts/fetch_bitcoin_bash_tools.sh`: pin/fetch helper for `bitcoin-bash-tools`.
 - `scripts/test_shell_syntax.sh`: shell syntax checks.
+- `test-vectors/qr-signing/`: deterministic QR + PSBT vectors for webcam signing tests.
 - `experiments/`: quarantined prototype scripts not used in runtime image.
 
 ## Fast path (after source verification)
