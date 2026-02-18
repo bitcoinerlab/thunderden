@@ -16,15 +16,14 @@ Usage:
 If data is omitted, one line is read from stdin.
 
 Behavior:
-  - If payload fits as one QR frame, show static QR.
-  - If payload is too dense, stream animated pMofN frames.
+  - Auto mode uses one standard display profile.
+  - In auto mode, show static if reasonable; otherwise stream pMofN frames.
+  - Optional override can show full static QR if it fits screen.
 
 Controls (interactive terminal):
   Enter/q  Exit viewer
-  w/s      Larger/Smaller displayed QR
-  a/d      Lower/Higher density (smaller/larger chunk per frame)
-  arrows   Up/Down = size, Left/Right = density
-  r        Return to static-auto mode
+  p        Full static preview (if it fits)
+  o        Back to auto profile
 EOF
   exit 0
 fi
@@ -39,38 +38,34 @@ fi
 
 command -v qrencode >/dev/null 2>&1 || die "Missing command: qrencode"
 
-QR_TYPE="${THUNDERDEN_QR_TYPE:-UTF8}"
+QR_TYPE="${THUNDERDEN_QR_TYPE:-UTF8i}"
 QR_ECC="${THUNDERDEN_QR_ECC:-L}"
 FRAME_DELAY="${THUNDERDEN_QR_FRAME_DELAY:-0.14}"
+
+STANDARD_MAX_VERSION="${THUNDERDEN_QR_STANDARD_MAX_VERSION:-6}"
 CHUNK_STEP="${THUNDERDEN_QR_CHUNK_STEP:-20}"
 CHUNK_MIN="${THUNDERDEN_QR_CHUNK_MIN:-80}"
 CHUNK_DEFAULT="${THUNDERDEN_QR_CHUNK_DEFAULT:-180}"
 CHUNK_MAX="${THUNDERDEN_QR_CHUNK_MAX:-1200}"
-ZOOM_MIN=0
-ZOOM_MAX=4
-ZOOM="${THUNDERDEN_QR_ZOOM:-0}"
+MARGIN="${THUNDERDEN_QR_MARGIN:-2}"
 
-MARGIN="${THUNDERDEN_QR_MARGIN:-1}"
-
+MAX_QR_VERSION=40
 PAYLOAD_LEN="${#DATA}"
 
+case "$STANDARD_MAX_VERSION" in ''|*[!0-9]*) STANDARD_MAX_VERSION=6 ;; esac
 case "$CHUNK_STEP" in ''|*[!0-9]*) CHUNK_STEP=20 ;; esac
 case "$CHUNK_MIN" in ''|*[!0-9]*) CHUNK_MIN=80 ;; esac
 case "$CHUNK_DEFAULT" in ''|*[!0-9]*) CHUNK_DEFAULT=180 ;; esac
 case "$CHUNK_MAX" in ''|*[!0-9]*) CHUNK_MAX=1200 ;; esac
-case "$ZOOM" in ''|*[!0-9]*) ZOOM=0 ;; esac
-case "$MARGIN" in ''|*[!0-9]*) MARGIN=1 ;; esac
+case "$MARGIN" in ''|*[!0-9]*) MARGIN=2 ;; esac
 
+[ "$STANDARD_MAX_VERSION" -ge 1 ] || STANDARD_MAX_VERSION=6
+[ "$STANDARD_MAX_VERSION" -le "$MAX_QR_VERSION" ] || STANDARD_MAX_VERSION="$MAX_QR_VERSION"
 [ "$CHUNK_STEP" -ge 1 ] || CHUNK_STEP=20
 [ "$CHUNK_MIN" -ge 1 ] || CHUNK_MIN=1
 [ "$CHUNK_DEFAULT" -ge 1 ] || CHUNK_DEFAULT=1
 [ "$CHUNK_MAX" -ge "$CHUNK_MIN" ] || CHUNK_MAX="$CHUNK_MIN"
-[ "$ZOOM" -ge "$ZOOM_MIN" ] || ZOOM="$ZOOM_MIN"
-[ "$ZOOM" -le "$ZOOM_MAX" ] || ZOOM="$ZOOM_MAX"
-
-if [ "$MARGIN" -lt 0 ]; then
-  MARGIN=0
-fi
+[ "$MARGIN" -ge 0 ] || MARGIN=0
 
 if [ "$PAYLOAD_LEN" -lt "$CHUNK_MIN" ]; then
   CHUNK_MIN="$PAYLOAD_LEN"
@@ -85,61 +80,122 @@ if [ "$CHUNK_DEFAULT" -gt "$PAYLOAD_LEN" ]; then
   CHUNK_DEFAULT="$PAYLOAD_LEN"
 fi
 
-PREFER_STATIC=1
+INTERACTIVE=0
+TTY_STATE=""
+
+VIEW_MODE="auto" # auto | full-static
+RENDER_KIND="static" # static | stream
+FRAME_VERSION=1
+FULL_STATIC_VERSION=0
+FULL_STATIC_FITS=0
 CHUNK_SIZE="$CHUNK_DEFAULT"
-MODE="static"
 FRAME_INDEX=0
 NEEDS_RENDER=1
-INTERACTIVE=0
+STATUS_LINE=""
+FORCE_CLEAR=1
+FOOTER_DIRTY=1
 
 declare -a FRAMES=()
 
-can_encode_payload() {
-  qrencode -t "$QR_TYPE" -l "$QR_ECC" -m "$MARGIN" -- "$1" >/dev/null 2>&1
-}
-
-scale_ascii_qr() {
-  local factor="$1"
-
-  if [ "$factor" -le 1 ]; then
-    cat
-    return 0
-  fi
-
-  awk -v f="$factor" '
-    {
-      out = ""
-      for (i = 1; i <= length($0); i++) {
-        c = substr($0, i, 1)
-        for (j = 0; j < f; j++) {
-          out = out c
-        }
-      }
-      for (k = 0; k < f; k++) {
-        print out
-      }
-    }
-  '
-}
-
-render_qr_payload() {
+qrencode_base() {
   local payload="$1"
+  local version="${2:-0}"
 
-  if [ "$ZOOM" -eq 0 ]; then
+  if [ "$version" -gt 0 ]; then
+    qrencode -t "$QR_TYPE" -l "$QR_ECC" -m "$MARGIN" -v "$version" --strict-version -- "$payload"
+  else
     qrencode -t "$QR_TYPE" -l "$QR_ECC" -m "$MARGIN" -- "$payload"
-    return 0
+  fi
+}
+
+can_encode_payload() {
+  local payload="$1"
+  local version="${2:-0}"
+
+  qrencode_base "$payload" "$version" >/dev/null 2>&1
+}
+
+find_min_version() {
+  local payload="$1"
+  find_min_version_up_to "$payload" "$MAX_QR_VERSION"
+}
+
+find_min_version_up_to() {
+  local payload="$1"
+  local limit="$2"
+  local low=1
+  local high="$limit"
+  local mid=0
+
+  if ! can_encode_payload "$payload" "$high"; then
+    return 1
   fi
 
-  qrencode -t ASCII -l "$QR_ECC" -m "$MARGIN" -- "$payload" | scale_ascii_qr "$ZOOM"
+  while [ "$low" -lt "$high" ]; do
+    mid=$(( (low + high) / 2 ))
+    if can_encode_payload "$payload" "$mid"; then
+      high="$mid"
+    else
+      low=$((mid + 1))
+    fi
+  done
+
+  printf '%s' "$low"
+  return 0
+}
+
+fits_screen() {
+  local version="$1"
+  local tty_size=""
+  local tty_rows=0
+  local tty_cols=0
+  local modules=0
+  local rows=0
+  local cols=0
+  local footer_rows=4
+  local max_cols=0
+
+  [ "$INTERACTIVE" -eq 1 ] || return 0
+
+  tty_size="$(stty size < /dev/tty 2>/dev/null || true)"
+  tty_rows="${tty_size%% *}"
+  tty_cols="${tty_size##* }"
+
+  case "$tty_rows" in ''|*[!0-9]*) return 1 ;; esac
+  case "$tty_cols" in ''|*[!0-9]*) return 1 ;; esac
+
+  modules=$((17 + 4 * version + 2 * MARGIN))
+  rows=$(( (modules + 1) / 2 ))
+  cols="$modules"
+
+  max_cols=$((tty_cols - 1))
+  [ "$max_cols" -ge 1 ] || return 1
+
+  [ "$cols" -le "$max_cols" ] && [ $((rows + footer_rows)) -le "$tty_rows" ]
+}
+
+update_full_static_capability() {
+  if [ "$FULL_STATIC_VERSION" -eq 0 ]; then
+    FULL_STATIC_VERSION="$(find_min_version "$DATA")" || FULL_STATIC_VERSION=0
+  fi
+
+  if [ "$FULL_STATIC_VERSION" -gt 0 ] && fits_screen "$FULL_STATIC_VERSION"; then
+    FULL_STATIC_FITS=1
+  else
+    FULL_STATIC_FITS=0
+  fi
 }
 
 build_stream_frames_for_size() {
   local size="$1"
+  local max_version="$2"
   local count=0
   local idx=0
   local start=0
   local part=""
   local frame=""
+  local sample=""
+  local v=0
   local -a tmp=()
 
   [ "$size" -ge 1 ] || return 1
@@ -147,10 +203,11 @@ build_stream_frames_for_size() {
   count=$(( (PAYLOAD_LEN + size - 1) / size ))
   [ "$count" -ge 1 ] || return 1
 
-  # Fast capacity check once using the longest header width.
   part="${DATA:0:size}"
-  frame="p${count}of${count} ${part}"
-  if ! can_encode_payload "$frame"; then
+  sample="p${count}of${count} ${part}"
+
+  v="$(find_min_version_up_to "$sample" "$max_version")" || return 1
+  if ! fits_screen "$v"; then
     return 1
   fi
 
@@ -159,25 +216,21 @@ build_stream_frames_for_size() {
     start=$(( (idx - 1) * size ))
     part="${DATA:start:size}"
     frame="p${idx}of${count} ${part}"
-
     tmp+=("$frame")
     idx=$((idx + 1))
   done
 
   FRAMES=("${tmp[@]}")
-  MODE="stream"
+  RENDER_KIND="stream"
+  FRAME_VERSION="$v"
   CHUNK_SIZE="$size"
+  FRAME_INDEX=0
   return 0
 }
 
-build_frames() {
+build_stream_auto_with_limit() {
+  local max_version="$1"
   local size=0
-
-  if [ "$PREFER_STATIC" -eq 1 ] && can_encode_payload "$DATA"; then
-    FRAMES=("$DATA")
-    MODE="static"
-    return 0
-  fi
 
   size="$CHUNK_SIZE"
   if [ "$size" -gt "$CHUNK_MAX" ]; then
@@ -191,73 +244,116 @@ build_frames() {
   fi
 
   while [ "$size" -ge "$CHUNK_MIN" ]; do
-    if build_stream_frames_for_size "$size"; then
+    if build_stream_frames_for_size "$size" "$max_version"; then
       return 0
     fi
-
     size=$((size - CHUNK_STEP))
     if [ "$size" -lt "$CHUNK_MIN" ]; then
       break
     fi
   done
 
-  die "Payload cannot be rendered in this terminal QR mode."
+  return 1
 }
 
-render_current_frame() {
-  local current="${FRAMES[$FRAME_INDEX]}"
+build_auto_view() {
+  update_full_static_capability
+
+  if [ "$FULL_STATIC_VERSION" -gt 0 ] &&
+     [ "$FULL_STATIC_VERSION" -le "$STANDARD_MAX_VERSION" ] &&
+     [ "$FULL_STATIC_FITS" -eq 1 ]; then
+    FRAMES=("$DATA")
+    RENDER_KIND="static"
+    FRAME_VERSION="$FULL_STATIC_VERSION"
+    CHUNK_SIZE="$CHUNK_DEFAULT"
+    FRAME_INDEX=0
+    return 0
+  fi
+
+  if build_stream_auto_with_limit "$STANDARD_MAX_VERSION"; then
+    return 0
+  fi
+
+  if build_stream_auto_with_limit "$MAX_QR_VERSION"; then
+    STATUS_LINE="Auto stream uses denser QR due payload size."
+    return 0
+  fi
+
+  if [ "$FULL_STATIC_VERSION" -gt 0 ] && [ "$FULL_STATIC_FITS" -eq 1 ]; then
+    FRAMES=("$DATA")
+    RENDER_KIND="static"
+    FRAME_VERSION="$FULL_STATIC_VERSION"
+    CHUNK_SIZE="$CHUNK_DEFAULT"
+    FRAME_INDEX=0
+    STATUS_LINE="Auto fallback: using full static QR."
+    return 0
+  fi
+
+  return 1
+}
+
+build_full_static_view() {
+  update_full_static_capability
+
+  if [ "$FULL_STATIC_VERSION" -le 0 ]; then
+    return 1
+  fi
+  if [ "$FULL_STATIC_FITS" -ne 1 ]; then
+    return 1
+  fi
+
+  FRAMES=("$DATA")
+  RENDER_KIND="static"
+  FRAME_VERSION="$FULL_STATIC_VERSION"
+  FRAME_INDEX=0
+  return 0
+}
+
+render_view() {
+  local payload="${FRAMES[$FRAME_INDEX]}"
 
   if [ "$INTERACTIVE" -eq 1 ]; then
-    clear
+    if [ "$FORCE_CLEAR" -eq 1 ]; then
+      printf '\033[2J\033[H' > /dev/tty
+      FORCE_CLEAR=0
+      FOOTER_DIRTY=1
+    else
+      printf '\033[H' > /dev/tty
+    fi
   fi
-  render_qr_payload "$current"
+
+  qrencode_base "$payload" "$FRAME_VERSION"
+
+  if [ "$INTERACTIVE" -eq 1 ] &&
+     [ "$VIEW_MODE" = "auto" ] &&
+     [ "$RENDER_KIND" = "stream" ] &&
+     [ "$FOOTER_DIRTY" -eq 0 ]; then
+    return
+  fi
+
   printf '\n'
 
-  if [ "$MODE" = "static" ]; then
-    printf 'Mode: static | payload=%s chars | size=%s\n' "$PAYLOAD_LEN" "$ZOOM"
+  if [ "$VIEW_MODE" = "full-static" ]; then
+    printf 'Mode: full static preview | qr-v=%s\n' "$FRAME_VERSION"
+  elif [ "$RENDER_KIND" = "static" ]; then
+    printf 'Mode: auto static | qr-v=%s\n' "$FRAME_VERSION"
   else
-    printf 'Mode: stream | frame %s/%s | chunk=%s chars | size=%s\n' "$((FRAME_INDEX + 1))" "${#FRAMES[@]}" "$CHUNK_SIZE" "$ZOOM"
+    printf 'Mode: auto stream | chunk=%s chars | qr-v=%s\n' "$CHUNK_SIZE" "$FRAME_VERSION"
   fi
 
-  printf 'Keys: Enter/q done | w/s size | a/d density | arrows supported | r static-auto\n'
-}
-
-apply_density_delta() {
-  local delta="$1"
-  local requested=0
-
-  PREFER_STATIC=0
-
-  requested=$((CHUNK_SIZE + delta))
-  if [ "$requested" -lt "$CHUNK_MIN" ]; then
-    requested="$CHUNK_MIN"
-  fi
-  if [ "$requested" -gt "$CHUNK_MAX" ]; then
-    requested="$CHUNK_MAX"
+  if [ "$VIEW_MODE" = "full-static" ]; then
+    printf 'Keys: Enter/q done | o back to auto\n'
+  else
+    printf 'Keys: Enter/q done | p full static preview\n'
   fi
 
-  CHUNK_SIZE="$requested"
-  build_frames
-  FRAME_INDEX=0
-  NEEDS_RENDER=1
-}
-
-apply_zoom_delta() {
-  local delta="$1"
-  local requested=0
-
-  requested=$((ZOOM + delta))
-  if [ "$requested" -lt "$ZOOM_MIN" ]; then
-    requested="$ZOOM_MIN"
-  fi
-  if [ "$requested" -gt "$ZOOM_MAX" ]; then
-    requested="$ZOOM_MAX"
+  if [ -n "$STATUS_LINE" ]; then
+    printf '%s\n' "$STATUS_LINE"
+  else
+    printf '\n'
   fi
 
-  if [ "$requested" -ne "$ZOOM" ]; then
-    ZOOM="$requested"
-    NEEDS_RENDER=1
-  fi
+  FOOTER_DIRTY=0
 }
 
 read_key() {
@@ -265,16 +361,14 @@ read_key() {
   local a=""
   local b=""
 
-  if ! IFS= read -r -s -n 1 -t "$FRAME_DELAY" key < /dev/tty; then
+  if ! IFS= read -r -s -N 1 -t "$FRAME_DELAY" key < /dev/tty; then
     return 1
   fi
 
   if [ "$key" = $'\033' ]; then
-    if IFS= read -r -s -n 1 -t 0.02 a < /dev/tty && [ "$a" = "[" ]; then
-      if IFS= read -r -s -n 1 -t 0.02 b < /dev/tty; then
+    if IFS= read -r -s -N 1 -t 0.02 a < /dev/tty && [ "$a" = "[" ]; then
+      if IFS= read -r -s -N 1 -t 0.02 b < /dev/tty; then
         case "$b" in
-          A) KEY_RESULT="UP" ; return 0 ;;
-          B) KEY_RESULT="DOWN" ; return 0 ;;
           C) KEY_RESULT="RIGHT" ; return 0 ;;
           D) KEY_RESULT="LEFT" ; return 0 ;;
           *) ;;
@@ -294,23 +388,41 @@ handle_key() {
     $'\n'|$'\r'|q|Q)
       return 1
       ;;
-    w|W|UP)
-      apply_zoom_delta 1
-      ;;
-    s|S|DOWN)
-      apply_zoom_delta -1
-      ;;
-    a|A|LEFT)
-      apply_density_delta $((-CHUNK_STEP))
-      ;;
-    d|D|RIGHT)
-      apply_density_delta "$CHUNK_STEP"
-      ;;
-    r|R)
-      PREFER_STATIC=1
-      build_frames
+    p|P|RIGHT)
+      if [ "$VIEW_MODE" = "full-static" ]; then
+        STATUS_LINE="Already showing full static preview."
+        NEEDS_RENDER=1
+        FOOTER_DIRTY=1
+        return 0
+      fi
+      if build_full_static_view; then
+        VIEW_MODE="full-static"
+        STATUS_LINE=""
+        FORCE_CLEAR=1
+      else
+        STATUS_LINE="Full static preview is not available (too dense or too large for this screen)."
+      fi
       FRAME_INDEX=0
       NEEDS_RENDER=1
+      FOOTER_DIRTY=1
+      ;;
+    o|O|LEFT)
+      if [ "$VIEW_MODE" = "auto" ]; then
+        STATUS_LINE="Already in auto profile."
+        NEEDS_RENDER=1
+        FOOTER_DIRTY=1
+        return 0
+      fi
+      if build_auto_view; then
+        VIEW_MODE="auto"
+        STATUS_LINE=""
+        FORCE_CLEAR=1
+      else
+        STATUS_LINE="Unable to return to auto profile with current settings."
+      fi
+      FRAME_INDEX=0
+      NEEDS_RENDER=1
+      FOOTER_DIRTY=1
       ;;
     *)
       ;;
@@ -319,30 +431,29 @@ handle_key() {
   return 0
 }
 
-build_frames
-
-TTY_STATE=""
-
 if [ -t 1 ] && TTY_STATE="$(stty -g < /dev/tty 2>/dev/null)"; then
   INTERACTIVE=1
-else
-  FRAME_INDEX=0
-  render_current_frame
+fi
+
+build_auto_view || die "Payload cannot be rendered in this terminal QR mode."
+
+if [ "$INTERACTIVE" -eq 0 ]; then
+  render_view
   exit 0
 fi
 
 restore_tty() {
   stty "$TTY_STATE" < /dev/tty 2>/dev/null || true
+  printf '\033[?25h' > /dev/tty 2>/dev/null || true
 }
 trap restore_tty EXIT INT TERM
 
 stty -echo -icanon min 0 time 0 < /dev/tty
+printf '\033[?25l' > /dev/tty
 
 while true; do
-  local_key=""
-
   if [ "$NEEDS_RENDER" -eq 1 ]; then
-    render_current_frame
+    render_view
     NEEDS_RENDER=0
   fi
 
@@ -354,7 +465,7 @@ while true; do
     continue
   fi
 
-  if [ "$MODE" = "stream" ]; then
+  if [ "$VIEW_MODE" = "auto" ] && [ "$RENDER_KIND" = "stream" ] && [ "${#FRAMES[@]}" -gt 1 ]; then
     FRAME_INDEX=$(( (FRAME_INDEX + 1) % ${#FRAMES[@]} ))
     NEEDS_RENDER=1
   fi
