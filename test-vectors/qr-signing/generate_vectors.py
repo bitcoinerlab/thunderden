@@ -254,12 +254,63 @@ def build_unsigned_psbt(spec: VectorSpec):
     return unsigned_b64, metadata
 
 
-def write_vector_files(base_dir: Path, spec: VectorSpec, unsigned_b64: str, metadata: dict, no_qr: bool):
+def sign_psbt(unsigned_b64: str, spec: VectorSpec) -> str:
+    signed = psbt.PSBT.from_base64(unsigned_b64)
+    root = derive_root(spec.mnemonic, spec.passphrase, spec.network)
+    signed_count = signed.sign_with(root)
+    if signed_count < len(spec.inputs):
+        raise RuntimeError(
+            f"Signed {signed_count} inputs for {spec.vector_id}, expected {len(spec.inputs)}"
+        )
+
+    for idx, inp in enumerate(signed.inputs):
+        if inp.final_scriptwitness is not None:
+            continue
+        if len(inp.partial_sigs) != 1:
+            raise RuntimeError(
+                f"Expected 1 partial signature for {spec.vector_id} input {idx}, got {len(inp.partial_sigs)}"
+            )
+
+        pub, sig = next(iter(inp.partial_sigs.items()))
+        inp.final_scriptsig = None
+        inp.final_scriptwitness = script.Witness([sig, pub.sec()])
+
+        inp.partial_sigs.clear()
+        inp.sighash_type = None
+        inp.redeem_script = None
+        inp.witness_script = None
+        inp.bip32_derivations.clear()
+        inp.taproot_bip32_derivations.clear()
+        inp.taproot_internal_key = None
+        inp.taproot_merkle_root = None
+        inp.taproot_sigs.clear()
+        inp.taproot_scripts.clear()
+
+    signed_b64 = signed.to_base64()
+    if not signed_b64.startswith("cHNidP"):
+        raise RuntimeError(
+            f"Unexpected signed PSBT output for {spec.vector_id}: {signed_b64[:32]}"
+        )
+
+    return signed_b64
+
+
+def write_vector_files(
+    base_dir: Path,
+    spec: VectorSpec,
+    unsigned_b64: str,
+    signed_b64: str,
+    metadata: dict,
+    no_qr: bool,
+):
     vector_dir = base_dir / "vectors" / spec.vector_id
     vector_dir.mkdir(parents=True, exist_ok=True)
 
     psbt_file = vector_dir / "unsigned.psbt.txt"
     psbt_file.write_text(unsigned_b64 + "\n", encoding="ascii")
+
+    signed_file = vector_dir / "signed.psbt.txt"
+    signed_file.write_text(signed_b64 + "\n", encoding="ascii")
 
     metadata_file = vector_dir / "metadata.json"
     metadata_file.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
@@ -287,6 +338,7 @@ def write_vector_files(base_dir: Path, spec: VectorSpec, unsigned_b64: str, meta
         "title": spec.title,
         "network": spec.network,
         "unsigned_psbt_file": str(psbt_file.relative_to(base_dir)),
+        "signed_psbt_file": str(signed_file.relative_to(base_dir)),
         "metadata_file": str(metadata_file.relative_to(base_dir)),
         "qr_png_file": str(qr_file.relative_to(base_dir)) if not no_qr else None,
     }
@@ -297,7 +349,7 @@ def main() -> int:
     parser.add_argument(
         "--no-qr",
         action="store_true",
-        help="Skip QR image generation (unsigned PSBT text + metadata only).",
+        help="Skip QR image generation (unsigned/signed PSBT text + metadata only).",
     )
     args = parser.parse_args()
 
@@ -312,7 +364,8 @@ def main() -> int:
 
     for spec in VECTOR_SPECS:
         unsigned_b64, metadata = build_unsigned_psbt(spec)
-        entry = write_vector_files(base_dir, spec, unsigned_b64, metadata, args.no_qr)
+        signed_b64 = sign_psbt(unsigned_b64, spec)
+        entry = write_vector_files(base_dir, spec, unsigned_b64, signed_b64, metadata, args.no_qr)
         index["vectors"].append(entry)
 
     (base_dir / "index.json").write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")

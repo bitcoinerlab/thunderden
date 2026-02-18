@@ -1,10 +1,11 @@
 # QR Signing Test Vectors
 
-Deterministic unsigned PSBT vectors for webcam-based Thunder Den signing tests.
+Deterministic PSBT vectors for webcam-based Thunder Den signing tests.
 
 Each vector includes:
 
 - `unsigned.psbt.txt`: base64 PSBT payload (`cHNidP...`).
+- `signed.psbt.txt`: expected signed PSBT output from Thunder Den signing flow.
 - `unsigned.psbt.qr.png`: single-frame QR image for camera scan tests.
 - `metadata.json`: mnemonic, passphrase, paths, amounts, and expected unsigned txid.
 
@@ -22,7 +23,7 @@ Never use them for storing real bitcoin.
 3. Show the vector `unsigned.psbt.qr.png` on a second screen.
 4. Scan QR in Thunder Den.
 5. Enter the vector mnemonic and passphrase from `metadata.json`.
-6. Confirm signing succeeds and a signed PSBT is shown.
+6. Confirm signing succeeds and compare the shown signed PSBT against `signed.psbt.txt`.
 
 ## Optional local verification
 
@@ -31,7 +32,7 @@ You can verify the signed PSBT output matches vector expectations:
 ```bash
 python3 test-vectors/qr-signing/verify_signed_psbt.py \
   --vector tv1-testnet-basic \
-  --signed-psbt-file /path/to/signed-psbt.txt
+  --signed-psbt-file test-vectors/qr-signing/vectors/tv1-testnet-basic/signed.psbt.txt
 ```
 
 ## Regeneration
