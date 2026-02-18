@@ -21,9 +21,10 @@ Behavior:
 
 Controls (interactive terminal):
   Enter/q  Exit viewer
-  -/+      Smaller/Larger displayed QR (quiet-zone zoom)
-  [ ]      Lower/Higher density (smaller/larger chunk per frame)
-  s        Return to static-auto mode
+  w/s      Larger/Smaller displayed QR
+  a/d      Lower/Higher density (smaller/larger chunk per frame)
+  arrows   Up/Down = size, Left/Right = density
+  r        Return to static-auto mode
 EOF
   exit 0
 fi
@@ -45,9 +46,10 @@ CHUNK_STEP="${THUNDERDEN_QR_CHUNK_STEP:-20}"
 CHUNK_MIN="${THUNDERDEN_QR_CHUNK_MIN:-80}"
 CHUNK_DEFAULT="${THUNDERDEN_QR_CHUNK_DEFAULT:-180}"
 CHUNK_MAX="${THUNDERDEN_QR_CHUNK_MAX:-1200}"
+ZOOM_MIN=0
+ZOOM_MAX=4
+ZOOM="${THUNDERDEN_QR_ZOOM:-0}"
 
-MARGIN_MIN=0
-MARGIN_MAX=4
 MARGIN="${THUNDERDEN_QR_MARGIN:-1}"
 
 PAYLOAD_LEN="${#DATA}"
@@ -56,18 +58,18 @@ case "$CHUNK_STEP" in ''|*[!0-9]*) CHUNK_STEP=20 ;; esac
 case "$CHUNK_MIN" in ''|*[!0-9]*) CHUNK_MIN=80 ;; esac
 case "$CHUNK_DEFAULT" in ''|*[!0-9]*) CHUNK_DEFAULT=180 ;; esac
 case "$CHUNK_MAX" in ''|*[!0-9]*) CHUNK_MAX=1200 ;; esac
+case "$ZOOM" in ''|*[!0-9]*) ZOOM=0 ;; esac
 case "$MARGIN" in ''|*[!0-9]*) MARGIN=1 ;; esac
 
 [ "$CHUNK_STEP" -ge 1 ] || CHUNK_STEP=20
 [ "$CHUNK_MIN" -ge 1 ] || CHUNK_MIN=1
 [ "$CHUNK_DEFAULT" -ge 1 ] || CHUNK_DEFAULT=1
 [ "$CHUNK_MAX" -ge "$CHUNK_MIN" ] || CHUNK_MAX="$CHUNK_MIN"
+[ "$ZOOM" -ge "$ZOOM_MIN" ] || ZOOM="$ZOOM_MIN"
+[ "$ZOOM" -le "$ZOOM_MAX" ] || ZOOM="$ZOOM_MAX"
 
-if [ "$MARGIN" -lt "$MARGIN_MIN" ]; then
-  MARGIN="$MARGIN_MIN"
-fi
-if [ "$MARGIN" -gt "$MARGIN_MAX" ]; then
-  MARGIN="$MARGIN_MAX"
+if [ "$MARGIN" -lt 0 ]; then
+  MARGIN=0
 fi
 
 if [ "$PAYLOAD_LEN" -lt "$CHUNK_MIN" ]; then
@@ -96,6 +98,41 @@ can_encode_payload() {
   qrencode -t "$QR_TYPE" -l "$QR_ECC" -m "$MARGIN" -- "$1" >/dev/null 2>&1
 }
 
+scale_ascii_qr() {
+  local factor="$1"
+
+  if [ "$factor" -le 1 ]; then
+    cat
+    return 0
+  fi
+
+  awk -v f="$factor" '
+    {
+      out = ""
+      for (i = 1; i <= length($0); i++) {
+        c = substr($0, i, 1)
+        for (j = 0; j < f; j++) {
+          out = out c
+        }
+      }
+      for (k = 0; k < f; k++) {
+        print out
+      }
+    }
+  '
+}
+
+render_qr_payload() {
+  local payload="$1"
+
+  if [ "$ZOOM" -eq 0 ]; then
+    qrencode -t "$QR_TYPE" -l "$QR_ECC" -m "$MARGIN" -- "$payload"
+    return 0
+  fi
+
+  qrencode -t ASCII -l "$QR_ECC" -m "$MARGIN" -- "$payload" | scale_ascii_qr "$ZOOM"
+}
+
 build_stream_frames_for_size() {
   local size="$1"
   local count=0
@@ -110,15 +147,18 @@ build_stream_frames_for_size() {
   count=$(( (PAYLOAD_LEN + size - 1) / size ))
   [ "$count" -ge 1 ] || return 1
 
+  # Fast capacity check once using the longest header width.
+  part="${DATA:0:size}"
+  frame="p${count}of${count} ${part}"
+  if ! can_encode_payload "$frame"; then
+    return 1
+  fi
+
   idx=1
   while [ "$idx" -le "$count" ]; do
     start=$(( (idx - 1) * size ))
     part="${DATA:start:size}"
     frame="p${idx}of${count} ${part}"
-
-    if ! can_encode_payload "$frame"; then
-      return 1
-    fi
 
     tmp+=("$frame")
     idx=$((idx + 1))
@@ -170,16 +210,16 @@ render_current_frame() {
   if [ "$INTERACTIVE" -eq 1 ]; then
     clear
   fi
-  qrencode -t "$QR_TYPE" -l "$QR_ECC" -m "$MARGIN" -- "$current"
+  render_qr_payload "$current"
   printf '\n'
 
   if [ "$MODE" = "static" ]; then
-    printf 'Mode: static | payload=%s chars\n' "$PAYLOAD_LEN"
+    printf 'Mode: static | payload=%s chars | size=%s\n' "$PAYLOAD_LEN" "$ZOOM"
   else
-    printf 'Mode: stream | frame %s/%s | chunk=%s chars\n' "$((FRAME_INDEX + 1))" "${#FRAMES[@]}" "$CHUNK_SIZE"
+    printf 'Mode: stream | frame %s/%s | chunk=%s chars | size=%s\n' "$((FRAME_INDEX + 1))" "${#FRAMES[@]}" "$CHUNK_SIZE" "$ZOOM"
   fi
 
-  printf 'Keys: Enter/q done | - smaller + larger | [ less density ] more density | s static-auto\n'
+  printf 'Keys: Enter/q done | w/s size | a/d density | arrows supported | r static-auto\n'
 }
 
 apply_density_delta() {
@@ -202,6 +242,51 @@ apply_density_delta() {
   NEEDS_RENDER=1
 }
 
+apply_zoom_delta() {
+  local delta="$1"
+  local requested=0
+
+  requested=$((ZOOM + delta))
+  if [ "$requested" -lt "$ZOOM_MIN" ]; then
+    requested="$ZOOM_MIN"
+  fi
+  if [ "$requested" -gt "$ZOOM_MAX" ]; then
+    requested="$ZOOM_MAX"
+  fi
+
+  if [ "$requested" -ne "$ZOOM" ]; then
+    ZOOM="$requested"
+    NEEDS_RENDER=1
+  fi
+}
+
+read_key() {
+  local key=""
+  local a=""
+  local b=""
+
+  if ! IFS= read -r -s -n 1 -t "$FRAME_DELAY" key < /dev/tty; then
+    return 1
+  fi
+
+  if [ "$key" = $'\033' ]; then
+    if IFS= read -r -s -n 1 -t 0.02 a < /dev/tty && [ "$a" = "[" ]; then
+      if IFS= read -r -s -n 1 -t 0.02 b < /dev/tty; then
+        case "$b" in
+          A) KEY_RESULT="UP" ; return 0 ;;
+          B) KEY_RESULT="DOWN" ; return 0 ;;
+          C) KEY_RESULT="RIGHT" ; return 0 ;;
+          D) KEY_RESULT="LEFT" ; return 0 ;;
+          *) ;;
+        esac
+      fi
+    fi
+  fi
+
+  KEY_RESULT="$key"
+  return 0
+}
+
 handle_key() {
   local key="$1"
 
@@ -209,25 +294,19 @@ handle_key() {
     $'\n'|$'\r'|q|Q)
       return 1
       ;;
-    -)
-      if [ "$MARGIN" -gt "$MARGIN_MIN" ]; then
-        MARGIN=$((MARGIN - 1))
-        NEEDS_RENDER=1
-      fi
+    w|W|UP)
+      apply_zoom_delta 1
       ;;
-    +|=)
-      if [ "$MARGIN" -lt "$MARGIN_MAX" ]; then
-        MARGIN=$((MARGIN + 1))
-        NEEDS_RENDER=1
-      fi
+    s|S|DOWN)
+      apply_zoom_delta -1
       ;;
-    '[')
+    a|A|LEFT)
       apply_density_delta $((-CHUNK_STEP))
       ;;
-    ']')
+    d|D|RIGHT)
       apply_density_delta "$CHUNK_STEP"
       ;;
-    s|S)
+    r|R)
       PREFER_STATIC=1
       build_frames
       FRAME_INDEX=0
@@ -242,7 +321,9 @@ handle_key() {
 
 build_frames
 
-if [ -t 0 ] && [ -t 1 ]; then
+TTY_STATE=""
+
+if [ -t 1 ] && TTY_STATE="$(stty -g < /dev/tty 2>/dev/null)"; then
   INTERACTIVE=1
 else
   FRAME_INDEX=0
@@ -250,13 +331,12 @@ else
   exit 0
 fi
 
-TTY_STATE="$(stty -g)"
 restore_tty() {
-  stty "$TTY_STATE" 2>/dev/null || true
+  stty "$TTY_STATE" < /dev/tty 2>/dev/null || true
 }
 trap restore_tty EXIT INT TERM
 
-stty -echo -icanon min 0 time 0
+stty -echo -icanon min 0 time 0 < /dev/tty
 
 while true; do
   local_key=""
@@ -266,8 +346,9 @@ while true; do
     NEEDS_RENDER=0
   fi
 
-  if IFS= read -r -s -n 1 -t "$FRAME_DELAY" local_key; then
-    if ! handle_key "$local_key"; then
+  KEY_RESULT=""
+  if read_key; then
+    if ! handle_key "$KEY_RESULT"; then
       break
     fi
     continue
