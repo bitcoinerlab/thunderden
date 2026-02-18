@@ -139,6 +139,16 @@ echo
 echo "== [2/3] Building Buildroot toolchain =="
 make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" toolchain
 
+# Buildroot caches local package extract/build stamps in O=. For local-source
+# packages this can keep stale binaries across incremental runs. Force a
+# lightweight refresh of thunderden-qrscan so scanner code changes are picked
+# up without nuking the whole cache.
+if [ -f "${OUTPUT_DIR}/.config" ] && grep -q '^BR2_PACKAGE_THUNDERDEN_QRSCAN=y' "${OUTPUT_DIR}/.config"; then
+  echo
+  echo "== [2b/3] Refreshing thunderden-qrscan package =="
+  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" thunderden-qrscan-dirclean
+fi
+
 # Phase 3: build target packages (Bitcoin, zbar, etc.) and image artifacts.
 echo
 echo "== [3/3] Building target packages and images =="

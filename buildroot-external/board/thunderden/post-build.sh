@@ -11,6 +11,7 @@ install -d -m 0755 "${TARGET_DIR}/usr/bin"
 
 for s in \
   thunderden_boot.sh \
+  thunderden_export_bip84_descriptor.sh \
   thunderden_entropy_guard.sh \
   thunderden_hardening.sh \
   thunderden_runtime_guard.sh \
@@ -27,9 +28,9 @@ if [ ! -x "${TARGET_DIR}/bin/bash" ]; then
   exit 1
 fi
 
-if [ ! -x "${TARGET_DIR}/usr/bin/zbarcam" ]; then
-  echo "Missing /usr/bin/zbarcam in target rootfs." >&2
-  echo "Enable BR2_PACKAGE_ZBAR and required toolchain options." >&2
+if [ ! -x "${TARGET_DIR}/usr/bin/thunderden-qrscan" ]; then
+  echo "Missing /usr/bin/thunderden-qrscan in target rootfs." >&2
+  echo "Enable BR2_PACKAGE_THUNDERDEN_QRSCAN." >&2
   exit 1
 fi
 
@@ -58,6 +59,9 @@ if [ ! -x "${TARGET_DIR}/usr/bin/openssl" ]; then
 fi
 
 rm -f "${TARGET_DIR}/usr/bin/bitcoin-tx" "${TARGET_DIR}/usr/bin/bitcoin-util"
+
+# Remove stale scanner preview helper binaries if present from older builds.
+rm -f "${TARGET_DIR}/usr/bin/fbv" "${TARGET_DIR}/usr/bin/v4l2grab"
 
 # Thunder Den is built for initramfs-only runtime without kernel modules.
 # Remove any stale module trees left by incremental builds.

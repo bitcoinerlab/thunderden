@@ -2,4 +2,6 @@ menu "Thunder Den"
 
 comment "Use thunderden_x86_64_defconfig from this external tree"
 
+source "$BR2_EXTERNAL_THUNDERDEN_PATH/package/thunderden-qrscan/Config.in"
+
 endmenu
