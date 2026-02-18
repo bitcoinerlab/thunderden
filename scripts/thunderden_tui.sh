@@ -6,6 +6,7 @@ umask 077
 SIGNER="${THUNDERDEN_SIGNER:-/usr/bin/thunderden_sign_psbt.sh}"
 SCANNER="${THUNDERDEN_SCANNER:-/usr/bin/thunderden_scan_qr.sh}"
 SHOW_QR="${THUNDERDEN_SHOW_QR:-/usr/bin/thunderden_show_qr.sh}"
+EXPORTER="${THUNDERDEN_EXPORTER:-/usr/bin/thunderden_export_bip84_descriptor.sh}"
 NETWORK="${THUNDERDEN_NETWORK:-main}"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
@@ -16,6 +17,7 @@ Environment:
   THUNDERDEN_SIGNER   Path to signer script
   THUNDERDEN_SCANNER  Path to scanner script
   THUNDERDEN_SHOW_QR  Path to QR output script
+  THUNDERDEN_EXPORTER Path to descriptor export script
   THUNDERDEN_NETWORK  main|testnet|signet|regtest
 EOF
   exit 0
@@ -83,9 +85,25 @@ prompt_secret() {
 
   printf '%s' "$prompt" >&2
   stty -echo
-  IFS= read -r value || true
+  if ! IFS= read -r value; then
+    stty echo
+    printf '\n' >&2
+    return 130
+  fi
   stty echo
   printf '\n' >&2
+  printf '%s' "$value"
+}
+
+prompt_visible() {
+  local prompt="$1"
+  local value=""
+
+  printf '%s' "$prompt" >&2
+  if ! IFS= read -r value; then
+    printf '\n' >&2
+    return 130
+  fi
   printf '%s' "$value"
 }
 
@@ -95,13 +113,23 @@ sign_flow() {
   local passphrase=""
   local signed_psbt=""
 
-  mnemonic="$(prompt_secret 'Enter mnemonic words: ')"
+  printf 'Mnemonic input is visible (English BIP39 words only). Press Ctrl+C to cancel and return to menu.\n' >&2
+
+  if ! mnemonic="$(prompt_visible 'Enter mnemonic words: ')"; then
+    printf 'Mnemonic entry cancelled.\n' >&2
+    return 130
+  fi
+
   [ -n "$mnemonic" ] || {
     printf 'Mnemonic is required.\n' >&2
     return 1
   }
 
-  passphrase="$(prompt_secret 'Enter optional passphrase (empty for none): ')"
+  printf 'Press Ctrl+C to cancel passphrase entry and return to menu.\n' >&2
+  if ! passphrase="$(prompt_secret 'Enter optional passphrase (empty for none): ')"; then
+    printf 'Passphrase entry cancelled.\n' >&2
+    return 130
+  fi
 
   if [ -n "$passphrase" ]; then
     if ! signed_psbt="$(printf '%s\n' "$mnemonic" | BIP39_PASSPHRASE="$passphrase" "$SIGNER" --network "$NETWORK" --mnemonic-stdin --psbt "$psbt")"; then
@@ -120,8 +148,48 @@ sign_flow() {
 
   clear
   printf 'Signed PSBT:\n\n%s\n\n' "$signed_psbt"
-  "$SHOW_QR" "$signed_psbt" || true
-  press_enter
+  if ! "$SHOW_QR" "$signed_psbt"; then
+    press_enter
+  fi
+}
+
+descriptor_export_flow() {
+  local mnemonic=""
+  local passphrase=""
+
+  printf 'Mnemonic input is visible (English BIP39 words only). Press Ctrl+C to cancel and return to menu.\n' >&2
+
+  if ! mnemonic="$(prompt_visible 'Enter mnemonic words: ')"; then
+    printf 'Mnemonic entry cancelled.\n' >&2
+    return 130
+  fi
+
+  [ -n "$mnemonic" ] || {
+    printf 'Mnemonic is required.\n' >&2
+    return 1
+  }
+
+  printf 'Press Ctrl+C to cancel passphrase entry and return to menu.\n' >&2
+  if ! passphrase="$(prompt_secret 'Enter optional passphrase (empty for none): ')"; then
+    printf 'Passphrase entry cancelled.\n' >&2
+    return 130
+  fi
+
+  clear
+  if [ -n "$passphrase" ]; then
+    if ! printf '%s\n' "$mnemonic" | BIP39_PASSPHRASE="$passphrase" "$EXPORTER" --network "$NETWORK" --mnemonic-stdin; then
+      printf 'Descriptor export failed.\n' >&2
+      return 1
+    fi
+  else
+    if ! printf '%s\n' "$mnemonic" | "$EXPORTER" --network "$NETWORK" --mnemonic-stdin; then
+      printf 'Descriptor export failed.\n' >&2
+      return 1
+    fi
+  fi
+
+  mnemonic=""
+  passphrase=""
 }
 
 menu() {
@@ -129,17 +197,21 @@ menu() {
   printf '==========================================\n'
   printf '               THUNDER DEN\n'
   printf '==========================================\n\n'
-  printf 'Offline PSBT signer (BIP84, single-frame QR)\n'
+  printf 'Offline PSBT signer (BIP84, multi-format QR)\n'
   printf 'Current network: %s\n\n' "$(network_label "$NETWORK")"
   printf '1) Scan unsigned PSBT from camera\n'
   printf '2) Change network\n'
-  printf '3) Power off\n\n'
+  printf '3) Export wallet descriptor (xpub + QR)\n'
+  printf '4) Power off\n\n'
   printf 'Choose an option: '
 }
 
 main() {
   local choice=""
   local psbt=""
+  local scan_rc=0
+  local sign_rc=0
+  local export_rc=0
 
   case "$NETWORK" in
     main|testnet|signet|regtest) ;;
@@ -153,17 +225,35 @@ main() {
     exit 1
   }
 
+  command -v "$EXPORTER" >/dev/null 2>&1 || {
+    printf 'Descriptor export script not found: %s\n' "$EXPORTER" >&2
+    exit 1
+  }
+
   while true; do
     menu
     IFS= read -r choice || true
     case "$choice" in
       1)
-        if ! psbt="$($SCANNER)"; then
+        if psbt="$($SCANNER)"; then
+          :
+        else
+          scan_rc=$?
+          if [ "$scan_rc" -eq 130 ]; then
+            continue
+          fi
           printf 'QR scan failed.\n' >&2
           press_enter
           continue
         fi
-        if ! sign_flow "$psbt"; then
+
+        if sign_flow "$psbt"; then
+          :
+        else
+          sign_rc=$?
+          if [ "$sign_rc" -eq 130 ]; then
+            continue
+          fi
           press_enter
         fi
         ;;
@@ -171,6 +261,17 @@ main() {
         set_network
         ;;
       3)
+        if descriptor_export_flow; then
+          :
+        else
+          export_rc=$?
+          if [ "$export_rc" -eq 130 ]; then
+            continue
+          fi
+          press_enter
+        fi
+        ;;
+      4)
         poweroff
         ;;
       *)

@@ -30,6 +30,7 @@ Environment:
 Notes:
   - This script uses Bitcoin Core RPC descriptorprocesspsbt.
   - It runs bitcoind with an ephemeral datadir and network disabled.
+  - BIP39 mnemonic parsing is forced to English wordlist only.
 EOF
 }
 
@@ -44,6 +45,7 @@ NETWORK="main"
 RANGE="200"
 PRINT_JSON=0
 BBT_SH="${THUNDERDEN_BBT_SH:-/opt/bitcoin-bash-tools/bitcoin.sh}"
+CHAIN="main"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -109,20 +111,83 @@ case "$NETWORK" in
   *) die "Invalid --network value: $NETWORK" ;;
 esac
 
+CHAIN="$NETWORK"
+if [ "$NETWORK" = "testnet" ]; then
+  CHAIN="test"
+fi
+
 case "$RANGE" in
   ''|*[!0-9]*) die "--range must be a positive integer" ;;
 esac
 
 need_cmd bitcoind
 need_cmd bitcoin-cli
+need_cmd ip
 need_cmd tr
 need_cmd sed
+need_cmd grep
+need_cmd tail
 need_cmd mktemp
+need_cmd dc
+need_cmd basenc
+
+bbt_call() {
+  local fn="$1"
+  shift
+
+  (
+    set +u
+    export LANG=C
+    export LC_ALL=C
+    BIP39_PASSPHRASE="${BIP39_PASSPHRASE-}"
+    export BIP39_PASSPHRASE
+
+    # shellcheck source=/dev/null
+    . "$BBT_SH"
+
+    case "$fn" in
+      check-mnemonic) check-mnemonic "$@" ;;
+      mnemonic-to-seed) mnemonic-to-seed "$@" ;;
+      bip32) bip32 "$@" | base58 -c ;;
+      *)
+        printf 'Unknown bitcoin-bash-tools function: %s\n' "$fn" >&2
+        exit 2
+        ;;
+    esac
+  )
+}
 
 [ -f "$BBT_SH" ] || die "bitcoin-bash-tools script not found at: $BBT_SH"
 
-# shellcheck source=/dev/null
-. "$BBT_SH"
+print_bitcoind_diagnostics() {
+  local log=""
+  local found=0
+
+  if [ -s "$BITCOIND_START_LOG" ]; then
+    printf 'bitcoind startup output:\n' >&2
+    sed -n '1,120p' "$BITCOIND_START_LOG" >&2
+  fi
+
+  for log in "$DATADIR"/debug.log "$DATADIR"/*/debug.log "$DATADIR"/*/*/debug.log; do
+    [ -f "$log" ] || continue
+    found=1
+    printf 'debug.log tail (%s):\n' "$log" >&2
+    tail -n 120 "$log" >&2 || true
+  done
+
+  if [ "$found" -eq 0 ]; then
+    printf 'No debug.log found under %s\n' "$DATADIR" >&2
+  fi
+}
+
+ensure_loopback_up() {
+  ip link set lo up >/dev/null 2>&1 || die "Unable to bring loopback interface up"
+
+  # Idempotent: succeeds first time, ignored if already configured.
+  ip -4 addr add 127.0.0.1/8 dev lo >/dev/null 2>&1 || true
+
+  ip -4 addr show dev lo | grep -q '127\.0\.0\.1/8' || die "Loopback IPv4 address 127.0.0.1/8 is missing"
+}
 
 IFS=' ' read -r -a MNEMONIC_WORDS <<<"$MNEMONIC"
 
@@ -137,7 +202,7 @@ SEED_FILE="$WORKDIR/seed.bin"
 CONF_FILE="$DATADIR/bitcoin.conf"
 
 cleanup() {
-  bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$NETWORK" stop >/dev/null 2>&1 || true
+  bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$CHAIN" stop >/dev/null 2>&1 || true
   rm -rf "$WORKDIR"
   unset MNEMONIC
   unset MNEMONIC_WORDS
@@ -147,16 +212,31 @@ trap cleanup EXIT INT TERM
 
 mkdir -p "$DATADIR"
 
-mnemonic-to-seed "${MNEMONIC_WORDS[@]}" > "$SEED_FILE"
+ensure_loopback_up
 
-ZKEY_ARGS=(-s)
+MNEMONIC_CHECK_RC=0
+if bbt_call check-mnemonic "${MNEMONIC_WORDS[@]}"; then
+  :
+else
+  MNEMONIC_CHECK_RC=$?
+  case "$MNEMONIC_CHECK_RC" in
+    1) die "Mnemonic contains unknown word(s). Use English BIP39 words only." ;;
+    2) die "Mnemonic checksum is invalid. Use English BIP39 words only." ;;
+    3) die "Mnemonic must contain 12, 15, 18, 21, or 24 English words." ;;
+    *) die "Mnemonic validation failed (code: $MNEMONIC_CHECK_RC)" ;;
+  esac
+fi
+
+bbt_call mnemonic-to-seed "${MNEMONIC_WORDS[@]}" > "$SEED_FILE" || die "Failed to derive BIP39 seed"
+
+BIP32_ARGS=(-s)
 ACCOUNT_PATH="/84h/0h/0h"
 if [ "$NETWORK" != "main" ]; then
-  ZKEY_ARGS=(-t)
+  BIP32_ARGS=(-t)
   ACCOUNT_PATH="/84h/1h/0h"
 fi
 
-ACCOUNT_XPRV="$(zkey "${ZKEY_ARGS[@]}" "$ACCOUNT_PATH" < "$SEED_FILE" | tr -d '\r\n')"
+ACCOUNT_XPRV="$(bbt_call bip32 "${BIP32_ARGS[@]}" "$ACCOUNT_PATH" < "$SEED_FILE" | tr -d '\r\n')"
 [ -n "$ACCOUNT_XPRV" ] || die "Failed to derive BIP84 account key"
 
 EXT_DESC="wpkh(${ACCOUNT_XPRV}/0/*)"
@@ -173,13 +253,15 @@ discover=0
 upnp=0
 natpmp=0
 networkactive=0
-rpcbind=127.0.0.1
-rpcallowip=127.0.0.1
 EOF
 
-bitcoind -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$NETWORK" -nosettings=1 -daemonwait >/dev/null 2>&1 || die "bitcoind failed to start"
+BITCOIND_START_LOG="$WORKDIR/bitcoind-start.log"
+if ! bitcoind -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$CHAIN" -nosettings=1 -daemonwait -noconnect -maxconnections=0 -rpcbind=127.0.0.1 -rpcallowip=127.0.0.1 >"$BITCOIND_START_LOG" 2>&1; then
+  print_bitcoind_diagnostics
+  die "bitcoind failed to start"
+fi
 
-RESULT_JSON="$(bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$NETWORK" -named descriptorprocesspsbt psbt="$PSBT" descriptors="$DESCRIPTORS_JSON" bip32derivs=true finalize=true)"
+RESULT_JSON="$(bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$CHAIN" -named descriptorprocesspsbt psbt="$PSBT" descriptors="$DESCRIPTORS_JSON" bip32derivs=true finalize=true)"
 
 [ -n "$RESULT_JSON" ] || die "descriptorprocesspsbt returned empty output"
 

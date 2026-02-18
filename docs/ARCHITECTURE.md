@@ -26,7 +26,7 @@ auditable and strict enough to be trusted.
 1. User boots Thunder Den image.
 2. Text menu starts automatically (no login).
 3. User selects signing network context (mainnet/testnet).
-4. User enters BIP39 mnemonic (and optional passphrase).
+4. User enters English BIP39 mnemonic (and optional passphrase).
 5. Tool derives BIP84 account key (`m/84h/0h/0h` for mainnet, `m/84h/1h/0h` for testnet) using `bitcoin-bash-tools`.
 6. Tool builds descriptors:
    - `wpkh(<account_xprv>/0/*)`
