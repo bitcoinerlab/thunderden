@@ -72,10 +72,11 @@ For exact switches, see `buildroot-external/board/thunderden/linux.config`.
 - `buildroot-external/`: Buildroot external tree (`thunderden_x86_64_defconfig`).
 - `scripts/thunderden_tui.sh`: no-login text menu for signing.
 - `scripts/thunderden_sign_psbt.sh`: BIP84 descriptor signing pipeline.
+- `scripts/thunderden_export_bip84_descriptor.sh`: exports single BIP84 import descriptor (`xpub/tpub`) as text + QR.
 - `scripts/thunderden_runtime_guard.sh`: boot-time runtime policy checks.
 - `scripts/thunderden_entropy_guard.sh`: strict entropy readiness gate for seed generation flows.
 - `scripts/thunderden_scan_qr.sh`: camera scanner helper.
-- `scripts/thunderden_show_qr.sh`: terminal QR display helper.
+- `scripts/thunderden_show_qr.sh`: terminal QR display helper (auto static/animated with live zoom+density keys).
 - `scripts/build_thunderden.sh`: build helper for Buildroot external tree.
 - `scripts/docker_build_thunderden.sh`: Docker build helper without bind-mount compile.
 - `scripts/fetch_bitcoin_bash_tools.sh`: pin/fetch helper for `bitcoin-bash-tools`.
@@ -117,4 +118,4 @@ Default prebuilt-image verification flow is documented in
 
 - This project intentionally avoids broad dependency sprawl.
 - The build guide pins source versions and includes signature verification steps.
-- The first implementation focuses on single-frame base64 PSBT QR (`cHNidP...`).
+- Scanner support includes direct and multipart PSBT QR payloads (base64, UR, BBQR, `pMofN`, hex, base43), normalized to base64 for signing.
