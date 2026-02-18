@@ -202,8 +202,31 @@ SEED_FILE="$WORKDIR/seed.bin"
 CONF_FILE="$DATADIR/bitcoin.conf"
 
 cleanup() {
+  local i=0
+
+  set +e
+
   bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$CHAIN" stop >/dev/null 2>&1 || true
-  rm -rf "$WORKDIR"
+
+  # bitcoind shutdown can be asynchronous; wait briefly for RPC to go away
+  # so datadir cleanup does not race with late file writes.
+  i=0
+  while [ "$i" -lt 30 ]; do
+    if bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$CHAIN" getblockchaininfo >/dev/null 2>&1; then
+      sleep 0.1
+      i=$((i + 1))
+      continue
+    fi
+    break
+  done
+
+  i=0
+  while [ "$i" -lt 6 ]; do
+    rm -rf "$WORKDIR" && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+
   unset MNEMONIC
   unset MNEMONIC_WORDS
 }
