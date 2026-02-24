@@ -1,5 +1,23 @@
 # Thunder Den
 
+> [!WARNING]
+> ## EXPERIMENTAL SOFTWARE - TESTNET / SIGNET / REGTEST ONLY
+> Thunder Den is currently experimental and under active development.
+> It is not production-ready, not externally audited, and not suitable for
+> protecting meaningful value.
+>
+> **DO NOT USE THIS PROJECT WITH MAINNET FUNDS.**
+>
+> Use it only for controlled experimentation on test networks:
+>
+> - `testnet`
+> - `signet`
+> - `regtest`
+>
+> If you choose to run it anyway, assume you can lose funds, lose keys, or sign
+> something incorrectly. Treat all outputs and signing behavior as untrusted
+> until you have independently verified them in your own lab environment.
+
 Thunder Den is an offline Bitcoin signer image (USB-boot) focused on trust,
 minimal dependencies, and stateless operation.
 
