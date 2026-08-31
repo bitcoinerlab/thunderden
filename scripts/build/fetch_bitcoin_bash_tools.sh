@@ -42,7 +42,7 @@ if [ "$#" -ne 0 ]; then
   exit 1
 fi
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST_DIR="${ROOT_DIR}/third_party/bitcoin-bash-tools"
 
 mkdir -p "${ROOT_DIR}/third_party"

@@ -18,7 +18,7 @@ Options:
   --psbt-file <path>      Read unsigned PSBT from file
   --mnemonic <words>      BIP39 mnemonic words as a single string
   --mnemonic-stdin        Read one line of mnemonic words from stdin
-  --network <chain>       main | testnet | signet | regtest (default: main)
+  --network <chain>       main | testnet | signet | regtest (default: testnet)
   --range <n>             Descriptor range upper bound (default: 200)
   --json                  Print full JSON RPC result (default: PSBT only)
   -h, --help              Show this help
@@ -41,7 +41,7 @@ need_cmd() {
 PSBT=""
 MNEMONIC=""
 MNEMONIC_FROM_STDIN=0
-NETWORK="main"
+NETWORK="testnet"
 RANGE="200"
 PRINT_JSON=0
 BBT_SH="${THUNDERDEN_BBT_SH:-/opt/bitcoin-bash-tools/bitcoin.sh}"

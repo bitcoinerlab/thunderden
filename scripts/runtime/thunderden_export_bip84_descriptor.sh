@@ -16,7 +16,7 @@ Usage:
 Options:
   --mnemonic <words>      BIP39 mnemonic words as a single string
   --mnemonic-stdin        Read one line of mnemonic words from stdin
-  --network <chain>       main | testnet | signet | regtest (default: main)
+  --network <chain>       main | testnet | signet | regtest (default: testnet)
   --no-qr                 Print descriptor only, skip QR render
   -h, --help              Show this help
 
@@ -39,7 +39,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 MNEMONIC=""
 MNEMONIC_FROM_STDIN=0
-NETWORK="main"
+NETWORK="testnet"
 NO_QR=0
 BBT_SH="${THUNDERDEN_BBT_SH:-/opt/bitcoin-bash-tools/bitcoin.sh}"
 SHOW_QR="${THUNDERDEN_SHOW_QR:-${SCRIPT_DIR}/thunderden_show_qr.sh}"

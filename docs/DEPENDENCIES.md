@@ -2,21 +2,24 @@
 
 Thunder Den keeps runtime dependencies intentionally small.
 
-## Runtime dependencies (v1)
+## Runtime programs
 
 - Linux kernel + BusyBox userspace
 - Bash
+- GNU coreutils (required by `bitcoin-bash-tools`)
 - Bitcoin Core (`bitcoind`, `bitcoin-cli`)
 - OpenSSL (`openssl` CLI)
 - `dc` (from `bc`)
 - `libqrencode` tools (`qrencode`)
-- `zbar` (`zbarcam`)
-- `kmod` (`modprobe`)
+- Thunder Den QR scanner
+
+The QR scanner uses `zbar`, `libv4l`, JPEG, and zlib libraries. It does not use
+the `zbarcam` program.
 
 ## Pinned source references
 
 - Buildroot: `2025.11.1`
-- Bitcoin Core: `30.2` (pinned by `scripts/build_thunderden.sh` + `buildroot-external/patches/bitcoin/30.2/bitcoin.hash`)
+- Bitcoin Core: `30.2` (pinned by `scripts/build/build_thunderden.sh` + `buildroot-external/patches/bitcoin/30.2/bitcoin.hash`)
 - `bitcoin-bash-tools`: `7fa496aa2004c55f7845a6cbd003007fb40694fc`
 - `bitcoin-bash-tools/bitcoin.sh` sha256: `772d8d38f0cc215000815176deb555733fa22ff59e3154e280d6fb228af9397e`
 - Linux kernel: Buildroot latest for pinned release (2025.11.1 currently tracks `6.18`)
@@ -26,11 +29,11 @@ Thunder Den keeps runtime dependencies intentionally small.
 - Root filesystem runs from initramfs in RAM.
 - Boot runtime guard enforces RAM-only runtime policy before launching TUI.
 
-## Runtime entropy defaults
+## Entropy defaults
 
 - Kernel cmdline uses `random.trust_cpu=off random.trust_bootloader=off`.
 - Kernel keeps hardware RNG support enabled (including `virtio-rng` for VM tests).
-- Runtime entropy gate script (`thunderden_entropy_guard.sh`) enforces strict infinite wait before any seed-generation flow.
+- Thunder Den imports a mnemonic. It does not generate one.
 
 ## Build host dependencies (Linux)
 

@@ -22,7 +22,7 @@ Windows note:
 From repository root:
 
 ```bash
-./scripts/docker_build_thunderden.sh
+./scripts/build/docker_build_thunderden.sh
 ```
 
 Artifacts are written to repository root by default:
@@ -41,10 +41,10 @@ By default, the script generates both outputs:
 ## Useful options
 
 ```bash
-./scripts/docker_build_thunderden.sh --output-dir ./artifacts
-./scripts/docker_build_thunderden.sh --buildroot-version 2025.11.1
-./scripts/docker_build_thunderden.sh --rebuild-image
-./scripts/docker_build_thunderden.sh --clean-cache
+./scripts/build/docker_build_thunderden.sh --output-dir ./artifacts
+./scripts/build/docker_build_thunderden.sh --buildroot-version 2025.11.1
+./scripts/build/docker_build_thunderden.sh --rebuild-image
+./scripts/build/docker_build_thunderden.sh --clean-cache
 ```
 
 ## Why this script is safer on Desktop hosts

@@ -18,7 +18,6 @@ auditable and strict enough to be trusted.
 
 - General-purpose wallet UX.
 - Multi-account management.
-- Animated multi-part QR standards (UR/BBQR) in first release.
 - x86 + Apple Silicon support in same first artifact (x86 first).
 
 ## High-level flow (BIP84 / PSBT)
@@ -44,7 +43,7 @@ Allowed runtime dependencies are intentionally narrow:
 - Bitcoin Core (`bitcoind`, `bitcoin-cli`)
 - OpenSSL + `dc` (required by `bitcoin-bash-tools`)
 - `qrencode` (display)
-- `zbar` (scan)
+- Custom scanner with `zbar` and `libv4l`
 
 Anything else should be treated as an exception and justified in review.
 
@@ -85,8 +84,7 @@ The source of truth for exact kernel toggles is
 - Kernel command line sets `random.trust_cpu=off random.trust_bootloader=off`.
 - Keep hardware RNG support enabled (`HW_RANDOM_*`, including `HW_RANDOM_VIRTIO`).
 - Keep `virtio-rng` for VM test coverage; real hardware does not depend on virtio.
-- Any future seed/mnemonic generation flow must run `thunderden_entropy_guard.sh` first.
-- Entropy guard uses a strict infinite wait (no timeout) until kernel CSPRNG is initialized.
+- Thunder Den imports a mnemonic. It does not generate one.
 
 ## Runtime storage model
 
@@ -115,10 +113,12 @@ BIP39-derived descriptor keys from `bitcoin-bash-tools`.
 - Publish build manifest and image hashes.
 - Rebuild from clean VM and compare resulting artifacts.
 
-## Current implementation scaffolding
+## Source layout
 
 - Buildroot external tree: `buildroot-external/`.
 - Defconfig entrypoint: `buildroot-external/configs/thunderden_x86_64_defconfig`.
 - Post-build integration: `buildroot-external/board/thunderden/post-build.sh`.
 - Post-image integration: `buildroot-external/board/thunderden/post-image.sh`.
-- Repro helpers: `scripts/build_thunderden.sh`, `scripts/fetch_bitcoin_bash_tools.sh`.
+- Build scripts: `scripts/build/`.
+- Files installed in the image: `scripts/runtime/`.
+- Unfinished code not installed in the image: `scripts/todo/`.

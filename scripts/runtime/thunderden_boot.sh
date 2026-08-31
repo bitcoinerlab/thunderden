@@ -1,13 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
-HARDEN="${THUNDERDEN_HARDENING:-/usr/bin/thunderden_hardening.sh}"
 TUI="${THUNDERDEN_TUI:-/usr/bin/thunderden_tui.sh}"
 GUARD="${THUNDERDEN_RUNTIME_GUARD:-/usr/bin/thunderden_runtime_guard.sh}"
 GUARD_ERROR=""
 
 run_guard() {
   local output=""
+
+  if ! mount -o remount,ro / >/dev/null 2>&1; then
+    GUARD_ERROR="Cannot make the root filesystem read-only."
+    return 1
+  fi
 
   [ -x "$GUARD" ] || {
     GUARD_ERROR="Runtime guard script not found: $GUARD"
@@ -63,10 +67,6 @@ EOF
     esac
   done
 }
-
-if [ -x "$HARDEN" ]; then
-  "$HARDEN" || true
-fi
 
 if run_guard; then
   exec "$TUI"

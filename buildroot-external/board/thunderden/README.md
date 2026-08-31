@@ -13,16 +13,14 @@ This board directory wires the Buildroot image to boot directly into Thunder Den
 - Uses a custom `linux.config` baseline for Thunder Den runtime and hardening.
 - Kernel config disables unneeded sound, external NIC, and USB mass-storage paths.
 - Kernel cmdline enforces `random.trust_cpu=off random.trust_bootloader=off`.
-- Installs `thunderden_entropy_guard.sh` for strict entropy gating in seed-generation flows.
 - Replaces BusyBox `inittab` to launch `thunderden_boot.sh` on `tty1`.
-- Blacklists USB storage, Bluetooth, and Wi-Fi modules via `/etc/modprobe.d/`.
 - Overrides GRUB config for shared BIOS+UEFI boot entry.
 - Publishes `thunderden.SHA256SUMS` in `output/images`.
 
 ## Inputs expected
 
-- Repo runtime scripts in `../scripts`.
-- `bitcoin-bash-tools` source in `../third_party/bitcoin-bash-tools`
+- Repo runtime scripts in `scripts/runtime/`.
+- `bitcoin-bash-tools` source in `third_party/bitcoin-bash-tools`
   (or override with `THUNDERDEN_BBT_SRC`).
 
 ## Output helper

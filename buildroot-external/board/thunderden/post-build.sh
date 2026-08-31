@@ -3,19 +3,15 @@ set -eu
 
 EXTERNAL_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 REPO_DIR="$(cd "${EXTERNAL_DIR}/.." && pwd)"
-SCRIPTS_DIR="${REPO_DIR}/scripts"
+SCRIPTS_DIR="${REPO_DIR}/scripts/runtime"
 BBT_SRC="${THUNDERDEN_BBT_SRC:-${REPO_DIR}/third_party/bitcoin-bash-tools}"
-GRUB_CFG_SRC="${EXTERNAL_DIR}/board/thunderden/grub/grub-efi.cfg"
 
 install -d -m 0755 "${TARGET_DIR}/usr/bin"
 
 for s in \
   thunderden_boot.sh \
   thunderden_export_bip84_descriptor.sh \
-  thunderden_entropy_guard.sh \
-  thunderden_hardening.sh \
   thunderden_runtime_guard.sh \
-  thunderden_scan_qr.sh \
   thunderden_show_qr.sh \
   thunderden_sign_psbt.sh \
   thunderden_tui.sh; do
@@ -58,10 +54,15 @@ if [ ! -x "${TARGET_DIR}/usr/bin/openssl" ]; then
   exit 1
 fi
 
-rm -f "${TARGET_DIR}/usr/bin/bitcoin-tx" "${TARGET_DIR}/usr/bin/bitcoin-util"
-
-# Remove stale scanner preview helper binaries if present from older builds.
-rm -f "${TARGET_DIR}/usr/bin/fbv" "${TARGET_DIR}/usr/bin/v4l2grab"
+# These programs are built by required packages but are not used at runtime.
+rm -f \
+  "${TARGET_DIR}/usr/bin/bc" \
+  "${TARGET_DIR}/usr/bin/bitcoin-tx" \
+  "${TARGET_DIR}/usr/bin/bitcoin-util" \
+  "${TARGET_DIR}/usr/bin/fbv" \
+  "${TARGET_DIR}/usr/bin/v4l2grab" \
+  "${TARGET_DIR}/usr/bin/zbarcam" \
+  "${TARGET_DIR}/usr/bin/zbarimg"
 
 # Thunder Den is built for initramfs-only runtime without kernel modules.
 # Remove any stale module trees left by incremental builds.
@@ -69,7 +70,7 @@ rm -rf "${TARGET_DIR}/lib/modules"
 
 if [ ! -f "${BBT_SRC}/bitcoin.sh" ]; then
   echo "Missing bitcoin-bash-tools at ${BBT_SRC}" >&2
-  echo "Run scripts/fetch_bitcoin_bash_tools.sh first or set THUNDERDEN_BBT_SRC." >&2
+  echo "Run scripts/build/fetch_bitcoin_bash_tools.sh first or set THUNDERDEN_BBT_SRC." >&2
   exit 1
 fi
 
@@ -79,8 +80,6 @@ install -m 0644 "${BBT_SRC}/bitcoin.sh" "${TARGET_DIR}/opt/bitcoin-bash-tools/bi
 if [ -f "${BBT_SRC}/LICENSE" ]; then
   install -m 0644 "${BBT_SRC}/LICENSE" "${TARGET_DIR}/opt/bitcoin-bash-tools/LICENSE"
 fi
-
-install -D -m 0644 "${GRUB_CFG_SRC}" "${TARGET_DIR}/boot/grub/grub.cfg"
 
 BOOT_IMG_SRC=""
 

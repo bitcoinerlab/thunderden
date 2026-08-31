@@ -28,7 +28,7 @@ Notes:
 EOF
 }
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILDROOT_VERSION="2025.11.1"
 BUILDER_IMAGE="thunderden-builder:debian12"
 CONTAINER_NAME="thunderden-build-run"
@@ -133,8 +133,8 @@ docker info >/dev/null 2>&1 || {
   exit 1
 }
 
-[ -f "$ROOT_DIR/scripts/build_thunderden.sh" ] || {
-  echo "Repository layout check failed: scripts/build_thunderden.sh not found" >&2
+[ -f "$ROOT_DIR/scripts/build/build_thunderden.sh" ] || {
+  echo "Repository layout check failed: scripts/build/build_thunderden.sh not found" >&2
   exit 1
 }
 
@@ -206,14 +206,14 @@ tar -C "$ROOT_DIR" \
 docker exec -u builder "$CONTAINER_NAME" bash -lc "
 set -euo pipefail
 cd $WORK_REPO_DIR
-./scripts/fetch_bitcoin_bash_tools.sh
+./scripts/build/fetch_bitcoin_bash_tools.sh
 mkdir -p /cache/src
 cd /cache/src
 [ -f buildroot-${BUILDROOT_VERSION}.tar.xz ] || curl -LO https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.xz
 [ -d buildroot-${BUILDROOT_VERSION} ] || tar -xf buildroot-${BUILDROOT_VERSION}.tar.xz
 cd $WORK_REPO_DIR
 export BR2_DL_DIR=/cache/dl
-./scripts/build_thunderden.sh --buildroot-dir /cache/src/buildroot-${BUILDROOT_VERSION} --output-dir /cache/out
+./scripts/build/build_thunderden.sh --buildroot-dir /cache/src/buildroot-${BUILDROOT_VERSION} --output-dir /cache/out
 "
 
 docker exec "$CONTAINER_NAME" bash -lc "

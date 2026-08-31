@@ -15,14 +15,14 @@ Options:
   -h, --help              Show this help
 
 Notes:
-  - Run scripts/fetch_bitcoin_bash_tools.sh first.
+  - Run scripts/build/fetch_bitcoin_bash_tools.sh first.
   - Linux host only.
   - Build runs in 3 phases: defconfig, toolchain, full target/image.
   - Resulting binaries are in <output-dir>/images.
 EOF
 }
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BR_EXTERNAL="${ROOT_DIR}/buildroot-external"
 BUILDROOT_DIR=""
 OUTPUT_DIR="${ROOT_DIR}/out/buildroot"
@@ -112,7 +112,7 @@ ensure_linux_host
 
 [ -f "${BBT_SRC}/bitcoin.sh" ] || {
   echo "Missing bitcoin-bash-tools: ${BBT_SRC}" >&2
-  echo "Run scripts/fetch_bitcoin_bash_tools.sh or set THUNDERDEN_BBT_SRC" >&2
+  echo "Run scripts/build/fetch_bitcoin_bash_tools.sh or set THUNDERDEN_BBT_SRC" >&2
   exit 1
 }
 

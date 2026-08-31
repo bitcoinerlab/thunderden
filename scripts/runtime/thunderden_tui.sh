@@ -4,10 +4,10 @@ set -euo pipefail
 umask 077
 
 SIGNER="${THUNDERDEN_SIGNER:-/usr/bin/thunderden_sign_psbt.sh}"
-SCANNER="${THUNDERDEN_SCANNER:-/usr/bin/thunderden_scan_qr.sh}"
+SCANNER="${THUNDERDEN_SCANNER:-/usr/bin/thunderden-qrscan}"
 SHOW_QR="${THUNDERDEN_SHOW_QR:-/usr/bin/thunderden_show_qr.sh}"
 EXPORTER="${THUNDERDEN_EXPORTER:-/usr/bin/thunderden_export_bip84_descriptor.sh}"
-NETWORK="${THUNDERDEN_NETWORK:-main}"
+NETWORK="${THUNDERDEN_NETWORK:-testnet}"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   cat <<'EOF'
@@ -216,19 +216,17 @@ main() {
   case "$NETWORK" in
     main|testnet|signet|regtest) ;;
     *)
-      NETWORK="main"
+      NETWORK="testnet"
       ;;
   esac
 
-  command -v "$SIGNER" >/dev/null 2>&1 || {
-    printf 'Signer script not found: %s\n' "$SIGNER" >&2
-    exit 1
-  }
-
-  command -v "$EXPORTER" >/dev/null 2>&1 || {
-    printf 'Descriptor export script not found: %s\n' "$EXPORTER" >&2
-    exit 1
-  }
+  local tool=""
+  for tool in "$SIGNER" "$SCANNER" "$SHOW_QR" "$EXPORTER"; do
+    command -v "$tool" >/dev/null 2>&1 || {
+      printf 'Required program not found: %s\n' "$tool" >&2
+      exit 1
+    }
+  done
 
   while true; do
     menu

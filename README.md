@@ -28,7 +28,7 @@ minimal dependencies, and stateless operation.
 - Ship one hybrid BIOS+UEFI USB image for broad hardware compatibility.
 - Stateless runtime: initramfs root in RAM, `/tmp` and `/run` on tmpfs, reboot clears all secrets.
 - Network disabled for the signing workflow.
-- TUI includes network selection for signing context (mainnet/testnet).
+- TUI includes network selection for signing context (testnet by default).
 - Use Bitcoin Core for PSBT signing through `descriptorprocesspsbt`.
 - Use `bitcoin-bash-tools` only for BIP39 (`mnemonic -> seed -> BIP84 descriptors`).
 - QR-only transport (scan unsigned PSBT, display signed PSBT).
@@ -77,7 +77,7 @@ For exact switches, see `buildroot-external/board/thunderden/linux.config`.
 
 - Kernel boot args explicitly set `random.trust_cpu=off random.trust_bootloader=off`.
 - Hardware RNG paths remain enabled (including `virtio-rng` for VM testing).
-- Future seed/mnemonic generation flows must run `thunderden_entropy_guard.sh` first; it waits indefinitely for kernel RNG readiness.
+- Thunder Den imports a mnemonic. It does not generate one.
 
 ## Repo layout
 
@@ -87,26 +87,19 @@ For exact switches, see `buildroot-external/board/thunderden/linux.config`.
 - `docs/DEPENDENCIES.md`: minimal dependency set and pinned references.
 - `docs/HOST_SETUP_LINUX.md`: from-scratch Linux host requirements and setup.
 - `docs/RELEASE_VERIFICATION.md`: prebuilt image verification and release signing flow.
-- `buildroot-external/`: Buildroot external tree (`thunderden_x86_64_defconfig`).
-- `scripts/thunderden_tui.sh`: no-login text menu for signing.
-- `scripts/thunderden_sign_psbt.sh`: BIP84 descriptor signing pipeline.
-- `scripts/thunderden_export_bip84_descriptor.sh`: exports single BIP84 import descriptor (`xpub/tpub`) as text + QR.
-- `scripts/thunderden_runtime_guard.sh`: boot-time runtime policy checks.
-- `scripts/thunderden_entropy_guard.sh`: strict entropy readiness gate for seed generation flows.
-- `scripts/thunderden_scan_qr.sh`: camera scanner helper.
-- `scripts/thunderden_show_qr.sh`: terminal QR display helper (auto static/animated with live zoom+density keys).
-- `scripts/build_thunderden.sh`: build helper for Buildroot external tree.
-- `scripts/docker_build_thunderden.sh`: Docker build helper without bind-mount compile.
-- `scripts/fetch_bitcoin_bash_tools.sh`: pin/fetch helper for `bitcoin-bash-tools`.
-- `scripts/test_shell_syntax.sh`: shell syntax checks.
+- `buildroot-external/`: defines the Linux system and boot image.
+- `scripts/build/`: runs only on the build computer. These files are not installed in the image.
+- `scripts/runtime/`: files installed in the image.
+- `scripts/todo/`: unfinished work that is not installed in the image.
+- `buildroot-external/package/thunderden-qrscan/`: camera and QR scanner.
 - `test-vectors/qr-signing/`: deterministic QR + PSBT vectors for webcam signing tests.
 - `experiments/`: quarantined prototype scripts not used in runtime image.
 
 ## Fast path (after source verification)
 
 ```bash
-./scripts/fetch_bitcoin_bash_tools.sh
-./scripts/build_thunderden.sh --buildroot-dir /path/to/buildroot
+./scripts/build/fetch_bitcoin_bash_tools.sh
+./scripts/build/build_thunderden.sh --buildroot-dir /path/to/buildroot
 ./out/buildroot/images/make-image.sh --binaries-dir ./out/buildroot/images --output thunderden.img
 ```
 
@@ -134,6 +127,7 @@ Default prebuilt-image verification flow is documented in
 
 ## Notes
 
+- Use simple English in documentation, screen text, errors, and comments.
 - This project intentionally avoids broad dependency sprawl.
 - The build guide pins source versions and includes signature verification steps.
 - Scanner support includes direct and multipart PSBT QR payloads (base64, UR, BBQR, `pMofN`, hex, base43), normalized to base64 for signing.

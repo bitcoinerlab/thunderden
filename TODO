@@ -1,3 +1,83 @@
-Use this before generating any random number:
+# Thunder Den TODO
 
-thunderden_entropy_guard.sh
+## Project rules
+
+- Use simple English in code messages, comments, and documents.
+- Keep the build easy to read and run.
+- Install only files used by the final system.
+- Keep support for legacy BIOS and UEFI systems.
+- Keep GRUB because the hybrid image needs it for legacy BIOS support.
+- Keep secrets in RAM and keep network and storage support disabled.
+
+## 1. Make signing safe
+
+- Show transaction outputs, amounts, fee, locktime, and sighash rules before asking for the mnemonic.
+- Require clear user confirmation before signing.
+- Reject a PSBT when input amounts are missing or the fee cannot be checked.
+- Reject unsafe sighash types unless support is added with a clear reason.
+- Report success only when at least one new signature was added.
+- Pass mnemonics, passphrases, and private descriptors through standard input instead of process arguments or exported variables.
+- Keep testnet as the default while the project is experimental.
+
+## 2. Update and pin the build
+
+- Keep all main versions in one small, easy-to-read file.
+- Update Buildroot to `2026.05.2`.
+- Update Bitcoin Core to `31.1`.
+- Update the build container to Debian `13`.
+- Use the Linux kernel selected by Buildroot `2026.05.2` and review the final kernel configuration.
+- Keep `bitcoin-bash-tools` at its current commit unless upstream changes.
+- Store and check the SHA-256 hash of every downloaded source.
+- Check the Buildroot signing-key fingerprint instead of trusting a key URL from the downloaded signature.
+- Use a clean Buildroot output directory when a version or package setting changes.
+- Keep download caches, but do not reuse target files for release builds.
+
+## 3. Keep the image small
+
+- Build an exact list of installed programs and libraries.
+- Fail the build if an unexpected program or library is installed.
+- Check again for unused Boost libraries after updating Bitcoin Core.
+- Keep only QR formats that are needed. Prefer base64 plus one multipart format such as BBQR.
+- Remove the other QR decoders after the supported multipart format is chosen.
+- Review whether Bash, GNU coreutils, OpenSSL, and `dc` can be reduced without writing new untested cryptographic code.
+- Review the final kernel configuration for unused drivers and features.
+- Keep drivers needed for old BIOS-era computers, USB keyboards, and USB cameras.
+- Keep Wi-Fi, Bluetooth, wired network, USB storage, disk storage, and kernel modules disabled.
+- Document every direct and indirect runtime dependency in simple English.
+
+## 4. Keep the build simple
+
+- Keep `scripts/build/` separate from `scripts/runtime/`.
+- Keep one documented Docker command as the normal build path.
+- Put the builder definition in a small visible Dockerfile instead of hiding it inside a long shell script.
+- Verify Buildroot before extracting it.
+- Make the build create the hybrid BIOS+UEFI image and its hashes without manual steps.
+- Keep the small UEFI image only if maintaining both outputs stays simple.
+
+## 5. Test the real system
+
+- Run the actual Bitcoin Core signing path against every PSBT test vector.
+- Verify signatures, not only the presence of signature fields.
+- Test wrong mnemonics, missing inputs, unsafe sighash types, and invalid PSBT data.
+- Test malformed and incomplete QR input without unbounded memory use.
+- Boot-test the hybrid image with both legacy BIOS and UEFI firmware.
+- Test a real USB keyboard and several common USB cameras.
+- Verify that root is read-only and RAM-backed, `/tmp` and `/run` are safe tmpfs mounts, and swap is off.
+- Verify that no network, radio, host disk, or USB storage device is usable.
+- Compare two clean builds and record any files that are not reproducible.
+
+## 6. Finish release verification
+
+- Include the repository commit, Buildroot configuration, kernel configuration, package list, and source hashes in the build manifest.
+- Include final image hashes in one signed `SHA256SUMS` file.
+- Build releases from a clean output directory.
+- Inspect the final initramfs before each release.
+
+## Future mnemonic generation
+
+- Move `scripts/todo/thunderden_entropy_guard.sh` into `scripts/runtime/` before adding mnemonic generation.
+- Run it before any mnemonic is generated.
+- Test that it waits for the kernel random generator.
+- Test that it fails when the required kernel settings are missing.
+
+The entropy script is not installed yet because Thunder Den currently imports a mnemonic instead of generating one.

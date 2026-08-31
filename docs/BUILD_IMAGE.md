@@ -51,15 +51,15 @@ export BR_SRC="$HOME/thunderden-build/src/buildroot-${BR_VER}"
 
 ```bash
 cd "$HOME/thunderden"
-./scripts/fetch_bitcoin_bash_tools.sh
-./scripts/test_shell_syntax.sh
+./scripts/build/fetch_bitcoin_bash_tools.sh
+./scripts/build/test_shell_syntax.sh
 ```
 
 ## 4) Build Thunder Den
 
 ```bash
 cd "$HOME/thunderden"
-./scripts/build_thunderden.sh --buildroot-dir "$BR_SRC"
+./scripts/build/build_thunderden.sh --buildroot-dir "$BR_SRC"
 ```
 
 Artifacts land in:
@@ -121,7 +121,6 @@ Replace `/dev/sdX` with the real USB device.
 - Wi-Fi/Bluetooth disabled
 - USB keyboard/camera usable
 - `/proc/cmdline` includes `random.trust_cpu=off` and `random.trust_bootloader=off`
-- `/usr/bin/thunderden_entropy_guard.sh --quiet` exits 0 (it may block until RNG is ready)
 - reboot clears runtime secrets
 
 ## 8) Release bundle checklist
