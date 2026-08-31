@@ -20,7 +20,6 @@ check_dir() {
 
 check_dir "${ROOT_DIR}/scripts"
 check_dir "${ROOT_DIR}/buildroot-external"
-check_dir "${ROOT_DIR}/experiments"
 sh -n "${ROOT_DIR}/buildroot-external/board/thunderden/rootfs-overlay/etc/init.d/S11thunderden-runtime"
 
 echo "All shell syntax checks passed."

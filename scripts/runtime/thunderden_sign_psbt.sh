@@ -11,16 +11,12 @@ die() {
 usage() {
   cat <<'EOF'
 Usage:
-  thunderden_sign_psbt.sh --psbt <base64> (--mnemonic "words..." | --mnemonic-stdin) [options]
+  printf '%s\n' "mnemonic words" | thunderden_sign_psbt.sh (--psbt <base64> | --psbt-file <path>) [options]
 
 Options:
   --psbt <base64>         Unsigned PSBT in base64 (must start with cHNidP)
   --psbt-file <path>      Read unsigned PSBT from file
-  --mnemonic <words>      BIP39 mnemonic words as a single string
-  --mnemonic-stdin        Read one line of mnemonic words from stdin
   --network <chain>       main | testnet | signet | regtest (default: testnet)
-  --range <n>             Descriptor range upper bound (default: 200)
-  --json                  Print full JSON RPC result (default: PSBT only)
   -h, --help              Show this help
 
 Environment:
@@ -40,10 +36,8 @@ need_cmd() {
 
 PSBT=""
 MNEMONIC=""
-MNEMONIC_FROM_STDIN=0
 NETWORK="testnet"
 RANGE="200"
-PRINT_JSON=0
 BBT_SH="${THUNDERDEN_BBT_SH:-/opt/bitcoin-bash-tools/bitcoin.sh}"
 CHAIN="main"
 
@@ -60,28 +54,10 @@ while [ "$#" -gt 0 ]; do
       PSBT="$(tr -d '\r\n' < "$2")"
       shift 2
       ;;
-    --mnemonic)
-      [ "$#" -ge 2 ] || die "--mnemonic requires a value"
-      MNEMONIC="$2"
-      shift 2
-      ;;
-    --mnemonic-stdin)
-      MNEMONIC_FROM_STDIN=1
-      shift
-      ;;
     --network)
       [ "$#" -ge 2 ] || die "--network requires a value"
       NETWORK="$2"
       shift 2
-      ;;
-    --range)
-      [ "$#" -ge 2 ] || die "--range requires a value"
-      RANGE="$2"
-      shift 2
-      ;;
-    --json)
-      PRINT_JSON=1
-      shift
       ;;
     -h|--help)
       usage
@@ -95,11 +71,8 @@ done
 
 [ -n "$PSBT" ] || die "Missing PSBT. Use --psbt or --psbt-file"
 
-if [ "$MNEMONIC_FROM_STDIN" -eq 1 ]; then
-  IFS= read -r MNEMONIC || true
-fi
-
-[ -n "$MNEMONIC" ] || die "Missing mnemonic. Use --mnemonic or --mnemonic-stdin"
+IFS= read -r MNEMONIC || true
+[ -n "$MNEMONIC" ] || die "Missing mnemonic on standard input"
 
 case "$PSBT" in
   cHNidP*) ;;
@@ -115,10 +88,6 @@ CHAIN="$NETWORK"
 if [ "$NETWORK" = "testnet" ]; then
   CHAIN="test"
 fi
-
-case "$RANGE" in
-  ''|*[!0-9]*) die "--range must be a positive integer" ;;
-esac
 
 need_cmd bitcoind
 need_cmd bitcoin-cli
@@ -251,6 +220,8 @@ else
 fi
 
 bbt_call mnemonic-to-seed "${MNEMONIC_WORDS[@]}" > "$SEED_FILE" || die "Failed to derive BIP39 seed"
+MNEMONIC=""
+unset MNEMONIC_WORDS BIP39_PASSPHRASE
 
 BIP32_ARGS=(-s)
 ACCOUNT_PATH="/84h/0h/0h"
@@ -287,11 +258,6 @@ fi
 RESULT_JSON="$(bitcoin-cli -datadir="$DATADIR" -conf="$CONF_FILE" -chain="$CHAIN" -named descriptorprocesspsbt psbt="$PSBT" descriptors="$DESCRIPTORS_JSON" bip32derivs=true finalize=true)"
 
 [ -n "$RESULT_JSON" ] || die "descriptorprocesspsbt returned empty output"
-
-if [ "$PRINT_JSON" -eq 1 ]; then
-  printf '%s\n' "$RESULT_JSON"
-  exit 0
-fi
 
 RESULT_ONE_LINE="$(printf '%s' "$RESULT_JSON" | tr -d '\n')"
 SIGNED_PSBT="$(printf '%s' "$RESULT_ONE_LINE" | sed -n 's/.*"psbt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"

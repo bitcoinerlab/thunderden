@@ -51,8 +51,7 @@
 - Keep one documented Docker command as the normal build path.
 - Put the builder definition in a small visible Dockerfile instead of hiding it inside a long shell script.
 - Verify Buildroot before extracting it.
-- Make the build create the hybrid BIOS+UEFI image and its hashes without manual steps.
-- Keep the small UEFI image only if maintaining both outputs stays simple.
+- Make the build create both boot images and their hashes without manual steps.
 
 ## 5. Test the real system
 
@@ -61,6 +60,7 @@
 - Test wrong mnemonics, missing inputs, unsafe sighash types, and invalid PSBT data.
 - Test malformed and incomplete QR input without unbounded memory use.
 - Boot-test the hybrid image with both legacy BIOS and UEFI firmware.
+- Boot-test the small image with x86_64 UEFI firmware.
 - Test a real USB keyboard and several common USB cameras.
 - Verify that root is read-only and RAM-backed, `/tmp` and `/run` are safe tmpfs mounts, and swap is off.
 - Verify that no network, radio, host disk, or USB storage device is usable.

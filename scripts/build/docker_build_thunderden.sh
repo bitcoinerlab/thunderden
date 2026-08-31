@@ -9,14 +9,9 @@ Usage:
   docker_build_thunderden.sh [options]
 
 Options:
-  --buildroot-version <ver>  Buildroot release version (default: 2025.11.1)
-  --builder-image <name>     Docker image used for builds (default: thunderden-builder:debian12)
-  --container-name <name>    Container name for current run (default: thunderden-build-run)
-  --cache-prefix <prefix>    Prefix for Docker cache volumes (default: thunderden)
   --output-dir <path>        Host directory for artifacts (default: <repo root>)
   --rebuild-image            Force rebuild of Docker builder image
   --clean-cache              Delete Docker cache volumes (dl/src/out) before build
-  --keep-container           Keep container after script exits
   -h, --help                 Show this help
 
 Notes:
@@ -32,35 +27,13 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILDROOT_VERSION="2025.11.1"
 BUILDER_IMAGE="thunderden-builder:debian12"
 CONTAINER_NAME="thunderden-build-run"
-CACHE_PREFIX="thunderden"
 OUTPUT_DIR="$ROOT_DIR"
 WORK_REPO_DIR="/work/thunderden"
 REBUILD_IMAGE=0
 CLEAN_CACHE=0
-KEEP_CONTAINER=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --buildroot-version)
-      [ "$#" -ge 2 ] || { echo "--buildroot-version requires a value" >&2; exit 1; }
-      BUILDROOT_VERSION="$2"
-      shift 2
-      ;;
-    --builder-image)
-      [ "$#" -ge 2 ] || { echo "--builder-image requires a value" >&2; exit 1; }
-      BUILDER_IMAGE="$2"
-      shift 2
-      ;;
-    --container-name)
-      [ "$#" -ge 2 ] || { echo "--container-name requires a value" >&2; exit 1; }
-      CONTAINER_NAME="$2"
-      shift 2
-      ;;
-    --cache-prefix)
-      [ "$#" -ge 2 ] || { echo "--cache-prefix requires a value" >&2; exit 1; }
-      CACHE_PREFIX="$2"
-      shift 2
-      ;;
     --output-dir)
       [ "$#" -ge 2 ] || { echo "--output-dir requires a value" >&2; exit 1; }
       OUTPUT_DIR="$2"
@@ -72,10 +45,6 @@ while [ "$#" -gt 0 ]; do
       ;;
     --clean-cache)
       CLEAN_CACHE=1
-      shift
-      ;;
-    --keep-container)
-      KEEP_CONTAINER=1
       shift
       ;;
     -h|--help)
@@ -97,34 +66,6 @@ need_cmd() {
   }
 }
 
-ensure_supported_host_shell() {
-  local host_uname=""
-
-  host_uname="$(uname -s)"
-  case "$host_uname" in
-    Darwin|Linux)
-      ;;
-    MINGW*|MSYS*|CYGWIN*)
-      echo "Unsupported shell: $host_uname" >&2
-      echo "Use WSL2 (Linux shell) on Windows." >&2
-      exit 1
-      ;;
-    *)
-      echo "Unsupported host OS: $host_uname" >&2
-      exit 1
-      ;;
-  esac
-
-  if [ "$host_uname" = "Linux" ] && [ -f /proc/sys/kernel/osrelease ]; then
-    if grep -qi microsoft /proc/sys/kernel/osrelease && ! grep -qi wsl2 /proc/sys/kernel/osrelease; then
-      echo "WSL1 detected. Use WSL2 for supported Docker workflow." >&2
-      exit 1
-    fi
-  fi
-}
-
-ensure_supported_host_shell
-
 need_cmd docker
 need_cmd tar
 
@@ -141,17 +82,18 @@ docker info >/dev/null 2>&1 || {
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 
-CACHE_DL_VOL="${CACHE_PREFIX}-dl"
-CACHE_SRC_VOL="${CACHE_PREFIX}-src"
-CACHE_OUT_VOL="${CACHE_PREFIX}-out"
+CACHE_DL_VOL="thunderden-dl"
+CACHE_SRC_VOL="thunderden-src"
+CACHE_OUT_VOL="thunderden-out"
 
 cleanup() {
-  if [ "$KEEP_CONTAINER" -eq 0 ]; then
-    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-  fi
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT INT TERM
+
+# Remove an old build container before deleting volumes it may still use.
+cleanup
 
 if [ "$CLEAN_CACHE" -eq 1 ]; then
   docker volume rm "$CACHE_DL_VOL" "$CACHE_SRC_VOL" "$CACHE_OUT_VOL" >/dev/null 2>&1 || true
@@ -166,25 +108,21 @@ if [ "$REBUILD_IMAGE" -eq 1 ] || ! docker image inspect "$BUILDER_IMAGE" >/dev/n
 FROM debian:12
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  sudo ca-certificates \
+  ca-certificates \
   build-essential bc bison flex cpio file git rsync unzip wget curl \
   xz-utils tar python3 libncurses-dev gawk patch pkg-config \
-  meson ninja-build cmake gpg gpg-agent dirmngr \
-  parted dosfstools util-linux e2fsprogs \
+  meson ninja-build cmake \
+  parted \
   && rm -rf /var/lib/apt/lists/* \
   && useradd -m -s /bin/bash builder
 EOF
 fi
-
-docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 docker run -d --name "$CONTAINER_NAME" \
   -v "${CACHE_DL_VOL}:/cache/dl" \
   -v "${CACHE_SRC_VOL}:/cache/src" \
   -v "${CACHE_OUT_VOL}:/cache/out" \
   "$BUILDER_IMAGE" sleep infinity >/dev/null
-
-docker exec "$CONTAINER_NAME" bash -lc 'id -u builder >/dev/null 2>&1 || useradd -m -s /bin/bash builder'
 
 docker exec "$CONTAINER_NAME" bash -lc '
 set -e
@@ -216,20 +154,19 @@ export BR2_DL_DIR=/cache/dl
 ./scripts/build/build_thunderden.sh --buildroot-dir /cache/src/buildroot-${BUILDROOT_VERSION} --output-dir /cache/out
 "
 
-docker exec "$CONTAINER_NAME" bash -lc "
+docker exec -u builder "$CONTAINER_NAME" bash -lc "
 set -euo pipefail
 cd $WORK_REPO_DIR
-IMAGE_HELPER=$WORK_REPO_DIR/buildroot-external/board/thunderden/make-image.sh
+IMAGE_HELPER=/cache/out/images/make-image.sh
 
 # Compatibility-first image.
 \"\$IMAGE_HELPER\" --binaries-dir /cache/out/images --output thunderden.img
 sha256sum thunderden.img > thunderden.img.sha256
-sha256sum -c thunderden.img.sha256
 
-# Tiny image (smallest current FAT16 fit, UEFI-only).
+# Minimum-size image for x86_64 UEFI systems with very small boot media.
 \"\$IMAGE_HELPER\" --binaries-dir /cache/out/images --output thunderden-small.img --small
 sha256sum thunderden-small.img > thunderden-small.img.sha256
-sha256sum -c thunderden-small.img.sha256
+
 "
 
 docker cp "$CONTAINER_NAME:$WORK_REPO_DIR/thunderden.img" "$OUTPUT_DIR/thunderden.img"
@@ -243,7 +180,7 @@ echo "Docker build complete."
 echo "Artifacts:"
 echo "  $OUTPUT_DIR/thunderden.img (max compatibility)"
 echo "  $OUTPUT_DIR/thunderden.img.sha256"
-echo "  $OUTPUT_DIR/thunderden-small.img (smallest current payload fit, UEFI-only)"
+echo "  $OUTPUT_DIR/thunderden-small.img (minimum-size x86_64 UEFI only, no GRUB)"
 echo "  $OUTPUT_DIR/thunderden-small.img.sha256"
 if [ -f "$OUTPUT_DIR/thunderden.SHA256SUMS" ]; then
   echo "  $OUTPUT_DIR/thunderden.SHA256SUMS"

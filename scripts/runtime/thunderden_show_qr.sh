@@ -38,34 +38,19 @@ fi
 
 command -v qrencode >/dev/null 2>&1 || die "Missing command: qrencode"
 
-QR_TYPE="${THUNDERDEN_QR_TYPE:-UTF8i}"
-QR_ECC="${THUNDERDEN_QR_ECC:-L}"
-FRAME_DELAY="${THUNDERDEN_QR_FRAME_DELAY:-0.14}"
+QR_TYPE="UTF8i"
+QR_ECC="L"
+FRAME_DELAY="0.14"
 
-STANDARD_MAX_VERSION="${THUNDERDEN_QR_STANDARD_MAX_VERSION:-6}"
-CHUNK_STEP="${THUNDERDEN_QR_CHUNK_STEP:-20}"
-CHUNK_MIN="${THUNDERDEN_QR_CHUNK_MIN:-80}"
-CHUNK_DEFAULT="${THUNDERDEN_QR_CHUNK_DEFAULT:-180}"
-CHUNK_MAX="${THUNDERDEN_QR_CHUNK_MAX:-1200}"
-MARGIN="${THUNDERDEN_QR_MARGIN:-2}"
+STANDARD_MAX_VERSION="6"
+CHUNK_STEP="20"
+CHUNK_MIN="80"
+CHUNK_DEFAULT="180"
+CHUNK_MAX="1200"
+MARGIN="2"
 
 MAX_QR_VERSION=40
 PAYLOAD_LEN="${#DATA}"
-
-case "$STANDARD_MAX_VERSION" in ''|*[!0-9]*) STANDARD_MAX_VERSION=6 ;; esac
-case "$CHUNK_STEP" in ''|*[!0-9]*) CHUNK_STEP=20 ;; esac
-case "$CHUNK_MIN" in ''|*[!0-9]*) CHUNK_MIN=80 ;; esac
-case "$CHUNK_DEFAULT" in ''|*[!0-9]*) CHUNK_DEFAULT=180 ;; esac
-case "$CHUNK_MAX" in ''|*[!0-9]*) CHUNK_MAX=1200 ;; esac
-case "$MARGIN" in ''|*[!0-9]*) MARGIN=2 ;; esac
-
-[ "$STANDARD_MAX_VERSION" -ge 1 ] || STANDARD_MAX_VERSION=6
-[ "$STANDARD_MAX_VERSION" -le "$MAX_QR_VERSION" ] || STANDARD_MAX_VERSION="$MAX_QR_VERSION"
-[ "$CHUNK_STEP" -ge 1 ] || CHUNK_STEP=20
-[ "$CHUNK_MIN" -ge 1 ] || CHUNK_MIN=1
-[ "$CHUNK_DEFAULT" -ge 1 ] || CHUNK_DEFAULT=1
-[ "$CHUNK_MAX" -ge "$CHUNK_MIN" ] || CHUNK_MAX="$CHUNK_MIN"
-[ "$MARGIN" -ge 0 ] || MARGIN=0
 
 if [ "$PAYLOAD_LEN" -lt "$CHUNK_MIN" ]; then
   CHUNK_MIN="$PAYLOAD_LEN"
@@ -113,11 +98,6 @@ can_encode_payload() {
   local version="${2:-0}"
 
   qrencode_base "$payload" "$version" >/dev/null 2>&1
-}
-
-find_min_version() {
-  local payload="$1"
-  find_min_version_up_to "$payload" "$MAX_QR_VERSION"
 }
 
 find_min_version_up_to() {
@@ -176,7 +156,7 @@ fits_screen() {
 
 update_full_static_capability() {
   if [ "$FULL_STATIC_VERSION" -eq 0 ]; then
-    FULL_STATIC_VERSION="$(find_min_version "$DATA")" || FULL_STATIC_VERSION=0
+    FULL_STATIC_VERSION="$(find_min_version_up_to "$DATA" "$MAX_QR_VERSION")" || FULL_STATIC_VERSION=0
   fi
 
   if [ "$FULL_STATIC_VERSION" -gt 0 ] && fits_screen "$FULL_STATIC_VERSION"; then
@@ -358,23 +338,9 @@ render_view() {
 
 read_key() {
   local key=""
-  local a=""
-  local b=""
 
   if ! IFS= read -r -s -N 1 -t "$FRAME_DELAY" key < /dev/tty; then
     return 1
-  fi
-
-  if [ "$key" = $'\033' ]; then
-    if IFS= read -r -s -N 1 -t 0.02 a < /dev/tty && [ "$a" = "[" ]; then
-      if IFS= read -r -s -N 1 -t 0.02 b < /dev/tty; then
-        case "$b" in
-          C) KEY_RESULT="RIGHT" ; return 0 ;;
-          D) KEY_RESULT="LEFT" ; return 0 ;;
-          *) ;;
-        esac
-      fi
-    fi
   fi
 
   KEY_RESULT="$key"
@@ -388,7 +354,7 @@ handle_key() {
     $'\n'|$'\r'|q|Q)
       return 1
       ;;
-    p|P|RIGHT)
+    p|P)
       if [ "$VIEW_MODE" = "full-static" ]; then
         STATUS_LINE="Already showing full static preview."
         NEEDS_RENDER=1
@@ -406,7 +372,7 @@ handle_key() {
       NEEDS_RENDER=1
       FOOTER_DIRTY=1
       ;;
-    o|O|LEFT)
+    o|O)
       if [ "$VIEW_MODE" = "auto" ]; then
         STATUS_LINE="Already in auto profile."
         NEEDS_RENDER=1

@@ -17,7 +17,7 @@ Options:
 Notes:
   - Run scripts/build/fetch_bitcoin_bash_tools.sh first.
   - Linux host only.
-  - Build runs in 3 phases: defconfig, toolchain, full target/image.
+  - Build runs in 2 phases: configuration, then the full system image.
   - Resulting binaries are in <output-dir>/images.
 EOF
 }
@@ -43,7 +43,7 @@ sanitize_path_for_buildroot() {
     esac
 
     case "$entry" in
-      *' '*|*'\t'*|*'\n'*)
+      *[[:space:]]*)
         dropped=1
         ;;
       *)
@@ -74,10 +74,12 @@ ensure_linux_host() {
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --buildroot-dir)
+      [ "$#" -ge 2 ] || { echo "--buildroot-dir requires a value" >&2; exit 1; }
       BUILDROOT_DIR="$2"
       shift 2
       ;;
     --output-dir)
+      [ "$#" -ge 2 ] || { echo "--output-dir requires a value" >&2; exit 1; }
       OUTPUT_DIR="$2"
       shift 2
       ;;
@@ -123,21 +125,16 @@ sanitize_path_for_buildroot
 echo
 echo "Bitcoin Core pin: ${THUNDERDEN_BITCOIN_VERSION}"
 
-# Phase 1: load Thunder Den defconfig into Buildroot output directory.
+# Phase 1: load Thunder Den defconfig into the Buildroot output directory.
 echo
-echo "== [1/3] Loading Thunder Den defconfig =="
-make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" thunderden_x86_64_defconfig
+echo "== [1/2] Loading Thunder Den configuration =="
+make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" thunderden_x86_64_defconfig
 
 if [ "${MENUCONFIG}" -eq 1 ]; then
   echo
-  echo "== [1b/3] Opening menuconfig (optional) =="
-  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" menuconfig
+  echo "== Opening menuconfig =="
+  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" menuconfig
 fi
-
-# Phase 2: build Buildroot internal cross-toolchain and host toolchain bits.
-echo
-echo "== [2/3] Building Buildroot toolchain =="
-make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" toolchain
 
 # Buildroot caches local package extract/build stamps in O=. For local-source
 # packages this can keep stale binaries across incremental runs. Force a
@@ -145,19 +142,19 @@ make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCO
 # up without nuking the whole cache.
 if [ -f "${OUTPUT_DIR}/.config" ] && grep -q '^BR2_PACKAGE_THUNDERDEN_QRSCAN=y' "${OUTPUT_DIR}/.config"; then
   echo
-  echo "== [2b/3] Refreshing thunderden-qrscan package =="
-  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}" thunderden-qrscan-dirclean
+  echo "== Refreshing Thunder Den QR scanner =="
+  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" thunderden-qrscan-dirclean
 fi
 
-# Phase 3: build target packages (Bitcoin, zbar, etc.) and image artifacts.
+# Phase 2: Buildroot creates the toolchain, target packages, and image files.
 echo
-echo "== [3/3] Building target packages and images =="
+echo "== [2/2] Building Thunder Den =="
 THUNDERDEN_BBT_SRC="${BBT_SRC}" \
   make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}"
 
 echo
 echo "Build complete. Artifacts: ${OUTPUT_DIR}/images"
-echo "To create max-compat hybrid BIOS+UEFI image:"
+echo "To create the hybrid BIOS+UEFI image:"
 echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden.img"
-echo "To create smallest current-fit image (UEFI-only):"
+echo "To create the minimum-size x86_64 UEFI image:"
 echo "  ${ROOT_DIR}/buildroot-external/board/thunderden/make-image.sh --binaries-dir ${OUTPUT_DIR}/images --output thunderden-small.img --small"

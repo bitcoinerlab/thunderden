@@ -11,13 +11,11 @@ die() {
 usage() {
   cat <<'EOF'
 Usage:
-  thunderden_export_bip84_descriptor.sh (--mnemonic "words..." | --mnemonic-stdin) [options]
+  printf '%s\n' "mnemonic words" | thunderden_export_bip84_descriptor.sh [options]
 
 Options:
-  --mnemonic <words>      BIP39 mnemonic words as a single string
-  --mnemonic-stdin        Read one line of mnemonic words from stdin
   --network <chain>       main | testnet | signet | regtest (default: testnet)
-  --no-qr                 Print descriptor only, skip QR render
+  --no-qr                 Print descriptor only, for headless tests
   -h, --help              Show this help
 
 Environment:
@@ -38,7 +36,6 @@ need_cmd() {
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 MNEMONIC=""
-MNEMONIC_FROM_STDIN=0
 NETWORK="testnet"
 NO_QR=0
 BBT_SH="${THUNDERDEN_BBT_SH:-/opt/bitcoin-bash-tools/bitcoin.sh}"
@@ -46,15 +43,6 @@ SHOW_QR="${THUNDERDEN_SHOW_QR:-${SCRIPT_DIR}/thunderden_show_qr.sh}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --mnemonic)
-      [ "$#" -ge 2 ] || die "--mnemonic requires a value"
-      MNEMONIC="$2"
-      shift 2
-      ;;
-    --mnemonic-stdin)
-      MNEMONIC_FROM_STDIN=1
-      shift
-      ;;
     --network)
       [ "$#" -ge 2 ] || die "--network requires a value"
       NETWORK="$2"
@@ -74,11 +62,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ "$MNEMONIC_FROM_STDIN" -eq 1 ]; then
-  IFS= read -r MNEMONIC || true
-fi
-
-[ -n "$MNEMONIC" ] || die "Missing mnemonic. Use --mnemonic or --mnemonic-stdin"
+IFS= read -r MNEMONIC || true
+[ -n "$MNEMONIC" ] || die "Missing mnemonic on standard input"
 
 case "$NETWORK" in
   main|testnet|signet|regtest) ;;
@@ -174,6 +159,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 bbt_call mnemonic-to-seed "${MNEMONIC_WORDS[@]}" > "$SEED_FILE" || die "Failed to derive BIP39 seed"
+MNEMONIC=""
+unset MNEMONIC_WORDS BIP39_PASSPHRASE
 
 BIP32_ARGS=(-s)
 ACCOUNT_PATH="/84h/0h/0h"

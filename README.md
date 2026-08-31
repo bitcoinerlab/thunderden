@@ -101,6 +101,7 @@ For exact switches, see `buildroot-external/board/thunderden/linux.config`.
 ./scripts/build/fetch_bitcoin_bash_tools.sh
 ./scripts/build/build_thunderden.sh --buildroot-dir /path/to/buildroot
 ./out/buildroot/images/make-image.sh --binaries-dir ./out/buildroot/images --output thunderden.img
+./out/buildroot/images/make-image.sh --binaries-dir ./out/buildroot/images --output thunderden-small.img --small
 ```
 
 The hybrid image assembly helper is rootless (no loop-mount step).
@@ -110,12 +111,14 @@ default output image size is 64 MiB. This keeps a FAT32 boot partition with
 enough headroom for old firmware quirks and supports one image that boots on
 both legacy BIOS and UEFI machines.
 
-Docker builds generate two artifacts by default:
+Docker builds generate two boot images and their hashes:
 
 - `thunderden.img`: max-compat BIOS+UEFI image (FAT32, 64 MiB)
-- `thunderden-small.img`: smallest current payload fit (UEFI-only, FAT16, best-effort compatibility)
+- `thunderden-small.img`: minimum-size x86_64 UEFI image (FAT16, no GRUB)
 
-Then flash `thunderden.img` to USB and boot.
+Use `thunderden.img` unless the boot media is too small. The small image is for
+x86_64 UEFI firmware with Secure Boot disabled. It does not boot legacy BIOS or
+32-bit UEFI systems.
 
 Default prebuilt-image verification flow is documented in
 `docs/RELEASE_VERIFICATION.md`.

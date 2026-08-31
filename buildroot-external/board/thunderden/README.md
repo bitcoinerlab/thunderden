@@ -25,17 +25,18 @@ This board directory wires the Buildroot image to boot directly into Thunder Den
 
 ## Output helper
 
-`output/images/make-image.sh` creates:
+`output/images/make-image.sh` creates the hybrid BIOS+UEFI image. Its `--small`
+mode creates the minimum-size FAT16 image for direct x86_64 UEFI-stub boot.
 
-- max-compat hybrid BIOS+UEFI image (default mode)
-- tiny UEFI-only image (`--small`)
-
-Default mode uses:
+It uses:
 
 - `output/images/efi-part/`
 - `output/images/bzImage`
 - `output/images/boot.img`
 - `output/images/grub.img`
+
+Small mode uses only `output/images/bzImage`. It does not use GRUB and does not
+support legacy BIOS.
 
 The helper uses rootless assembly (no loop devices or mounts).
 

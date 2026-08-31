@@ -35,6 +35,27 @@ python3 test-vectors/qr-signing/verify_signed_psbt.py \
   --signed-psbt-file test-vectors/qr-signing/vectors/tv1-testnet-basic/signed.psbt.txt
 ```
 
+To run the real signer in a Thunder Den runtime or build-test environment:
+
+```bash
+printf '%s\n' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' |
+  thunderden_sign_psbt.sh \
+    --network testnet \
+    --psbt-file test-vectors/qr-signing/vectors/tv1-testnet-basic/unsigned.psbt.txt \
+    > /tmp/tv1-signed.psbt.txt
+
+python3 test-vectors/qr-signing/verify_signed_psbt.py \
+  --vector tv1-testnet-basic \
+  --signed-psbt-file /tmp/tv1-signed.psbt.txt
+```
+
+Descriptor derivation can be tested without terminal QR output:
+
+```bash
+printf '%s\n' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' |
+  thunderden_export_bip84_descriptor.sh --network testnet --no-qr
+```
+
 ## Regeneration
 
 Regenerate all vector files (requires `python3`, `embit`, and `qrencode`):

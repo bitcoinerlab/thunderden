@@ -131,16 +131,9 @@ sign_flow() {
     return 130
   fi
 
-  if [ -n "$passphrase" ]; then
-    if ! signed_psbt="$(printf '%s\n' "$mnemonic" | BIP39_PASSPHRASE="$passphrase" "$SIGNER" --network "$NETWORK" --mnemonic-stdin --psbt "$psbt")"; then
-      printf 'Signing failed.\n' >&2
-      return 1
-    fi
-  else
-    if ! signed_psbt="$(printf '%s\n' "$mnemonic" | "$SIGNER" --network "$NETWORK" --mnemonic-stdin --psbt "$psbt")"; then
-      printf 'Signing failed.\n' >&2
-      return 1
-    fi
+  if ! signed_psbt="$(printf '%s\n' "$mnemonic" | BIP39_PASSPHRASE="$passphrase" "$SIGNER" --network "$NETWORK" --psbt "$psbt")"; then
+    printf 'Signing failed.\n' >&2
+    return 1
   fi
 
   mnemonic=""
@@ -176,16 +169,9 @@ descriptor_export_flow() {
   fi
 
   clear
-  if [ -n "$passphrase" ]; then
-    if ! printf '%s\n' "$mnemonic" | BIP39_PASSPHRASE="$passphrase" "$EXPORTER" --network "$NETWORK" --mnemonic-stdin; then
-      printf 'Descriptor export failed.\n' >&2
-      return 1
-    fi
-  else
-    if ! printf '%s\n' "$mnemonic" | "$EXPORTER" --network "$NETWORK" --mnemonic-stdin; then
-      printf 'Descriptor export failed.\n' >&2
-      return 1
-    fi
+  if ! printf '%s\n' "$mnemonic" | BIP39_PASSPHRASE="$passphrase" "$EXPORTER" --network "$NETWORK"; then
+    printf 'Descriptor export failed.\n' >&2
+    return 1
   fi
 
   mnemonic=""

@@ -5,28 +5,6 @@ PINNED_COMMIT="7fa496aa2004c55f7845a6cbd003007fb40694fc"
 PINNED_BITCOIN_SH_SHA256="772d8d38f0cc215000815176deb555733fa22ff59e3154e280d6fb228af9397e"
 REPO_URL="https://github.com/grondilu/bitcoin-bash-tools.git"
 
-sha256_file() {
-  local file="$1"
-
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" | awk '{print $1}'
-    return 0
-  fi
-
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" | awk '{print $1}'
-    return 0
-  fi
-
-  if command -v openssl >/dev/null 2>&1; then
-    openssl dgst -sha256 "$file" | awk '{print $NF}'
-    return 0
-  fi
-
-  echo "Error: no SHA-256 tool found (sha256sum, shasum, or openssl)." >&2
-  exit 1
-}
-
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   cat <<'EOF'
 Fetch bitcoin-bash-tools at the pinned commit into third_party/.
@@ -41,6 +19,11 @@ if [ "$#" -ne 0 ]; then
   echo "Unexpected arguments. Use --help for usage." >&2
   exit 1
 fi
+
+command -v sha256sum >/dev/null 2>&1 || {
+  echo "Missing command: sha256sum" >&2
+  exit 1
+}
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST_DIR="${ROOT_DIR}/third_party/bitcoin-bash-tools"
@@ -66,7 +49,8 @@ fi
   exit 1
 }
 
-ACTUAL_BITCOIN_SH_SHA256="$(sha256_file "${DEST_DIR}/bitcoin.sh")"
+ACTUAL_BITCOIN_SH_SHA256="$(sha256sum "${DEST_DIR}/bitcoin.sh")"
+ACTUAL_BITCOIN_SH_SHA256="${ACTUAL_BITCOIN_SH_SHA256%% *}"
 if [ "${ACTUAL_BITCOIN_SH_SHA256}" != "${PINNED_BITCOIN_SH_SHA256}" ]; then
   echo "Pinned bitcoin.sh SHA256 mismatch: expected ${PINNED_BITCOIN_SH_SHA256}, got ${ACTUAL_BITCOIN_SH_SHA256}" >&2
   exit 1

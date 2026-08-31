@@ -12,7 +12,7 @@ so this project documents Linux host setup only.
 ## Install required host packages
 
 These are the minimal packages needed to build and assemble
-`thunderden.img` / `thunderden-small.img`:
+`thunderden.img`:
 
 ```bash
 sudo apt update
@@ -21,7 +21,7 @@ sudo apt install -y \
   xz-utils tar python3 libncurses-dev gawk patch pkg-config \
   meson ninja-build cmake \
   gpg gpg-agent dirmngr \
-  parted dosfstools
+  parted
 ```
 
 ## Preflight checks
@@ -29,20 +29,20 @@ sudo apt install -y \
 ```bash
 for cmd in \
   git make gcc gpg curl tar xz \
-  parted mkfs.vfat; do
+  parted; do
   command -v "$cmd" >/dev/null || echo "missing: $cmd"
 done
 ```
 
 If any command is missing, install the corresponding package first.
 
-`mcopy` is built by Buildroot into `out/buildroot/host/bin` during normal builds,
-and the Thunder Den image assembly helper auto-discovers that path.
+Buildroot builds `mcopy`, `mdir`, and `mkfs.vfat` under `out/buildroot/host`.
+The image assembly helper finds them automatically.
 
 ## PATH gotcha for admin tools
 
-On some minimal Debian shells, `parted` and `mkfs.vfat` are under
-`/usr/sbin` and are not present in the default non-root `PATH`.
+On some minimal Debian shells, `parted` is under `/usr/sbin` and is not present
+in the default non-root `PATH`.
 
 Use this before running image assembly scripts:
 

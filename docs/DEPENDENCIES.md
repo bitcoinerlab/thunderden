@@ -43,13 +43,13 @@ Required build + image assembly packages:
 - `xz-utils tar python3 libncurses-dev gawk patch pkg-config`
 - `meson ninja-build cmake`
 - `gpg gpg-agent dirmngr`
-- `parted dosfstools`
+- `parted`
 
 Admin-path note:
 
-- some hosts require `/usr/sbin:/sbin` in `PATH` for `parted`/`mkfs.vfat` discovery
-- `mcopy` is provided by Buildroot host tools (`<output-dir>/host/bin`) and the image
-  helper prepends that path automatically when available
+- some hosts require `/usr/sbin:/sbin` in `PATH` for `parted` discovery
+- Buildroot provides `mcopy`, `mdir`, and `mkfs.vfat` in `<output-dir>/host`;
+  the image helper finds them automatically
 
 ## Rules
 

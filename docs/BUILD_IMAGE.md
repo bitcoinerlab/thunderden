@@ -1,4 +1,4 @@
-# Thunder Den Image Build Guide (x86_64 Hybrid BIOS+UEFI)
+# Thunder Den Image Build Guide (x86_64)
 
 This guide is the canonical Linux-only self-build flow for Thunder Den v1.
 
@@ -70,7 +70,7 @@ Artifacts land in:
 - `out/buildroot/images/thunderden.SHA256SUMS`
 - `out/buildroot/images/make-image.sh`
 
-## 5) Assemble bootable hybrid BIOS+UEFI disk image
+## 5) Assemble bootable disk images
 
 ```bash
 cd "$HOME/thunderden"
@@ -80,7 +80,7 @@ cd "$HOME/thunderden"
   --binaries-dir ./out/buildroot/images \
   --output thunderden.img
 
-# Tiny image (smallest UEFI-only FAT16 size that fits current payload)
+# Smallest current fit (x86_64 UEFI only, FAT16, no GRUB)
 ./out/buildroot/images/make-image.sh \
   --binaries-dir ./out/buildroot/images \
   --output thunderden-small.img \
@@ -89,18 +89,33 @@ cd "$HOME/thunderden"
 
 This image assembly step is rootless (no `sudo`, no loop mounts).
 
-Both images boot a kernel with embedded initramfs rootfs (RAM-backed runtime
-root).
+Both images boot a kernel with an embedded initramfs root filesystem in RAM.
 
-Use `thunderden.img` as the default release artifact. `thunderden-small.img`
-is a best-effort tiny UEFI-only variant and may be less firmware-compatible.
+Use `thunderden.img` by default. It supports legacy BIOS and x86_64 UEFI and
+uses GRUB for broad firmware compatibility.
+
+Use `thunderden-small.img` only when the boot media cannot hold the 64 MiB
+image. The build tries image sizes from 8 through 64 MiB and keeps the first
+size that fits the complete kernel and embedded root filesystem. This makes the
+small image useful for tracking system growth and for old 32 MB USB drives.
+
+The small image works only when all of these are true:
+
+- the computer has x86_64 UEFI firmware
+- the firmware can boot the removable-media path `EFI/BOOT/BOOTX64.EFI`
+- the firmware can read a FAT16 partition
+- Secure Boot is disabled
+
+The small image does not work on legacy BIOS-only computers, 32-bit UEFI
+computers, or firmware that requires a signed EFI program. Some early UEFI
+implementations require FAT32; use `thunderden.img` on those systems.
 
 Generate hash for release/testing:
 
 ```bash
 sha256sum thunderden.img > thunderden.img.sha256
-sha256sum -c thunderden.img.sha256
 sha256sum thunderden-small.img > thunderden-small.img.sha256
+sha256sum -c thunderden.img.sha256
 sha256sum -c thunderden-small.img.sha256
 ```
 
@@ -127,7 +142,7 @@ Replace `/dev/sdX` with the real USB device.
 
 - `thunderden.img`
 - `thunderden.img.sha256`
-- `thunderden-small.img` (UEFI-only tiny variant)
+- `thunderden-small.img`
 - `thunderden-small.img.sha256`
 - `SHA256SUMS` + `SHA256SUMS.asc`
 - Buildroot version and verification logs

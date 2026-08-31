@@ -1,9 +1,28 @@
 #!/bin/sh
+set -eu
 
-grep -qs " /tmp tmpfs " /proc/mounts || \
-  mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /tmp
+mount_tmpfs() {
+  target="$1"
+  options="$2"
 
-grep -qs " /run tmpfs " /proc/mounts || \
-  mount -t tmpfs -o mode=0755,nosuid,nodev,size=16M tmpfs /run
+  if grep -qs " ${target} tmpfs " /proc/mounts; then
+    mount -o "remount,${options}" tmpfs "$target"
+  else
+    mount -t tmpfs -o "$options" tmpfs "$target"
+  fi
+}
 
-swapoff -a >/dev/null 2>&1 || true
+case "${1:-}" in
+  start)
+    mount_tmpfs /tmp mode=1777,nosuid,nodev
+    mount_tmpfs /run mode=0755,nosuid,nodev,size=16M
+    mkdir -p /run/lock/subsys
+    swapoff -a >/dev/null 2>&1 || true
+    ;;
+  stop)
+    ;;
+  *)
+    echo "Usage: $0 {start|stop}" >&2
+    exit 1
+    ;;
+esac

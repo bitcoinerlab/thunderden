@@ -29,20 +29,18 @@ Artifacts are written to repository root by default:
 
 - `thunderden.img` (max-compat BIOS+UEFI, FAT32, 64 MiB)
 - `thunderden.img.sha256`
-- `thunderden-small.img` (smallest current payload fit, UEFI-only FAT16 best-effort)
+- `thunderden-small.img` (minimum-size x86_64 UEFI, FAT16, no GRUB)
 - `thunderden-small.img.sha256`
 - `thunderden.SHA256SUMS` (if produced)
 
-By default, the script generates both outputs:
-
-- compatibility image: fixed `64` MiB FAT32 for broad firmware support
-- tiny image: smallest UEFI-only FAT16 size that still fits current payload
+Use `thunderden.img` by default. The small image is only for x86_64 UEFI
+systems with Secure Boot disabled and boot media that cannot hold 64 MiB. It
+does not support legacy BIOS or 32-bit UEFI.
 
 ## Useful options
 
 ```bash
 ./scripts/build/docker_build_thunderden.sh --output-dir ./artifacts
-./scripts/build/docker_build_thunderden.sh --buildroot-version 2025.11.1
 ./scripts/build/docker_build_thunderden.sh --rebuild-image
 ./scripts/build/docker_build_thunderden.sh --clean-cache
 ```
