@@ -18,11 +18,21 @@ the `zbarcam` program.
 
 ## Pinned source references
 
-- Buildroot: `2025.11.1`
-- Bitcoin Core: `30.2` (pinned by `scripts/build/build_thunderden.sh` + `buildroot-external/patches/bitcoin/30.2/bitcoin.hash`)
+- Buildroot: `2026.05.2`
+- Buildroot tarball sha256: `7cd0b79e657b8a1760cef0a68d083265726efe96a17f7f0cb9c10dd6d29b7107`
+- Buildroot signing key: `18C7DF2819C1733D822D599EA500D6EE9CB0E540`
+- Bitcoin Core: `31.1`
+- Bitcoin Core tarball sha256: `50411d5b43c7e4c90099394759eb6c2add6e7c2dbe728840893d638b6fc6afc9`
+- Linux kernel: `7.0.14`
+- Linux tarball sha256: `de9999b784d2293f00d39c62d8f92a08ab8a54bc4e80ffd250a0c09cb07a0f98`
+- Docker builder: Debian `13.6` from snapshot `20260824T000000Z`, with the base OCI image pinned by digest
 - `bitcoin-bash-tools`: `7fa496aa2004c55f7845a6cbd003007fb40694fc`
 - `bitcoin-bash-tools/bitcoin.sh` sha256: `772d8d38f0cc215000815176deb555733fa22ff59e3154e280d6fb228af9397e`
-- Linux kernel: Buildroot latest for pinned release (2025.11.1 currently tracks `6.18`)
+
+The authoritative main pins are in `scripts/build/versions.env`. Buildroot
+package hash files verify Bitcoin Core, Linux, package sources, and license
+files. `BR2_DOWNLOAD_FORCE_CHECK_HASHES=y` makes a missing source hash a build
+failure.
 
 ## Runtime storage model
 

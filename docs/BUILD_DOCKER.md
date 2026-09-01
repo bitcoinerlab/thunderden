@@ -31,7 +31,8 @@ Artifacts are written to repository root by default:
 - `thunderden.img.sha256`
 - `thunderden-small.img` (minimum-size x86_64 UEFI, FAT16, no GRUB)
 - `thunderden-small.img.sha256`
-- `thunderden.SHA256SUMS` (if produced)
+- `SHA256SUMS` (both release images)
+- `thunderden.SHA256SUMS` (internal Buildroot image files)
 
 Use `thunderden.img` by default. The small image is only for x86_64 UEFI
 systems with Secure Boot disabled and boot media that cannot hold 64 MiB. It
@@ -42,8 +43,14 @@ does not support legacy BIOS or 32-bit UEFI.
 ```bash
 ./scripts/build/docker_build_thunderden.sh --output-dir ./artifacts
 ./scripts/build/docker_build_thunderden.sh --rebuild-image
+./scripts/build/docker_build_thunderden.sh --clean-output
 ./scripts/build/docker_build_thunderden.sh --clean-cache
 ```
+
+The script automatically clears the Buildroot output volume when a main pin or
+Buildroot package/configuration setting changes. Downloads remain cached. Use
+`--clean-output` to request the same output-only cleanup manually, or
+`--clean-cache` to delete downloads, extracted Buildroot sources, and output.
 
 ## Runtime vector tests
 
@@ -61,6 +68,10 @@ modify the cached output.
 ## Why this script is safer on Desktop hosts
 
 - Source is copied into container-local filesystem before build.
+- The builder uses Debian 13.6 by OCI digest and a dated Debian snapshot.
+- The Buildroot archive is checked against its pinned SHA-256, and its signed
+  checksum message is verified with a pinned signing-key fingerprint before
+  extraction.
 - Buildroot compile workload does not run on host bind mounts.
 - Download, source, and Buildroot output caches are preserved in Docker
   volumes across runs for incremental rebuilds.
@@ -73,4 +84,5 @@ modify the cached output.
 - If Docker Desktop offers file-sharing backend choice, prefer `VirtioFS`.
 - This flow does not replace Linux-native reproducible build path in
   `docs/BUILD_IMAGE.md`; it is an additional convenience path.
-- Use `--clean-cache` when you need a fully clean rebuild.
+- Use `--clean-output` for a clean release build that retains verified source
+  downloads.

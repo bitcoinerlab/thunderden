@@ -37,18 +37,12 @@
 - Extend the existing runtime harness with Ledger wallet-ID vectors, SLIP-0021/HMAC vectors, all default policies, registered multisig, and tampering cases; do not add another harness.
 - Document that custom policies must be backed up because the seed cannot recover cosigners, thresholds, or policy structure.
 
-## 3. Update and pin the build
+## 3. Update and pin the build (completed 2026-09-01)
 
-- Keep all main versions in one small, easy-to-read file.
-- Update Buildroot to `2026.05.2`.
-- Update Bitcoin Core to `31.1`.
-- Update the build container to Debian `13`.
-- Use the Linux kernel selected by Buildroot `2026.05.2` and review the final kernel configuration.
-- Keep `bitcoin-bash-tools` at its current commit unless upstream changes.
-- Store and check the SHA-256 hash of every downloaded source.
-- Check the Buildroot signing-key fingerprint instead of trusting a key URL from the downloaded signature.
-- Use a clean Buildroot output directory when a version or package setting changes.
-- Keep download caches, but do not reuse target files for release builds.
+- Main pins are in `scripts/build/versions.env`.
+- Buildroot is pinned to `2026.05.2`, Bitcoin Core to `31.1`, Linux to `7.0.14`, and the Docker builder to Debian `13.6`.
+- Source hashes are enforced, and the Buildroot signing key is checked against its pinned fingerprint before extraction.
+- Version and package/configuration changes clear Buildroot output while keeping verified downloads.
 
 ## 4. Keep the image small
 
@@ -81,7 +75,7 @@
 - Test a real USB keyboard and several common USB cameras.
 - Verify that root is read-only and RAM-backed, `/tmp` and `/run` are safe tmpfs mounts, and swap is off.
 - Verify that no network, radio, host disk, or USB storage device is usable.
-- Compare two clean builds and record any files that are not reproducible.
+- Make final FAT disk metadata reproducible; repeated builds matched all internal Buildroot hashes but produced different final disk-image hashes.
 
 ## 7. Finish release verification
 

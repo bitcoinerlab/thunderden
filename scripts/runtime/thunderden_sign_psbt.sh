@@ -244,9 +244,10 @@ daemon=1
 listen=0
 dnsseed=0
 discover=0
-upnp=0
 natpmp=0
 networkactive=0
+blocksonly=1
+dbcache=4
 EOF
 
 BITCOIND_START_LOG="$WORKDIR/bitcoind-start.log"

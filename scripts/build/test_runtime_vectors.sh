@@ -2,7 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BUILDER_IMAGE="thunderden-builder:debian12"
+VERSIONS_FILE="${ROOT_DIR}/scripts/build/versions.env"
+[ -f "$VERSIONS_FILE" ] || { echo "Missing build pins: $VERSIONS_FILE" >&2; exit 1; }
+. "$VERSIONS_FILE"
+
 BUILDROOT_OUT_VOLUME="thunderden-out"
 RUNTIME_IMAGE="thunderden-runtime-test:rootfs-v1"
 VECTORS_DIR="${ROOT_DIR}/test-vectors/qr-signing"

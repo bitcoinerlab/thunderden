@@ -15,29 +15,36 @@ Recommended baseline:
 ## 2) Verify Buildroot source (pinned)
 
 ```bash
-export BR_VER="2025.11.1"
+export BR_VER="2026.05.2"
+export BR_SHA256="7cd0b79e657b8a1760cef0a68d083265726efe96a17f7f0cb9c10dd6d29b7107"
+export BR_KEY_FINGERPRINT="18C7DF2819C1733D822D599EA500D6EE9CB0E540"
+export BR_KEY_URL="https://gitlab.com/-/snippets/4836881/raw/main/arnout@rnout.be.asc"
 mkdir -p "$HOME/thunderden-build/src"
 cd "$HOME/thunderden-build/src"
 
-curl -LO "https://buildroot.org/downloads/buildroot-${BR_VER}.tar.xz"
-curl -LO "https://buildroot.org/downloads/buildroot-${BR_VER}.tar.xz.sign"
+curl -fLO "https://buildroot.org/downloads/buildroot-${BR_VER}.tar.xz"
+curl -fLO "https://buildroot.org/downloads/buildroot-${BR_VER}.tar.xz.sign"
+curl -fsSL "$BR_KEY_URL" -o buildroot-release-key.asc
 ```
 
 Buildroot `*.sign` files are clearsigned messages that include hashes and the
-key URL. Import key and verify the signed message:
+key URL. Do not trust that downloaded URL. Check the key against the fingerprint
+pinned in `scripts/build/versions.env`, then verify the signed message:
 
 ```bash
-KEY_URL="$(awk '/^from https:/{print $2}' "buildroot-${BR_VER}.tar.xz.sign")"
-curl -fsSL "$KEY_URL" -o buildroot-release-key.asc
+ACTUAL_FINGERPRINT="$(
+  gpg --batch --with-colons --show-keys buildroot-release-key.asc |
+    awk -F: '$1 == "fpr" { print $10; exit }'
+)"
+test "$ACTUAL_FINGERPRINT" = "$BR_KEY_FINGERPRINT"
 gpg --import buildroot-release-key.asc
 gpg --verify "buildroot-${BR_VER}.tar.xz.sign"
 ```
 
-Then verify the tarball hash against the signed message:
+Then verify the tarball against the repository pin:
 
 ```bash
-EXPECTED_SHA256="$(awk '/^SHA256:/ {print $2}' "buildroot-${BR_VER}.tar.xz.sign")"
-echo "${EXPECTED_SHA256}  buildroot-${BR_VER}.tar.xz" | sha256sum -c -
+echo "${BR_SHA256}  buildroot-${BR_VER}.tar.xz" | sha256sum -c -
 ```
 
 Extract source tree:
@@ -61,6 +68,10 @@ cd "$HOME/thunderden"
 cd "$HOME/thunderden"
 ./scripts/build/build_thunderden.sh --buildroot-dir "$BR_SRC"
 ```
+
+The helper rejects the wrong Buildroot source version. It also clears its
+output directory when a main pin or Buildroot package/configuration setting
+changes. Pass `--clean-output` to request that cleanup explicitly.
 
 Artifacts land in:
 
@@ -115,6 +126,7 @@ Generate hash for release/testing:
 ```bash
 sha256sum thunderden.img > thunderden.img.sha256
 sha256sum thunderden-small.img > thunderden-small.img.sha256
+sha256sum thunderden.img thunderden-small.img > SHA256SUMS
 sha256sum -c thunderden.img.sha256
 sha256sum -c thunderden-small.img.sha256
 ```

@@ -7,7 +7,8 @@ This board directory wires the Buildroot image to boot directly into Thunder Den
 - Installs Thunder Den runtime scripts into `/usr/bin`.
 - Runs boot-time runtime guard before starting TUI.
 - Installs pinned `bitcoin-bash-tools` into `/opt/bitcoin-bash-tools`.
-- Pins Bitcoin Core package source to 30.2 with verified hashes.
+- Pins Bitcoin Core package source to 31.1 with verified hashes.
+- Pins Linux 7.0.14 and uses matching kernel headers.
 - Narrows Bitcoin Core build outputs to daemon + CLI only.
 - Prunes unused Bitcoin Core helper binaries from target rootfs.
 - Uses a custom `linux.config` baseline for Thunder Den runtime and hardening.

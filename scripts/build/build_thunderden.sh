@@ -6,11 +6,12 @@ usage() {
 Build Thunder Den via Buildroot external tree.
 
 Usage:
-  build_thunderden.sh --buildroot-dir <path> [--output-dir <path>] [--menuconfig]
+  build_thunderden.sh --buildroot-dir <path> [--output-dir <path>] [--clean-output] [--menuconfig]
 
 Options:
   --buildroot-dir <path>  Buildroot source directory (required)
   --output-dir <path>     Build output directory (default: <repo>/out/buildroot)
+  --clean-output          Recreate the Buildroot output before building
   --menuconfig            Open menuconfig after loading defconfig
   -h, --help              Show this help
 
@@ -23,12 +24,58 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+VERSIONS_FILE="${ROOT_DIR}/scripts/build/versions.env"
+[ -f "$VERSIONS_FILE" ] || { echo "Missing build pins: $VERSIONS_FILE" >&2; exit 1; }
+. "$VERSIONS_FILE"
+
 BR_EXTERNAL="${ROOT_DIR}/buildroot-external"
 BUILDROOT_DIR=""
 OUTPUT_DIR="${ROOT_DIR}/out/buildroot"
 MENUCONFIG=0
+CLEAN_OUTPUT=0
 BBT_SRC="${THUNDERDEN_BBT_SRC:-${ROOT_DIR}/third_party/bitcoin-bash-tools}"
-THUNDERDEN_BITCOIN_VERSION="30.2"
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Missing command: $1" >&2
+    exit 1
+  }
+}
+
+calculate_build_config_hash() {
+  (
+    cd "$ROOT_DIR"
+    {
+      sha256sum \
+        scripts/build/versions.env \
+        scripts/build/Dockerfile \
+        buildroot-external/Config.in \
+        buildroot-external/external.desc \
+        buildroot-external/external.mk \
+        buildroot-external/board/thunderden/linux.config
+      find \
+        buildroot-external/configs \
+        buildroot-external/package \
+        buildroot-external/patches \
+        -type f \( \
+          -name 'Config.in' -o \
+          -name '*.mk' -o \
+          -name '*.hash' -o \
+          -name '*.patch' \
+        \) -print0 |
+        LC_ALL=C sort -z |
+        xargs -0 sha256sum
+    } | sha256sum
+  ) | {
+    read -r hash _
+    printf '%s\n' "$hash"
+  }
+}
+
+clear_output_dir() {
+  [ "$OUTPUT_DIR" != "/" ] || { echo "Refusing to clear /" >&2; exit 1; }
+  find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+}
 
 sanitize_path_for_buildroot() {
   local old_path="$PATH"
@@ -83,6 +130,10 @@ while [ "$#" -gt 0 ]; do
       OUTPUT_DIR="$2"
       shift 2
       ;;
+    --clean-output)
+      CLEAN_OUTPUT=1
+      shift
+      ;;
     --menuconfig)
       MENUCONFIG=1
       shift
@@ -107,10 +158,21 @@ done
 
 ensure_linux_host
 
+need_cmd find
+need_cmd sha256sum
+need_cmd sort
+need_cmd xargs
+
 [ -f "${BUILDROOT_DIR}/Makefile" ] || {
   echo "Not a Buildroot source tree: ${BUILDROOT_DIR}" >&2
   exit 1
 }
+
+ACTUAL_BUILDROOT_VERSION="$(make -s -C "$BUILDROOT_DIR" print-version)"
+if [ "$ACTUAL_BUILDROOT_VERSION" != "$BUILDROOT_VERSION" ]; then
+  echo "Buildroot version mismatch: expected $BUILDROOT_VERSION, got $ACTUAL_BUILDROOT_VERSION" >&2
+  exit 1
+fi
 
 [ -f "${BBT_SRC}/bitcoin.sh" ] || {
   echo "Missing bitcoin-bash-tools: ${BBT_SRC}" >&2
@@ -119,11 +181,50 @@ ensure_linux_host
 }
 
 mkdir -p "${OUTPUT_DIR}"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+
+ACTUAL_BBT_SHA256="$(sha256sum "${BBT_SRC}/bitcoin.sh")"
+ACTUAL_BBT_SHA256="${ACTUAL_BBT_SHA256%% *}"
+if [ "$ACTUAL_BBT_SHA256" != "$BITCOIN_BASH_TOOLS_SHA256" ]; then
+  echo "bitcoin-bash-tools hash mismatch: expected $BITCOIN_BASH_TOOLS_SHA256, got $ACTUAL_BBT_SHA256" >&2
+  exit 1
+fi
+
+BITCOIN_HASH_FILE="${BR_EXTERNAL}/patches/bitcoin/${BITCOIN_VERSION}/bitcoin.hash"
+LINUX_HASH_FILE="${BR_EXTERNAL}/patches/linux/${LINUX_VERSION}/linux.hash"
+grep -Fq "${BITCOIN_SOURCE_SHA256}  bitcoin-${BITCOIN_VERSION}.tar.gz" "$BITCOIN_HASH_FILE" || {
+  echo "Bitcoin source hash does not match versions.env: $BITCOIN_HASH_FILE" >&2
+  exit 1
+}
+grep -Fq "${LINUX_SOURCE_SHA256}  linux-${LINUX_VERSION}.tar.xz" "$LINUX_HASH_FILE" || {
+  echo "Linux source hash does not match versions.env: $LINUX_HASH_FILE" >&2
+  exit 1
+}
+grep -Fqx "BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=\"${LINUX_VERSION}\"" \
+  "${BR_EXTERNAL}/configs/thunderden_x86_64_defconfig" || {
+  echo "Linux version in defconfig does not match versions.env" >&2
+  exit 1
+}
+
+BUILD_CONFIG_HASH="$(calculate_build_config_hash)"
+BUILD_CONFIG_STAMP="${OUTPUT_DIR}/.thunderden-build-config-sha256"
+PREVIOUS_BUILD_CONFIG_HASH=""
+[ ! -f "$BUILD_CONFIG_STAMP" ] || PREVIOUS_BUILD_CONFIG_HASH="$(< "$BUILD_CONFIG_STAMP")"
+
+if [ "$CLEAN_OUTPUT" -eq 1 ] || [ "$PREVIOUS_BUILD_CONFIG_HASH" != "$BUILD_CONFIG_HASH" ]; then
+  if [ -n "$(find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    echo "Build pins or configuration changed; clearing output while preserving downloads."
+    clear_output_dir
+  fi
+fi
+printf '%s\n' "$BUILD_CONFIG_HASH" > "$BUILD_CONFIG_STAMP"
 
 sanitize_path_for_buildroot
 
 echo
-echo "Bitcoin Core pin: ${THUNDERDEN_BITCOIN_VERSION}"
+echo "Buildroot pin: ${BUILDROOT_VERSION}"
+echo "Linux pin: ${LINUX_VERSION}"
+echo "Bitcoin Core pin: ${BITCOIN_VERSION}"
 
 # Phase 1: load Thunder Den defconfig into the Buildroot output directory.
 echo
@@ -150,7 +251,7 @@ fi
 echo
 echo "== [2/2] Building Thunder Den =="
 THUNDERDEN_BBT_SRC="${BBT_SRC}" \
-  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${THUNDERDEN_BITCOIN_VERSION}"
+  make -C "${BUILDROOT_DIR}" O="${OUTPUT_DIR}" BR2_EXTERNAL="${BR_EXTERNAL}" BITCOIN_VERSION="${BITCOIN_VERSION}"
 
 echo
 echo "Build complete. Artifacts: ${OUTPUT_DIR}/images"
