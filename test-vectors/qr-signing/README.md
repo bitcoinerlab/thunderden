@@ -25,36 +25,20 @@ Never use them for storing real bitcoin.
 5. Enter the vector mnemonic and passphrase from `metadata.json`.
 6. Confirm signing succeeds and compare the shown signed PSBT against `signed.psbt.txt`.
 
-## Optional local verification
+## Automated runtime tests
 
-You can verify the signed PSBT output matches vector expectations:
-
-```bash
-python3 test-vectors/qr-signing/verify_signed_psbt.py \
-  --vector tv1-testnet-basic \
-  --signed-psbt-file test-vectors/qr-signing/vectors/tv1-testnet-basic/signed.psbt.txt
-```
-
-To run the real signer in a Thunder Den runtime or build-test environment:
+After completing at least one Docker build, run the single runtime harness from
+the repository root:
 
 ```bash
-printf '%s\n' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' |
-  thunderden_sign_psbt.sh \
-    --network testnet \
-    --psbt-file test-vectors/qr-signing/vectors/tv1-testnet-basic/unsigned.psbt.txt \
-    > /tmp/tv1-signed.psbt.txt
-
-python3 test-vectors/qr-signing/verify_signed_psbt.py \
-  --vector tv1-testnet-basic \
-  --signed-psbt-file /tmp/tv1-signed.psbt.txt
+./scripts/build/test_runtime_vectors.sh
 ```
 
-Descriptor derivation can be tested without terminal QR output:
-
-```bash
-printf '%s\n' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' |
-  thunderden_export_bip84_descriptor.sh --network testnet --no-qr
-```
+The harness uses the generated Buildroot rootfs cached in the `thunderden-out`
+Docker volume. It overlays the current signer, descriptor exporter, and QR
+renderer scripts, so script changes can be tested without rebuilding
+Buildroot. It runs every indexed vector with external networking disabled and
+does not modify the Buildroot output.
 
 ## Regeneration
 

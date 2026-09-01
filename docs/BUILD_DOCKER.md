@@ -45,6 +45,19 @@ does not support legacy BIOS or 32-bit UEFI.
 ./scripts/build/docker_build_thunderden.sh --clean-cache
 ```
 
+## Runtime vector tests
+
+After completing at least one Docker build, test the current runtime scripts
+against the generated Buildroot rootfs:
+
+```bash
+./scripts/build/test_runtime_vectors.sh
+```
+
+The harness reuses the `thunderden-out` cache and overlays the current signer,
+descriptor exporter, and QR renderer scripts. It does not rebuild Buildroot or
+modify the cached output.
+
 ## Why this script is safer on Desktop hosts
 
 - Source is copied into container-local filesystem before build.
