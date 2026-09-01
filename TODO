@@ -9,14 +9,15 @@
 - Keep GRUB because the hybrid image needs it for legacy BIOS support.
 - Keep secrets in RAM and keep network and storage support disabled.
 
-## 1. Make signing safe
+## 1. Add signing policy and user verification
 
-- Show transaction outputs, amounts, fee, locktime, and sighash rules before asking for the mnemonic.
-- Require clear user confirmation before signing.
-- Reject a PSBT when input amounts are missing or the fee cannot be checked.
-- Reject unsafe sighash types unless support is added with a clear reason.
-- Report success only when at least one new signature was added.
-- Pass mnemonics, passphrases, and private descriptors through standard input instead of process arguments or exported variables.
+- Use Bitcoin Core `decodepsbt` and `analyzepsbt` as the source of truth; do not implement another PSBT parser.
+- Add `jq` only for safe extraction of Core's JSON. Keep shell and TUI code limited to policy, display, and confirmation.
+- Keep `bitcoin-bash-tools` for BIP39 and key derivation, which Bitcoin Core does not provide.
+- Before asking for the mnemonic, show Core's transaction outputs, amounts, fee, fee rate, locktime, and sighash rules.
+- Require Core to report every input UTXO and a calculable fee, then require clear user confirmation.
+- For the current single-signature BIP84 scope, accept only the default or `ALL` sighash and require `complete=true` after signing.
+- Pass private descriptors through `bitcoin-cli -stdin`; pass mnemonics and passphrases through standard input, not arguments or exported variables.
 - Keep testnet as the default while the project is experimental.
 
 ## 2. Update and pin the build
