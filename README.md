@@ -82,6 +82,7 @@ For exact switches, see `buildroot-external/board/thunderden/linux.config`.
 ## Repo layout
 
 - `docs/ARCHITECTURE.md`: trust model, components, dependency policy.
+- `docs/WALLET_POLICIES.md`: target stateless wallet registration and signing architecture.
 - `docs/BUILD_IMAGE.md`: detailed human-followable image build guide.
 - `docs/BUILD_DOCKER.md`: Docker-based build flow for macOS/Linux/Windows (WSL2).
 - `docs/DEPENDENCIES.md`: minimal dependency set and pinned references.

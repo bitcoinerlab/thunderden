@@ -20,19 +20,42 @@ auditable and strict enough to be trusted.
 - Multi-account management.
 - x86 + Apple Silicon support in same first artifact (x86 first).
 
-## High-level flow (BIP84 / PSBT)
+## Current MVP flow (BIP84 / PSBT)
 
 1. User boots Thunder Den image.
 2. Text menu starts automatically (no login).
 3. User selects signing network context (mainnet/testnet).
-4. User enters English BIP39 mnemonic (and optional passphrase).
-5. Tool derives BIP84 account key (`m/84h/0h/0h` for mainnet, `m/84h/1h/0h` for testnet) using `bitcoin-bash-tools`.
-6. Tool builds descriptors:
+4. User scans an unsigned PSBT with the camera.
+5. User enters an English BIP39 mnemonic and optional passphrase.
+6. Tool derives BIP84 account key (`m/84h/0h/0h` for mainnet, `m/84h/1h/0h` for testnet) using `bitcoin-bash-tools`.
+7. Tool builds descriptors:
    - `wpkh(<account_xprv>/0/*)`
    - `wpkh(<account_xprv>/1/*)`
-7. Tool calls Bitcoin Core `descriptorprocesspsbt` offline.
-8. Signed PSBT is shown as text and QR.
-9. Reboot wipes runtime state.
+8. Tool calls Bitcoin Core `descriptorprocesspsbt` offline.
+9. Signed PSBT is shown as text and QR.
+10. Reboot wipes runtime state.
+
+The MVP derives a fixed BIP84 account internally. It does not yet accept a
+wallet policy, register custom accounts, support multisig, or review all
+transaction details before signing.
+
+## Target wallet-policy architecture
+
+The final architecture remains descriptor-based and stateless, but represents
+each account as a BIP-388 wallet policy supplied by the coordinator.
+
+- Use Ledger's version 2 wallet-policy serialization and wallet ID exactly.
+- Allow Ledger's BIP44, BIP49, BIP84, and BIP86 default accounts without registration when every standard-path and xpub check passes.
+- Require registration for multisig, Miniscript, unusual paths, named accounts, and every other custom policy.
+- Return a seed-derived HMAC as proof that the user previously approved the exact named policy.
+- Use a Thunder Den SLIP-0021 label so registration HMACs are not interchangeable with Ledger HMACs.
+- Require the coordinator to store and provide the complete policy and HMAC on every signing request.
+- Keep `REGISTER_WALLET` and `SIGN_PSBT` as separate airgap commands.
+- Use Bitcoin Core to validate materialized descriptors, classify policy-owned scripts, analyze PSBTs, and sign.
+- Return a complete PSBT for single-signature wallets or an updated partial PSBT for multisig.
+
+The exact policy serialization, HMAC construction, default-wallet rules, and
+request flows are defined in `docs/WALLET_POLICIES.md`.
 
 ## Dependency policy
 
@@ -42,6 +65,7 @@ Allowed runtime dependencies are intentionally narrow:
 - Bash (required by `bitcoin-bash-tools`)
 - Bitcoin Core (`bitcoind`, `bitcoin-cli`)
 - OpenSSL + `dc` (required by `bitcoin-bash-tools`)
+- `jq` (target architecture: safe extraction of Bitcoin Core JSON)
 - `qrencode` (display)
 - Custom scanner with `zbar` and `libv4l`
 
@@ -96,7 +120,10 @@ The source of truth for exact kernel toggles is
 
 `descriptorprocesspsbt` can sign from descriptors directly and does not require
 wallet state persistence. That aligns with stateless operation and allows using
-BIP39-derived descriptor keys from `bitcoin-bash-tools`.
+BIP39-derived descriptor keys from `bitcoin-bash-tools`. In the target
+architecture, Thunder Den materializes the supplied BIP-388 policy as Core
+descriptors and inserts private material only for keys proven to belong to the
+entered seed.
 
 ## TUI options evaluated
 
