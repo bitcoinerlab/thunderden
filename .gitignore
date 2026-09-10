@@ -1,5 +1,5 @@
 out/
-third_party/
+__pycache__/
 *.img
 *.img.sha256
 SHA256SUMS

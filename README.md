@@ -1,137 +1,69 @@
 # Thunder Den
 
-> [!WARNING]
-> ## EXPERIMENTAL SOFTWARE - TESTNET / SIGNET / REGTEST ONLY
-> Thunder Den is currently experimental and under active development.
-> It is not production-ready, not externally audited, and not suitable for
-> protecting meaningful value.
->
-> **DO NOT USE THIS PROJECT WITH MAINNET FUNDS.**
->
-> Use it only for controlled experimentation on test networks:
->
-> - `testnet`
-> - `signet`
-> - `regtest`
->
-> If you choose to run it anyway, assume you can lose funds, lose keys, or sign
-> something incorrectly. Treat all outputs and signing behavior as untrusted
-> until you have independently verified them in your own lab environment.
+**Turn a spare laptop into an airgapped Bitcoin signer.**
 
-Thunder Den is an offline Bitcoin signer image (USB-boot) focused on trust,
-minimal dependencies, and stateless operation.
+Thunder Den is being redesigned to boot from USB and run in memory. Import your
+existing recovery words, review transactions on the laptop, and exchange data
+through QR codes.
 
-## Current v1 direction
+It is built to be understandable. Even if you do not write code, you can use an
+AI assistant to explore the source, examine the claims, and guide you through
+building the published image yourself. The project is designed to make
+independent, AI-assisted review practical.
 
-- Boot from USB into text mode only.
-- No login flow; launch a signer TUI directly.
-- Ship one hybrid BIOS+UEFI USB image for broad hardware compatibility.
-- Stateless runtime: initramfs root in RAM, `/tmp` and `/run` on tmpfs, reboot clears all secrets.
-- Network disabled for the signing workflow.
-- TUI includes network selection for signing context (testnet by default).
-- Use Bitcoin Core for PSBT signing through `descriptorprocesspsbt`.
-- Use `bitcoin-bash-tools` only for BIP39 (`mnemonic -> seed -> BIP84 descriptors`).
-- QR-only transport (scan unsigned PSBT, display signed PSBT).
-- TUI flow is camera-first for unsigned PSBT input.
+Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
+designs, including Ledger and BitBox02. Bitcoin Core provides the Bitcoin
+functionality at its heart.
 
-System runtime guardrails:
+**Status: v2 is under development.** A bootable v2 release is not available yet.
+Use test networks only; this project is not ready to protect mainnet funds.
 
-- Boot guard checks runtime policy before launching the TUI (`/` RAM-backed, `/tmp` + `/run` tmpfs, swap off).
-- On guard failure, Thunder Den stays on an error screen and waits for user action.
+## Claims we are building toward
 
-## Distribution paths
+- Your seed and private keys stay in RAM.
+- Thunder Den saves no wallet state between boots.
+- Thunder Den does not write to the boot USB or the laptop's disks.
+- The running signer cannot access disk storage, Ethernet, Wi-Fi, or Bluetooth.
+- Wallet data and transactions move through QR codes.
+- You review and approve transactions on the laptop before signing.
+- You can rebuild the released USB image and compare its SHA-256.
 
-- Default users: download prebuilt `thunderden.img` (hybrid BIOS+UEFI) and verify signatures/hashes.
-- Advanced users: reproducible self-build on Linux host/VM.
-- Build host support is Linux-only in this repo flow.
+## Planned features
 
-## Accepted default for USB policy
+- Import English BIP39 recovery words and an optional ASCII passphrase once per boot.
+- Descriptor-based wallets, including SegWit and Taproot Miniscript.
+- BIP-388 wallet policies with seed-bound registration proofs.
+- BIP44, BIP49, BIP84, and BIP86 defaults without prior registration.
+- Partial signing when other signatures or spending conditions are still needed.
+- One USB image for x86-64 laptops with legacy BIOS or UEFI.
+- A Docker build for Linux, macOS, and Windows.
 
-v1 keeps keyboard and camera support, while disabling USB storage and radio
-stacks (Wi-Fi/Bluetooth). This keeps the machine usable for QR signing and
-typing while reducing attack surface.
+## What you trust
 
-## Kernel exfiltration controls (plain language)
+Thunder Den relies on your hardware and firmware, your build computer, and pinned
+upstream software, including Bitcoin Core and Linux. The project audit covers
+Thunder Den's code, configuration, and use of those dependencies, not a complete
+re-audit of upstream projects. AI-assisted review helps you examine that work;
+it is not a security certification.
 
-People often worry about a signer leaking a seed through radios or by copying
-data to attached storage. Thunder Den reduces those paths at kernel level:
+Firmware behavior and physical attacks on memory are outside the software's
+guarantees. RAM-only operation means no persistent wallet storage, not a promise
+that every trace in physical memory becomes unrecoverable at power-off.
 
-- No Wi-Fi or Bluetooth stack is compiled in.
-- No wired Ethernet driver family is compiled in.
-- USB keyboard/camera support is kept, but USB mass-storage support is compiled out.
-- Host-disk storage paths are compiled out (SCSI/ATA/virtio block stack disabled).
-- Host-disk filesystems are compiled out for runtime policy (`ext4` and automount path disabled).
-- Kernel modules are disabled, so features cannot be re-enabled later by loading modules.
-- Root runtime stays RAM-backed (initramfs + tmpfs), so normal operation does not mount host disks.
+## Follow the work
 
-Some virtual filesystems (for example `proc`, `sysfs`, `tmpfs`) remain enabled
-because Linux userspace needs them. This is expected and does not re-enable
-host-disk access by itself.
+- [Design](docs/DESIGN.md)
+- [Build and tests](docs/BUILD.md)
+- [Dependencies](docs/DEPENDENCIES.md)
+- [Implementation status](docs/STATUS.md)
 
-These controls reduce exfiltration surface at kernel level, but they are not a
-replacement for firmware, hardware, and supply-chain trust checks.
+Tests and development tools run on the build computer. They are not part of the
+production image. Software-wallet integrations and reference clients will follow
+the signer protocol; no particular software wallet defines Thunder Den's design.
 
-For exact switches, see `buildroot-external/board/thunderden/linux.config`.
+## Acknowledgments
 
-## Entropy policy (default)
-
-- Kernel boot args explicitly set `random.trust_cpu=off random.trust_bootloader=off`.
-- Hardware RNG paths remain enabled (including `virtio-rng` for VM testing).
-- Thunder Den imports a mnemonic. It does not generate one.
-
-## Repo layout
-
-- `docs/ARCHITECTURE.md`: trust model, components, dependency policy.
-- `docs/WALLET_POLICIES.md`: target stateless wallet registration and signing architecture.
-- `docs/BUILD_IMAGE.md`: detailed human-followable image build guide.
-- `docs/BUILD_DOCKER.md`: Docker-based build flow for macOS/Linux/Windows (WSL2).
-- `docs/DEPENDENCIES.md`: minimal dependency set and pinned references.
-- `docs/HOST_SETUP_LINUX.md`: from-scratch Linux host requirements and setup.
-- `docs/RELEASE_VERIFICATION.md`: prebuilt image verification and release signing flow.
-- `buildroot-external/`: defines the Linux system and boot image.
-- `scripts/build/`: runs only on the build computer. These files are not installed in the image.
-- `scripts/runtime/`: files installed in the image.
-- `scripts/todo/`: unfinished work that is not installed in the image.
-- `buildroot-external/package/thunderden-qrscan/`: camera and QR scanner.
-- `test-vectors/qr-signing/`: deterministic QR + PSBT vectors for webcam signing tests.
-- `experiments/`: quarantined prototype scripts not used in runtime image.
-
-## Fast path (after source verification)
-
-```bash
-./scripts/build/fetch_bitcoin_bash_tools.sh
-./scripts/build/build_thunderden.sh --buildroot-dir /path/to/buildroot
-./out/buildroot/images/make-image.sh --binaries-dir ./out/buildroot/images --output thunderden.img
-./out/buildroot/images/make-image.sh --binaries-dir ./out/buildroot/images --output thunderden-small.img --small
-```
-
-The hybrid image assembly helper is rootless (no loop-mount step).
-
-Even though the actual boot payload is small (roughly low-20s MiB today), the
-default output image size is 64 MiB. This keeps a FAT32 boot partition with
-enough headroom for old firmware quirks and supports one image that boots on
-both legacy BIOS and UEFI machines.
-
-Docker builds generate two boot images and their hashes:
-
-- `thunderden.img`: max-compat BIOS+UEFI image (FAT32, 64 MiB)
-- `thunderden-small.img`: minimum-size x86_64 UEFI image (FAT16, no GRUB)
-
-Use `thunderden.img` unless the boot media is too small. The small image is for
-x86_64 UEFI firmware with Secure Boot disabled. It does not boot legacy BIOS or
-32-bit UEFI systems.
-
-Default prebuilt-image verification flow is documented in
-`docs/RELEASE_VERIFICATION.md`.
-
-## Key references
-
-- Bitcoin Bash Tools: <https://github.com/grondilu/bitcoin-bash-tools>
-- Bitcoin Core RPC docs: <https://bitcoincore.org/en/doc/>
-
-## Notes
-
-- Use simple English in documentation, screen text, errors, and comments.
-- This project intentionally avoids broad dependency sprawl.
-- The build guide pins source versions and includes signature verification steps.
-- Scanner support includes direct and multipart PSBT QR payloads (base64, UR, BBQR, `pMofN`, hex, base43), normalized to base64 for signing.
+Thanks to **SeedSigner** for inspiration, **Salvatore Ingala (Ledger)** for the
+wallet-policy and registration design, and **Bitcoin Core's contributors** for
+the Bitcoin engine. Thunder Den also builds on Linux, Buildroot, and the other
+upstream projects listed in its dependency documentation.

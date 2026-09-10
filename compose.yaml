@@ -1,0 +1,23 @@
+name: thunderden-v2
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+      args:
+        DEBIAN_BASE_IMAGE: ${DEBIAN_BASE_IMAGE:?Missing build pin}
+        DEBIAN_SNAPSHOT: ${DEBIAN_SNAPSHOT:?Missing build pin}
+        BITCOIN_VERSION: ${BITCOIN_VERSION:?Missing build pin}
+        BITCOIN_SOURCE_SHA256: ${BITCOIN_SOURCE_SHA256:?Missing build pin}
+        BIP39_WORDLIST_URL: ${BIP39_WORDLIST_URL:?Missing wordlist pin}
+        BIP39_WORDLIST_SHA256: ${BIP39_WORDLIST_SHA256:?Missing wordlist pin}
+    platform: ${BUILDER_PLATFORM}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,mode=1777
+      - /build/Testing:rw,nosuid,nodev,mode=1777
+    command: [ctest, --test-dir, /build, --output-on-failure]

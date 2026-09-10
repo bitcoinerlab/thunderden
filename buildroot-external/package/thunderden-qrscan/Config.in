@@ -1,8 +1,0 @@
-config BR2_PACKAGE_THUNDERDEN_QRSCAN
-	bool "thunderden-qrscan"
-	depends on BR2_PACKAGE_ZBAR
-	select BR2_PACKAGE_ZLIB
-	help
-	  Thunder Den QR scanner helper with single-process camera ownership.
-	  It renders a framebuffer preview while scanning QR payloads and prints
-	  a normalized base64 PSBT to stdout.
