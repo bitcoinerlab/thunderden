@@ -54,7 +54,11 @@ Platform/toolchain configuration changes require a clean output volume for relia
 rebuilds. Reassembling identical payloads tests disk metadata determinism; full
 release reproducibility requires comparing independent clean builds as well.
 
-## Boot/display checks
+## Optional developer boot/display checks
+
+QEMU is not needed to build the image, run the default test suites, or audit the
+build configuration and generated artifacts. It is an optional developer tool
+for exercising boot and display behavior and is not installed in the signer image.
 
 On a Linux host with QEMU and the development test image built:
 

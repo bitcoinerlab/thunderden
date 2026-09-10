@@ -142,6 +142,25 @@ messages must keep consistent types, lengths, counts, and checksums; conflicting
 streams never silently replace scan state. Outgoing animation keeps a fixed QR
 geometry and a four-module quiet border, with pause and cancellation controls.
 
+## Input trust boundary
+
+The security requirement covers keyboard input, camera images, decoded QR data,
+and every future input channel. Data must pass bounded, typed interfaces and must
+never be executed as application/shell code or given authority to replace signer
+code. There is no seed/private-key export command. Imported data cannot supply
+local consent: signing requires approval of the exact immutable transaction review.
+
+Current controls include size/depth limits, strict schemas, duplicate-field and
+stream-conflict rejection, printable review text, and separate local confirmations.
+These controls address protocol and terminal injection and authorization bypass in
+the exercised paths.
+
+The current development application shares an address space with the camera/QR
+libraries and runs as root in the image. Isolating untrusted decoding from keys and
+approval state, and enforcing least privilege and non-writable application files,
+remain required hardening work. Validation and passing tests do not establish that
+native-parser memory-corruption bugs are impossible.
+
 ## Build and audit
 
 One pinned Docker environment supplies the build and test tools. Source archives

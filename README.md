@@ -27,6 +27,8 @@ Use test networks only; this project is not ready to protect mainnet funds.
 - The running signer cannot access disk storage, Ethernet, Wi-Fi, or Bluetooth.
 - Wallet data and transactions move through QR codes.
 - You review and approve transactions on the laptop before signing.
+- Untrusted input stays within validated data interfaces; code changes, secret
+  export, and approval bypass are forbidden.
 - You can rebuild the released USB image and compare its SHA-256.
 
 ## Planned features

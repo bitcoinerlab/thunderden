@@ -26,6 +26,7 @@ The hybrid disk image is 64 MiB.
 - [x] Verify BIOS/UEFI boot, local account review, and framebuffer QR export in QEMU.
 - [ ] Compare independent clean builds of the complete image.
 - [ ] Validate physical webcams and supported laptop hardware.
+- [ ] Isolate untrusted decoding from keys/approval and enforce least-privilege execution.
 
 `platform/` defines the Buildroot application package, runtime launch, kernel,
 and bootloader configuration. `build/image.py` assembles the hybrid disk image.
