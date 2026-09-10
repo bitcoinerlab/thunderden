@@ -1,9 +1,9 @@
 #include "application.h"
 #include "hardware.h"
+#include "isolation.h"
+#include "scan.h"
 
 #include <chainparams.h>
-#include <sys/prctl.h>
-#include <sys/resource.h>
 
 #include <algorithm>
 #include <charconv>
@@ -35,22 +35,17 @@ std::pair<unsigned, unsigned> Account(Terminal& terminal)
 QRMessage Scan(Terminal& terminal)
 {
     terminal.Screen("Scan UR v2", {"Opening webcam...", "Esc: Cancel"});
-    Camera camera;
     Display display(terminal);
-    QRScanner scanner;
-    URReceiver receiver;
+    ScanProcess scanner(ScannerExecutable());
     terminal.Flush();
-    while (!receiver.Result()) {
+    while (true) {
         const int key = terminal.Key(0);
         if (key == 27 || key == 3 || key == 'q') throw Cancelled{};
-        if (!camera.Capture()) continue;
-        for (const auto& frame : scanner.Scan(camera.Gray(), camera.Width(), camera.Height())) {
-            receiver.Receive(frame); // Invalid/conflicting frames end this scan visibly.
-            if (receiver.Result()) break;
-        }
-        display.Preview(camera.Gray(), camera.Width(), camera.Height(), receiver.Progress());
+        auto update = scanner.Poll();
+        if (!update) continue;
+        if (update->message) return std::move(*update->message);
+        display.Preview(update->gray, update->width, update->height, update->progress / 100.0);
     }
-    return *receiver.Result();
 }
 
 void Show(Terminal& terminal, const QRMessage& message)
@@ -100,10 +95,9 @@ int main(int argc, char** argv)
     }
     if (argc != 1) return 1;
     try {
-        const rlimit no_core{0, 0};
-        td::Require(setrlimit(RLIMIT_CORE, &no_core) == 0 && prctl(PR_SET_DUMPABLE, 0) == 0, "Cannot disable process dumps");
         td::Terminal terminal;
         SelectParams(Network(terminal));
+        td::PrepareSigner(); // Before any recovery input or private key exists.
         ECC_Context context;
         std::unique_ptr<td::Keys> session;
         const auto keys = [&]() -> const td::Keys& {

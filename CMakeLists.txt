@@ -48,18 +48,23 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(QR REQUIRED IMPORTED_TARGET libqrencode zbar libv4l2)
 
 add_library(thunderden STATIC src/keys.cpp src/policy.cpp src/transaction.cpp src/transport.cpp src/qr.cpp
-  src/review.cpp src/terminal.cpp src/application.cpp src/hardware.cpp)
+  src/review.cpp src/terminal.cpp src/application.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
 target_include_directories(thunderden PUBLIC src "${CORE_SOURCE_DIR}/src"
   "${CORE_SOURCE_DIR}/src/secp256k1/include" "${CMAKE_BINARY_DIR}/core/src"
   PRIVATE "${CMAKE_BINARY_DIR}")
 target_link_libraries(thunderden PUBLIC core_interface bitcoin_common univalue OpenSSL::Crypto bc-ur PkgConfig::QR)
-target_compile_options(thunderden PRIVATE -Wall -Wextra -Werror)
+target_compile_options(thunderden PRIVATE -Wall -Wextra -Werror -ffunction-sections -fdata-sections)
 target_link_options(thunderden INTERFACE -Wl,--gc-sections)
 
 add_executable(thunderden-signer src/main.cpp)
 target_link_libraries(thunderden-signer PRIVATE thunderden)
 target_compile_options(thunderden-signer PRIVATE -Wall -Wextra -Werror)
 install(TARGETS thunderden-signer RUNTIME DESTINATION bin)
+
+add_executable(thunderden-scanner src/scanner_main.cpp)
+target_link_libraries(thunderden-scanner PRIVATE thunderden)
+target_compile_options(thunderden-scanner PRIVATE -Wall -Wextra -Werror)
+install(TARGETS thunderden-scanner RUNTIME DESTINATION bin)
 
 if(TD_BUILD_TESTS)
 enable_testing()
@@ -111,4 +116,11 @@ add_test(NAME terminal COMMAND Python3::Interpreter -B "${CMAKE_SOURCE_DIR}/test
 add_executable(qr-image-probe tests/qr_image_probe.cpp)
 target_link_libraries(qr-image-probe PRIVATE thunderden)
 target_compile_options(qr-image-probe PRIVATE -Wall -Wextra -Werror)
+
+add_executable(isolation-tests tests/isolation.cpp)
+pkg_check_modules(CAMERA_TEST REQUIRED IMPORTED_TARGET libv4lconvert libjpeg)
+target_link_libraries(isolation-tests PRIVATE thunderden PkgConfig::CAMERA_TEST)
+target_compile_options(isolation-tests PRIVATE -Wall -Wextra -Werror)
+add_test(NAME isolation COMMAND isolation-tests)
+set_tests_properties(isolation PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
 endif()

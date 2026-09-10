@@ -1,13 +1,16 @@
 # Build and tests
 
-Requires Docker with Compose and Linux-container support.
+Requires Docker with Compose and Linux-container support. Build and test containers
+target Linux/amd64, as pinned by `BUILDER_PLATFORM` in `.env`.
 
 ```text
 docker compose run --build --rm test
 ```
 
 The development build compiles the native Core-backed application and runs its
-tests. Current verification coverage is listed in [STATUS.md](STATUS.md).
+tests as uid/gid 1000 in a container with networking and capabilities disabled,
+a read-only root filesystem, and temporary writable test directories. Current
+verification coverage is listed in [STATUS.md](STATUS.md).
 
 Source versions, hashes, the base-image digest, and Debian snapshot are defined in
 `.env`. Build products remain inside Docker. A CMake build can also use an existing
@@ -20,6 +23,13 @@ independent account-export compatibility, and terminal interaction. Signing test
 public deterministic fixtures and synthetic previous transactions. Linker wrappers
 count ECDSA/Schnorr calls to check that review and rejection do not sign.
 
+The `isolation` suite checks scanner containment and communication with the signer.
+Landlock enforcement tests require ABI 6 support in the host kernel (normally
+Linux 6.12 or later with Landlock enabled). That suite reports a skip on unsupported
+hosts; the scanner itself refuses to scan without confinement. Image construction
+uses only Docker and enables Landlock in the pinned guest kernel. See
+[Scanner isolation](ISOLATION.md) for the security boundary.
+
 To see individual checks, dependency details, and test-executable size measurements
 after building:
 
@@ -27,9 +37,10 @@ after building:
 docker compose run --rm test ctest --test-dir /build --output-on-failure -V
 ```
 
-`thunderden-signer` is the application target. Set `TD_BUILD_TESTS=OFF` for the
-image build; test executables are not installed. Reported test-executable sizes
-include fixtures and are not production signer or image sizes.
+`thunderden-signer` and `thunderden-scanner` are the application targets. Set
+`TD_BUILD_TESTS=OFF` for the image build; test executables are not installed.
+Reported test-executable sizes include fixtures and are not production application
+or image sizes.
 
 ## Boot image
 
@@ -71,3 +82,20 @@ The driver enters a public test mnemonic through the booted UI, reviews an accou
 export, captures its framebuffer QR, and checks the decoded account against the
 expected fixture. Screenshots and QEMU logs are kept in the specified directory.
 This checks boot/display behavior; it does not exercise a physical webcam.
+The `--firmware` argument expects a combined OVMF firmware image.
+
+The optional isolation-on-guest check uses a separate test binary/overlay, never
+installed into the image. First complete the boot-image build above, then build
+the test binary using the same output volume and its image toolchain (JPEG ABIs
+can differ from the development container):
+
+```text
+docker compose run --name thunderden-guest-tests image sh /work/tests/build_guest_tests.sh
+docker cp thunderden-guest-tests:/cache/out/images/bzImage /tmp/bzImage
+docker cp thunderden-guest-tests:/cache/out/validation/isolation-tests /tmp/isolation-tests
+docker rm thunderden-guest-tests
+python3 tests/boot_isolation.py /tmp/bzImage /tmp/isolation-tests
+```
+
+This developer-only check additionally uses the host `cpio` utility. It is optional
+for the same reason as the boot/display checks above.

@@ -14,6 +14,7 @@ services:
         BIP39_WORDLIST_URL: ${BIP39_WORDLIST_URL:?Missing wordlist pin}
         BIP39_WORDLIST_SHA256: ${BIP39_WORDLIST_SHA256:?Missing wordlist pin}
     platform: ${BUILDER_PLATFORM}
+    user: "1000:1000"
     network_mode: none
     read_only: true
     cap_drop: [ALL]

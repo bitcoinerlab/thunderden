@@ -14,11 +14,6 @@
 #include <string_view>
 
 namespace td {
-void Require(bool condition, const char* message)
-{
-    if (!condition) throw std::invalid_argument(message);
-}
-
 SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
                          std::span<const unsigned char> passphrase)
 {

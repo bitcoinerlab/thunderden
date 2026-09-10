@@ -62,9 +62,23 @@ allowed = {
 }
 loaded = set(re.findall(r'^\s*(\S+) =>', closure, re.M))
 assert "not found" not in closure and loaded <= allowed, closure
+assert not loaded & {"libzbar.so.0", "libv4l2.so.0", "libv4lconvert.so.0", "libjpeg.so.62"}, closure
 print("Application library closure: " + ", ".join(sorted(loaded)), flush=True)
 with tempfile.TemporaryDirectory() as directory:
     stripped = Path(directory) / "thunderden-signer"
     subprocess.run(["strip", "--strip-unneeded", "-o", stripped, application], check=True)
     print(f"Stripped native application: {stripped.stat().st_size} bytes (shared libraries separate)", flush=True)
 print("PASS: native application has no selected node/RPC/wallet or test-wrapper symbols; no GUI-framework dependencies", flush=True)
+
+scanner = application.with_name("thunderden-scanner")
+scanner_symbols = subprocess.check_output(["nm", "-C", "--defined-only", scanner], text=True)
+for absent in ("td::Keys::", "SignPSBTInput", "td::Terminal::", "td::Display::"):
+    assert absent not in scanner_symbols, absent
+scanner_closure = subprocess.check_output(["ldd", scanner], text=True)
+scanner_loaded = set(re.findall(r'^\s*(\S+) =>', scanner_closure, re.M))
+assert "not found" not in scanner_closure and scanner_loaded <= allowed, scanner_closure
+with tempfile.TemporaryDirectory() as directory:
+    stripped = Path(directory) / "thunderden-scanner"
+    subprocess.run(["strip", "--strip-unneeded", "-o", stripped, scanner], check=True)
+    print(f"Stripped scanner: {stripped.stat().st_size} bytes", flush=True)
+print("PASS: image decoders absent from signer closure; key/signing/UI implementations absent from scanner", flush=True)

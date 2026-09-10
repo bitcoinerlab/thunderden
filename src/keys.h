@@ -5,6 +5,7 @@
 
 #include <array>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -14,7 +15,10 @@ using Digest = std::array<unsigned char, 32>;
 using Fingerprint = std::array<unsigned char, 4>;
 using Path = std::vector<uint32_t>;
 
-void Require(bool condition, const char* message);
+inline void Require(bool condition, const char* message)
+{
+    if (!condition) throw std::invalid_argument(message);
+}
 SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
                          std::span<const unsigned char> passphrase);
 std::string EncodePublic(const CExtPubKey& key, bool mainnet);

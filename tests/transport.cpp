@@ -1,5 +1,6 @@
 #include "transport.h"
 #include "qr.h"
+#include "camera.h"
 
 #include <bytewords.hpp>
 #include <cbor-lite.hpp>

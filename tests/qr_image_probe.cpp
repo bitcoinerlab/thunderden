@@ -1,4 +1,5 @@
 #include "qr.h"
+#include "camera.h"
 #include "application.h"
 
 #include <chainparams.h>

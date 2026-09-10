@@ -1,4 +1,5 @@
 #include "application.h"
+#include "camera.h"
 #include "hardware.h"
 
 #include <chainparams.h>

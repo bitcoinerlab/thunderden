@@ -12,6 +12,12 @@ the exact default policy from the seed and uses the normal policy/approval engin
 The unsigned request is never allowed to choose a private-key path implicitly.
 The result is another `ur:crypto-psbt`, including when only partially signed.
 
+Every input must include its full previous transaction unless all inputs are
+Taproot. For inputs it signs, Thunder Den accepts only `SIGHASH_ALL` outside Taproot
+and `SIGHASH_DEFAULT` for Taproot. Derivation metadata supplies candidate wallet
+positions; exact policy-script matches establish ownership and change. See
+[Signing](DESIGN.md#signing) for the validation rules.
+
 Account export uses `ur:crypto-account` with a public HD key, origin, network,
 and script expression. It requires local approval before display.
 
@@ -70,8 +76,14 @@ Signing request:
 }
 ```
 
+The `psbt` string must use canonical standard base64, including required padding
+and without whitespace. `wallet_hmac` encodes the 32-byte proof as 64 hexadecimal
+characters. `SIGN_PSBT` also accepts a verified BIP44/49/84/86 default policy with
+an empty name, account index 0–100, and 64 zero characters as its proof. Named
+policies require the proof returned by registration.
+
 The response is standard `ur:crypto-psbt`. The complete policy accompanies every
-custom signing request. Registration approval and transaction approval are distinct.
+`SIGN_PSBT` request. Registration approval and transaction approval are distinct.
 Cancellation returns to the menu without displaying a response QR.
 
 Network identifiers are `main`, `testnet`, `testnet4`, `signet`, and `regtest`.
@@ -80,7 +92,11 @@ Network selection is local and fixed for an application session.
 ## Bounds and assembly
 
 - Individual QR text: at most 4,296 ASCII characters.
-- Message: at most 2 MiB + 64 KiB of CBOR, with tighter application/PSBT limits.
+- Message: at most 2 MiB + 64 KiB of CBOR.
+- Wallet-policy request JSON: at most 1,536 KiB, excluding its CBOR wrapper.
+- Incoming raw PSBT: at most 1 MiB, measured after base64 decoding for JSON requests.
+- Returned raw PSBT: at most 2 MiB; transactions have at most 128 inputs and
+  128 outputs. Wallet-definition limits are listed in [Design](DESIGN.md#wallets).
 - At most 1,024 source fragments; at most `4 * fragment_count + 64` distinct
   sequence numbers per scan. Identical repeated frames do not consume this budget.
 - The type, fragment count/size, message length, and checksum must stay consistent.

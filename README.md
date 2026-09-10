@@ -2,7 +2,7 @@
 
 **Turn a spare laptop into an airgapped Bitcoin signer.**
 
-Thunder Den is being redesigned to boot from USB and run in memory. Import your
+Thunder Den's development image boots from USB and runs in memory. Import your
 existing recovery words, review transactions on the laptop, and exchange data
 through QR codes.
 
@@ -31,15 +31,17 @@ Use test networks only; this project is not ready to protect mainnet funds.
   export, and approval bypass are forbidden.
 - You can rebuild the released USB image and compare its SHA-256.
 
-## Planned features
+## Implemented in the development image
 
 - Import English BIP39 recovery words and an optional ASCII passphrase once per boot.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.
 - BIP-388 wallet policies with seed-bound registration proofs.
 - BIP44, BIP49, BIP84, and BIP86 defaults without prior registration.
 - Partial signing when other signatures or spending conditions are still needed.
+- UR v2 scanning and animated QR output, with the scanner isolated from keys
+  and approval.
 - One USB image for x86-64 laptops with legacy BIOS or UEFI.
-- A Docker build for Linux, macOS, and Windows.
+- A Docker/Compose build using pinned Linux/amd64 containers.
 
 ## What you trust
 
@@ -56,6 +58,7 @@ that every trace in physical memory becomes unrecoverable at power-off.
 ## Follow the work
 
 - [Design](docs/DESIGN.md)
+- [Scanner isolation](docs/ISOLATION.md)
 - [Build and tests](docs/BUILD.md)
 - [QR protocol](docs/PROTOCOL.md)
 - [Dependencies](docs/DEPENDENCIES.md)

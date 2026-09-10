@@ -23,14 +23,17 @@ retains system-metadata reads and attempts a local netlink query. Derivation and
 signing tests pass when socket creation is unavailable. The image configuration
 disables the kernel networking and block-device subsystems entirely.
 
-The native application uses the local Linux console for keyboard input and review.
-Camera preview and QR output use the framebuffer, including the kernel's console
-font for status captions. libv4l supplies webcam frames, ZBar reads QR images, and
-libqrencode generates them. There is no desktop compositor or GUI framework.
+The signer uses the local Linux console for keyboard input and review. It renders
+camera previews and QR output through the framebuffer, including the kernel's
+console font for status captions. A separate, restricted scanner process uses
+libv4l to capture/convert webcam frames and ZBar to read QR images; the signer uses
+libqrencode to generate response QR codes. There is no desktop compositor or GUI
+framework. [Scanner isolation](ISOLATION.md) describes the process boundary.
 
 ## Recovery input
 
 - English BIP39 wordlist; 12, 15, 18, 21, or 24 words with a valid checksum.
+- Enter lowercase words separated by single spaces, without leading/trailing spaces.
 - Optional passphrase of printable ASCII characters, including spaces.
 - Passphrase case and every space are significant. Unsupported bytes are rejected.
 - The mnemonic is entered when first needed. Derived keys remain in RAM for the session.
@@ -56,10 +59,11 @@ The native adapter parses key references and paths, then checks Core's parsed ke
 count and public-key set against the supplied vector. Core handles nested script
 semantics and exposes warnings directly. Warning-bearing descriptors are rejected.
 
-Current library limits are 32 keys, 128 references, 8,192 template characters,
-65,536 expanded descriptor characters, 64 nesting levels, 64 Miniscript wrappers,
-and 32 origin-path steps. Names contain at most 64 printable ASCII characters
-without leading/trailing spaces. Passphrases contain at most 128 characters.
+Current library limits are 32 keys, 512 characters per key-information string,
+128 references, 8,192 template characters, 65,536 expanded descriptor characters,
+64 nesting levels, 64 Miniscript wrappers, and 32 origin-path steps.
+Names contain at most 64 printable ASCII characters without leading/trailing
+spaces. Passphrases contain at most 128 characters.
 Default accounts are limited to account indices 0 through 100. The script-derivation
 primitive permits any unhardened index, including existing inputs above 50,000.
 
@@ -155,11 +159,13 @@ stream-conflict rejection, printable review text, and separate local confirmatio
 These controls address protocol and terminal injection and authorization bypass in
 the exercised paths.
 
-The current development application shares an address space with the camera/QR
-libraries and runs as root in the image. Isolating untrusted decoding from keys and
-approval state, and enforcing least privilege and non-writable application files,
-remain required hardening work. Validation and passing tests do not establish that
-native-parser memory-corruption bugs are impossible.
+[Scanner isolation](ISOLATION.md) adds defense in depth against exploitation of
+image/QR decoding bugs through attacker-controlled input. Decoding runs in a fresh,
+unprivileged process with filesystem/process restrictions. The main process retains
+the keys and local approval devices and validates the scanner's bounded output.
+Application files remain root-owned. Core's parsers, the review/signing logic,
+Linux, and hardware remain trust dependencies. The isolation guide explains the
+threat model, enforced boundary, and practical limits.
 
 ## Build and audit
 

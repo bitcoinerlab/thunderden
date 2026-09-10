@@ -11,9 +11,11 @@ ASCII passphrases. OpenSSL libcrypto provides PBKDF2 and constant-time compariso
 
 The signing path runs in-process without a daemon, RPC server, or node database.
 Core's RNG, allocation, logging support, and shared MuSig helpers remain linked
-dependencies. MuSig policies and input metadata are rejected. The current stripped
-Buildroot application is 2,562,192 bytes, with shared libraries installed separately.
-The hybrid disk image is 64 MiB.
+dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
+runs in an isolated process, separate from keys and local approval. The stripped
+Buildroot executables are a 2,537,616-byte signer and an 88,176-byte scanner, with
+shared libraries installed separately. The hybrid disk image is 64 MiB. See
+[Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
 ## Milestones
 
@@ -24,18 +26,20 @@ The hybrid disk image is 64 MiB.
 - [x] Implement the local interface and UR v2 transport.
 - [x] Integrate the kernel, bootloader, and hybrid image with deterministic disk metadata.
 - [x] Verify BIOS/UEFI boot, local account review, and framebuffer QR export in QEMU.
+- [x] Isolate the scanner from keys and local approval; verify privilege restrictions.
 - [ ] Compare independent clean builds of the complete image.
-- [ ] Validate physical webcams and supported laptop hardware.
-- [ ] Isolate untrusted decoding from keys/approval and enforce least-privilege execution.
+- [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 
 `platform/` defines the Buildroot application package, runtime launch, kernel,
 and bootloader configuration. `build/image.py` assembles the hybrid disk image.
 
-## Verified library behavior
+## Verified native behavior
 
-`docker compose run --build --rm test` passes eight suites on Linux/amd64: `foundation`,
-`transactions`, `core-keys`, `native-runtime`, `transport`, `application`,
-`export-compat`, and `terminal`.
+`docker compose run --build --rm test` passes nine suites on the checked
+Linux/amd64 host: `foundation`, `transactions`, `core-keys`, `native-runtime`,
+`transport`, `application`, `export-compat`, `terminal`, and `isolation`.
+Actual native confinement tests require Landlock ABI 6 and are reported as skipped
+on hosts without it; scanner operation never falls back to an unconfined mode.
 
 - BIP39 seed vectors for all five standard word counts, ASCII rejection, and
   exact preservation of passphrase spaces and case.
@@ -73,9 +77,15 @@ and bootloader configuration. `build/image.py` assembles the hybrid disk image.
   to its menu when framebuffer display is unavailable.
 - Eight main/test-network account exports decoded/re-encoded by the independent
   `urtypes` codec with matching xpubs, origins, fingerprints, and script types.
-- Application, transport, export compatibility, and terminal tests pass with
-  AddressSanitizer and UndefinedBehaviorSanitizer; leak detection is disabled for
-  this check. The QR/camera shared libraries in that run are not instrumented.
+- Fresh scanner execution with no inherited parent environment/extra descriptors;
+  bounded preview/result pipes, stalled-worker cancellation, and reaping.
+- Restricted uid/capabilities, denied application-file writes, real JPEG/QR/UR
+  decoding under confinement, and denied filesystem/parent-process access.
+- Recorded AddressSanitizer and UndefinedBehaviorSanitizer coverage includes the
+  application, transport, export compatibility, and terminal tests. That run used
+  disabled leak detection and uninstrumented QR/camera shared libraries.
+  Process-confinement/IPC checks have been verified without sanitizers, including
+  on the image's kernel and runtime libraries.
 
 ## Verified image behavior
 
@@ -92,11 +102,15 @@ and bootloader configuration. `build/image.py` assembles the hybrid disk image.
 - SeaBIOS and 64-bit OVMF boot the image with a generic QEMU x86-64 CPU. The test
   enters public recovery words through the local UI, approves an account export,
   and verifies the framebuffer QR against the expected BIP84 regtest account.
+- The optional containment suite passes on the image kernel/runtime through a
+  separate test-only initramfs overlay. The installed image has ten BusyBox command
+  links, root-owned non-writable application paths, and no setuid/setgid files.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the
-development executables in the restricted Docker container; final-image kernel
-restrictions and hardware behavior require separate verification.
+development executables in the restricted Docker container. The image inventory
+and guest checks above verify the built kernel configuration and scanner
+confinement; physical hardware behavior requires separate validation.
 
 The application implements seed entry, policy registration, transaction rendering,
 account export, webcam capture/preview, and animated QR output. Physical webcam

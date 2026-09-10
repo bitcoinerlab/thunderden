@@ -5,7 +5,7 @@ The build uses Bitcoin Core 31.1 and a digest/snapshot-pinned Debian 13.6 build
 environment. Buildroot supplies the image toolchain, runtime libraries, Linux,
 BusyBox, and GRUB.
 
-## Native library
+## Runtime components
 
 | Component | Purpose |
 | --- | --- |
@@ -32,14 +32,15 @@ checks of the signing tests observe system-metadata reads and local NETLINK_ROUT
 queries, no IP sockets or filesystem-write opens, and successful signing with socket
 creation unavailable. These checks cover the exercised library paths. A complete
 packed-initramfs inventory is emitted as `installed-files.json`. The native runtime
-check reports the development application's transitive shared-library closure.
+check inspects the development signer/scanner symbols and shared-library dependencies
+and reports their stripped executable sizes.
 
 ## QR and camera configuration
 
-ZBar and libqrencode remain suitable for the native application: their C APIs
-accept/produce image data directly and require no desktop framework. ZBar is built
-with QR symbology only, without its video frontend, JPEG converter, GUI bindings,
-DBus, or language bindings. libqrencode is built without its tools or PNG support.
+ZBar and libqrencode use C APIs that accept/produce image data directly and require
+no desktop framework. ZBar is built with QR symbology only, without its video
+frontend, JPEG converter, GUI bindings, DBus, or language bindings. libqrencode is
+built without its tools or PNG support.
 The checked development builds of these two libraries depend only on libc.
 
 libv4l handles webcam negotiation and conversion, including normal MJPEG cameras.
@@ -47,6 +48,11 @@ Its optional plugins, wrappers, and utility programs are disabled. The checked
 capture-library closure consists of libv4l2, libv4lconvert, libjpeg, libc, and libm.
 The image targets standard UVC webcams, including typical integrated laptop cameras.
 Physical camera compatibility still requires hardware tests.
+
+ZBar, libv4l, and JPEG decoding run in `thunderden-scanner`; these libraries are
+absent from the signing executable's dependencies. Scanner confinement uses the
+pinned Linux kernel's Landlock API directly. See [Scanner isolation](ISOLATION.md)
+for the threat model, boundary, and compatibility requirements.
 
 bc-ur is pinned by commit and archive hash. The adapter validates URI fields,
 unsigned CBOR lengths, fragment geometry, stream identity, and work limits before
