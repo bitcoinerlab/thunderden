@@ -1,0 +1,9 @@
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t devtmpfs devtmpfs /dev
+::sysinit:/bin/mkdir -p /dev/pts /tmp /run
+::sysinit:/bin/mount -t devpts devpts /dev/pts
+::sysinit:/bin/mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /tmp
+::sysinit:/bin/mount -t tmpfs -o mode=0700,nosuid,nodev tmpfs /run
+tty1::once:/usr/bin/thunderden-session
+::ctrlaltdel:/sbin/poweroff -f

@@ -6,3 +6,5 @@
 !tests/**
 !build/
 !build/Dockerfile
+!build/native-deps.sh
+!.env

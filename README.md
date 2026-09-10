@@ -15,7 +15,8 @@ Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
 designs, including Ledger and BitBox02. Bitcoin Core provides the Bitcoin
 functionality at its heart.
 
-**Status: v2 is under development.** A bootable v2 release is not available yet.
+**Status: v2 is under development.** Docker can build a development image;
+physical-hardware validation and release verification are ongoing.
 Use test networks only; this project is not ready to protect mainnet funds.
 
 ## Claims we are building toward
@@ -54,6 +55,7 @@ that every trace in physical memory becomes unrecoverable at power-off.
 
 - [Design](docs/DESIGN.md)
 - [Build and tests](docs/BUILD.md)
+- [QR protocol](docs/PROTOCOL.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Implementation status](docs/STATUS.md)
 

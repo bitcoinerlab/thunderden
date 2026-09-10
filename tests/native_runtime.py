@@ -48,3 +48,23 @@ with tempfile.TemporaryDirectory() as directory:
     calls = trace.read_text()
     assert "EAFNOSUPPORT" in calls and "INJECTED" in calls
     print("PASS: complete signing tests also succeed with socket creation unavailable", flush=True)
+
+application = Path(sys.argv[2])
+app_symbols = subprocess.check_output(["nm", "-C", "--defined-only", application], text=True)
+for absent in ("CConnman::", "PeerManager", "CRPCTable::", "HTTPServer", "CWallet::", "leveldb::", "__wrap_secp256k1"):
+    assert absent not in app_symbols, absent
+closure = subprocess.check_output(["ldd", application], text=True)
+allowed = {
+    "libcrypto.so.3", "libstdc++.so.6", "libm.so.6", "libgcc_s.so.1", "libc.so.6",
+    "libqrencode.so.4", "libzbar.so.0", "libv4l2.so.0", "libv4lconvert.so.0", "libjpeg.so.62",
+    # Debian's libcrypto also links its optional compression implementations.
+    "libz.so.1", "libzstd.so.1",
+}
+loaded = set(re.findall(r'^\s*(\S+) =>', closure, re.M))
+assert "not found" not in closure and loaded <= allowed, closure
+print("Application library closure: " + ", ".join(sorted(loaded)), flush=True)
+with tempfile.TemporaryDirectory() as directory:
+    stripped = Path(directory) / "thunderden-signer"
+    subprocess.run(["strip", "--strip-unneeded", "-o", stripped, application], check=True)
+    print(f"Stripped native application: {stripped.stat().st_size} bytes (shared libraries separate)", flush=True)
+print("PASS: native application has no selected node/RPC/wallet or test-wrapper symbols; no GUI-framework dependencies", flush=True)

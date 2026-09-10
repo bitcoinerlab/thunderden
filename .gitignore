@@ -1,5 +1,6 @@
 out/
 __pycache__/
+installed-files.json
 *.img
 *.img.sha256
 SHA256SUMS

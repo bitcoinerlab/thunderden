@@ -1,0 +1,29 @@
+#!/bin/sh
+umask 077
+ulimit -c 0
+export HOME=/run TMPDIR=/tmp LANG=C LC_ALL=C
+
+root_ok=0 tmp_ok=0 run_ok=0
+while read -r device path type options rest; do
+    case "$path:$type" in
+        /:rootfs|/:ramfs|/:tmpfs) root_ok=1 ;;
+        /tmp:tmpfs) tmp_ok=1 ;;
+        /run:tmpfs) run_ok=1 ;;
+    esac
+done < /proc/mounts
+swap_ok=1
+if [ -r /proc/swaps ]; then
+    while read -r name rest; do
+        case "$name" in Filename|"") ;; *) swap_ok=0 ;; esac
+    done < /proc/swaps
+fi
+
+if [ "$root_ok$tmp_ok$run_ok$swap_ok" = 1111 ]; then
+    if /usr/bin/thunderden-signer; then
+        exec /sbin/poweroff -f
+    fi
+else
+    printf 'RAM-only runtime checks failed.\n'
+fi
+printf 'Signer stopped. Power off or press Ctrl+Alt+Del.\n'
+exec /bin/sleep 2147483647

@@ -19,8 +19,14 @@ without a Bitcoin daemon, RPC interface, or node database.
 
 Core's APIs are internal: upgrades require rebuilding and testing the complete
 integration. Unused functions are removed by the linker. Core RNG initialization
-retains system-metadata reads and a local netlink query; this is not Bitcoin P2P
-networking. Kernel restrictions must still be verified in the final image.
+retains system-metadata reads and attempts a local netlink query. Derivation and
+signing tests pass when socket creation is unavailable. The image configuration
+disables the kernel networking and block-device subsystems entirely.
+
+The native application uses the local Linux console for keyboard input and review.
+Camera preview and QR output use the framebuffer, including the kernel's console
+font for status captions. libv4l supplies webcam frames, ZBar reads QR images, and
+libqrencode generates them. There is no desktop compositor or GUI framework.
 
 ## Recovery input
 
@@ -29,6 +35,7 @@ networking. Kernel restrictions must still be verified in the final image.
 - Passphrase case and every space are significant. Unsupported bytes are rejected.
 - The mnemonic is entered when first needed. Derived keys remain in RAM for the session.
 - No mnemonic generation or persistent seed storage.
+- The initial console interface uses the kernel's default US keyboard layout.
 
 ASCII is unchanged by BIP39 NFKD normalization. Non-English mnemonics and
 non-ASCII passphrases are an explicit compatibility limitation.
@@ -114,8 +121,26 @@ to 2 MiB and may still require other signers or preimages.
 
 Core finalizes a separate copy to determine completeness and verifies its input
 scripts when complete. The result reports new signature count and completeness;
-it does not establish current-chain validity or timelock maturity. The interactive
-review and consent interface remains an application-layer milestone.
+it does not establish current-chain validity or timelock maturity.
+
+The local interface wraps full addresses/scripts onto review pages. Every page
+must be traversed before a separate typed `SIGN` confirmation is accepted. Queued
+input is discarded at screen/approval boundaries, and terminal resizing aborts
+the review. Registration and public-account export use separate `REGISTER` and
+`EXPORT` confirmations. Mnemonic/passphrase entry is masked and uses secure buffers.
+
+## QR exchange
+
+The [protocol](PROTOCOL.md) uses UR v2, including animated fountain-coded messages.
+Standard PSBT exchange uses `crypto-psbt`; public default-account export uses
+`crypto-account`. Plain PSBT input prompts for a local default account, which is
+constructed and checked by the same policy engine. Named policy operations use
+explicit versioned requests carrying the complete wallet definition and proof.
+
+Captured frames are bounded and their row stride is honored. Incoming multipart
+messages must keep consistent types, lengths, counts, and checksums; conflicting
+streams never silently replace scan state. Outgoing animation keeps a fixed QR
+geometry and a four-module quiet border, with pause and cancellation controls.
 
 ## Build and audit
 
