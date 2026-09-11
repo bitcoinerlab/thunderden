@@ -62,8 +62,47 @@ and installed files before assembling the disk image.
 
 Downloads are cached in Docker volumes; image products reside in `thunderden-v2-out`.
 Platform/toolchain configuration changes require a clean output volume for reliable
-rebuilds. Reassembling identical payloads tests disk metadata determinism; full
-release reproducibility requires comparing independent clean builds as well.
+rebuilds. Reassembling identical payloads tests disk metadata determinism. Complete
+clean-build verification is described below; recorded results are in
+[Implementation status](STATUS.md).
+
+## Clean-build comparison
+
+A clean comparison rebuilds the toolchain, libraries, bootloader, kernel, and
+application. Docker's `--no-cache` rebuilds the builder but does not empty Buildroot's
+Docker volumes, so each run needs its own fresh volumes too.
+
+Use two clean checkouts of the same commit with identical `.env` pins. In a POSIX
+shell, run the following in the first checkout, then repeat in the second with
+`run=thunderden-repro-b`. The container name and all three volume names must be
+unused; reusing an output volume would make this an incremental build.
+
+```sh
+run=thunderden-repro-a
+docker compose build --no-cache image
+docker compose run --name "$run" \
+  -v "${run}-src:/cache/src" \
+  -v "${run}-dl:/cache/dl" \
+  -v "${run}-out:/cache/out" image
+```
+
+Both builds must finish successfully, including the installed-file and disk-assembly
+checks. They retain their outputs and logs in the named volumes and containers.
+Compare their artifacts using the builder's Python interpreter:
+
+```sh
+docker compose run --rm \
+  -v thunderden-repro-a-out:/repro-a:ro \
+  -v thunderden-repro-b-out:/repro-b:ro \
+  image python3 /work/tests/compare_builds.py /repro-a/images /repro-b/images
+```
+
+The comparison requires byte-identical disk images, kernel/initramfs, BIOS/UEFI
+boot payloads, checksum files, and installed-file inventories. It reports each
+artifact's size and SHA-256 and identifies changed inventory entries on failure.
+Keep the source commit, pins, host/platform details, logs, and comparison output
+with the verification record. Results from another machine provide additional
+independent confirmation. These checks use Docker and do not require QEMU.
 
 ## Optional developer boot/display checks
 

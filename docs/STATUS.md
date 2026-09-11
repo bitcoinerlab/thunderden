@@ -27,7 +27,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Integrate the kernel, bootloader, and hybrid image with deterministic disk metadata.
 - [x] Verify BIOS/UEFI boot, local account review, and framebuffer QR export in QEMU.
 - [x] Isolate the scanner from keys and local approval; verify privilege restrictions.
-- [ ] Compare independent clean builds of the complete image.
+- [x] Compare complete clean builds using separate rebuilt builders and volumes.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 
 `platform/` defines the Buildroot application package, runtime launch, kernel,
@@ -97,14 +97,27 @@ on hosts without it; scanner operation never falls back to an unconfined mode.
   and device nodes. Development executables and GUI-framework libraries are absent
   from the checked installed tree.
 - Reassembling the same boot payloads with different file timestamps and time zones
-  produces identical disk-image bytes. This is an assembly check, not yet an
-  independent clean toolchain/kernel/application rebuild comparison.
+  produces identical disk-image bytes.
+- Two complete clean builds recompiled the toolchain, libraries, bootloader, kernel,
+  and application in separate, uncached Docker builders with fresh source,
+  download, and output volumes. The full disk image, kernel/initramfs, BIOS/UEFI
+  boot payloads, checksum file, and installed-file inventory are byte-identical.
+  See [Clean-build comparison](BUILD.md#clean-build-comparison) to repeat the check.
 - SeaBIOS and 64-bit OVMF boot the image with a generic QEMU x86-64 CPU. The test
   enters public recovery words through the local UI, approves an account export,
   and verifies the framebuffer QR against the expected BIP84 regtest account.
 - The optional containment suite passes on the image kernel/runtime through a
   separate test-only initramfs overlay. The installed image has ten BusyBox command
   links, root-owned non-writable application paths, and no setuid/setgid files.
+
+The clean-build comparison on 2026-09-10 used source commit
+`e4c07d45348b94e2035d16f52bf97f9cffea0a9c`, its pinned inputs, and
+`SOURCE_DATE_EPOCH=1787529600`. Both runs used the same Linux/amd64 host; confirmation
+on another machine is still outstanding. The 67,108,864-byte image SHA-256 was:
+
+```text
+8d85faeb3a73bf23378691e8cde3c08cf1940057bda427917e13bc4c7faf1ab3
+```
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the
@@ -114,6 +127,6 @@ confinement; physical hardware behavior requires separate validation.
 
 The application implements seed entry, policy registration, transaction rendering,
 account export, webcam capture/preview, and animated QR output. Physical webcam
-tests and independent clean image rebuilds remain release-verification work.
+tests and cross-machine rebuild confirmation remain release-verification work.
 Synthetic-image, pseudo-terminal, and emulated-display checks do not establish
 physical laptop/camera compatibility.
