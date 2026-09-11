@@ -66,6 +66,11 @@ rebuilds. Reassembling identical payloads tests disk metadata determinism. Compl
 clean-build verification is described below; recorded results are in
 [Implementation status](STATUS.md).
 
+`--build` does not clear the output cache. To clear it, first remove stopped
+containers using `thunderden-v2-out` (for example, `docker rm thunderden-image-build`),
+then run `docker volume rm thunderden-v2-out` and repeat the build command above.
+This removes generated build outputs; downloaded sources remain cached.
+
 ## Clean-build comparison
 
 A clean comparison rebuilds the toolchain, libraries, bootloader, kernel, and
