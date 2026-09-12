@@ -7,4 +7,5 @@
 !build/
 !build/Dockerfile
 !build/native-deps.sh
+!build/meson-no-cmake.ini
 !.env

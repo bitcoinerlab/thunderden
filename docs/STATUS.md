@@ -119,6 +119,12 @@ on another machine is still outstanding. The 67,108,864-byte image SHA-256 was:
 8d85faeb3a73bf23378691e8cde3c08cf1940057bda427917e13bc4c7faf1ab3
 ```
 
+A Linux build using the
+[documented dependency configuration](DEPENDENCIES.md#qr-and-camera-configuration)
+produces this image hash. Execution tracing confirms that libv4l's optional
+dependency searches do not launch CMake. Full builds on Apple Silicon Macs using
+x86-64 emulation remain unverified.
+
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the
 development executables in the restricted Docker container. The image inventory

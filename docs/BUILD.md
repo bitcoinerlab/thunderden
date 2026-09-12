@@ -71,6 +71,12 @@ containers using `thunderden-v2-out` (for example, `docker rm thunderden-image-b
 then run `docker volume rm thunderden-v2-out` and repeat the build command above.
 This removes generated build outputs; downloaded sources remain cached.
 
+The webcam library, libv4l, is configured with Meson. Its required JPEG library is
+located using pkg-config; optional CMake-based dependency searches are disabled.
+During this step, `Found CMake: NO` and a warning about `/bin/false` are expected.
+See [QR and camera configuration](DEPENDENCIES.md#qr-and-camera-configuration)
+for the dependency-selection details.
+
 ## Clean-build comparison
 
 A clean comparison rebuilds the toolchain, libraries, bootloader, kernel, and

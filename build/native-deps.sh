@@ -34,6 +34,7 @@ cmake -S /opt/qrencode -B /tmp/qrencode-build -G Ninja \
 cmake --build /tmp/qrencode-build --parallel 2
 cmake --install /tmp/qrencode-build
 meson setup /tmp/v4l-build /opt/v4l --prefix=/usr/local --libdir=lib --buildtype=minsize \
+    --native-file=/work/build/meson-no-cmake.ini \
     -Dbpf=disabled -Dgconv=disabled -Djpeg=enabled -Dlibdvbv5=disabled \
     -Dqv4l2=disabled -Dqvidcap=disabled -Dv4l2-tracer=disabled \
     -Dv4l-plugins=false -Dv4l-utils=false -Dv4l-wrappers=false -Ddoxygen-doc=disabled

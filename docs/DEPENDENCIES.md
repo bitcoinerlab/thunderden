@@ -49,6 +49,14 @@ capture-library closure consists of libv4l2, libv4lconvert, libjpeg, libc, and l
 The image targets standard UVC webcams, including typical integrated laptop cameras.
 Physical camera compatibility still requires hardware tests.
 
+libv4l's build system, Meson, checks which libraries are installed. Thunder Den uses
+JPEG conversion but has no audio or desktop-UI integration. The native development
+build and the Buildroot image build both load `build/meson-no-cmake.ini`: JPEG is
+found through pkg-config, which reads installed library metadata, while additional
+CMake-based dependency searches are disabled. The file specifies `/bin/false` as
+Meson's CMake command so it treats that search tool as unavailable. The same
+dependency-search configuration is used on every host.
+
 ZBar, libv4l, and JPEG decoding run in `thunderden-scanner`; these libraries are
 absent from the signing executable's dependencies. Scanner confinement uses the
 pinned Linux kernel's Landlock API directly. See [Scanner isolation](ISOLATION.md)
