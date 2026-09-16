@@ -80,7 +80,7 @@ BBQR support. The image builds its own dependency configuration through Buildroo
 
 ## Trust boundary
 
-The project audit covers Thunder Den's own code, upstream configuration, installed
-contents, and integration. It does not replace upstream audits of Linux, Core,
-OpenSSL, the toolchain, or hardware/firmware. Pinning identifies exactly which
-upstream code is trusted; reproducibility ties source builds to published bytes.
+An AI-assisted audit can start with Thunder Den's code, build settings and use of
+dependencies. Linux, Bitcoin Core, OpenSSL, the camera/QR libraries, the toolchain
+and hardware/firmware still need to be reviewed or trusted. Pinned sources and
+reproducible builds help you check which code goes into the image.

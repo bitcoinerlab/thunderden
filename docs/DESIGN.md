@@ -1,8 +1,9 @@
 # Design
 
 Thunder Den turns an x86-64 laptop into a RAM-only, QR-connected Bitcoin signer.
-The implementation is designed for independent source review and reproducible
-builds. Published claims apply only to a verified release, not unfinished code.
+The code and build process are designed to be easy to audit with AI.
+[Implementation status](STATUS.md) lists completed checks and what still needs
+verification.
 
 ## Runtime
 
@@ -167,13 +168,28 @@ Application files remain root-owned. Core's parsers, the review/signing logic,
 Linux, and hardware remain trust dependencies. The isolation guide explains the
 threat model, enforced boundary, and practical limits.
 
-## Build and audit
+## Build and independent review
 
 One pinned Docker environment supplies the build and test tools. Source archives
 are hash-checked. The release build must normalize final disk metadata and produce
 byte-identical images from clean outputs.
 
-Tests and development tools stay outside the production installation list. Each
-milestone includes source review, behavior checks, and a dependency/size review.
+Tests and development tools stay outside the signer image. For an AI-assisted
+audit of Thunder Den's own code, start with:
+
+- `src/main.cpp`, `src/terminal.cpp`, `src/review.cpp` and `src/hardware.cpp`:
+  recovery input, session lifetime, what is displayed and how consent is obtained.
+- `src/application.cpp`, `src/policy.cpp`, `src/transaction.cpp` and `src/keys.cpp`:
+  request validation, wallet authorization, immutable review and key use.
+- `src/scanner_main.cpp`, `src/camera.cpp`, `src/transport.cpp`, `src/scan.cpp` and
+  `src/isolation.cpp`: image/QR decoding, input bounds and the process boundary.
+- `.env`, `CMakeLists.txt`, `build/` and `platform/`: pinned inputs, linked code,
+  installed contents and operating-system permissions and restrictions.
+- `tests/` and [Implementation status](STATUS.md): what is checked and what still
+  needs verification.
+
+See [Dependencies](DEPENDENCIES.md#trust-boundary) for the upstream software you
+also need to review or trust.
+
 Software-wallet integration clients are a later deliverable using the documented
 protocol and shared vectors.
