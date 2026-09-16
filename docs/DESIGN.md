@@ -7,33 +7,30 @@ verification.
 
 ## Runtime
 
-The bootloader loads Linux and an embedded RAM filesystem. Persistent storage
-and external networking are unavailable to the signer. Keyboard, camera and
-screen provide its user interface. Hardware and firmware behavior remain outside
-the software's guarantees.
+At boot, the laptop loads Linux and the signer into RAM from the USB drive. Linux
+is built without networking or disk-storage support, so the running signer cannot
+use the laptop's disks or network connections. Hardware and firmware remain part
+of what you trust.
 
-The native library links Bitcoin Core's pinned internal key, descriptor, Miniscript,
-and PSBT implementations. It uses Core's validation, derivation, serialization,
-cryptographic primitives, and secure allocation. OpenSSL supplies PBKDF2 and
-constant-time comparison through library calls. Operations run directly in-process,
-without a Bitcoin daemon, RPC interface, or node database.
+Thunder Den's signing program is written in C++. It uses Bitcoin Core's code for
+key derivation, wallet descriptors, Miniscript and PSBT signing. That code runs
+inside the signer, without a Bitcoin node or blockchain database.
 
-Core's APIs are internal: upgrades require rebuilding and testing the complete
-integration. Unused functions are removed by the linker. Core RNG initialization
-retains system-metadata reads and attempts a local netlink query. Derivation and
-signing tests pass when socket creation is unavailable. The image configuration
-disables the kernel networking and block-device subsystems entirely.
+Bitcoin Core does not provide a stable public wallet library for other applications.
+Thunder Den uses Core's internal interfaces and builds against a specific version.
+Upgrading Core may require changes to Thunder Den and always requires rebuilding
+and testing the signer.
+The [dependency guide](DEPENDENCIES.md) describes the libraries included in the build.
 
-The signer uses the local Linux console for keyboard input and review. It renders
-camera previews and QR output through the framebuffer, including the kernel's
-console font for status captions. A separate, restricted scanner process uses
-libv4l to capture/convert webcam frames and ZBar to read QR images; the signer uses
-libqrencode to generate response QR codes. There is no desktop compositor or GUI
-framework. [Scanner isolation](ISOLATION.md) describes the process boundary.
+You enter recovery words and review transactions using the laptop's keyboard and
+screen. A separate scanner program reads QR codes from the camera and passes the
+decoded data to the signer. The signer holds the keys and asks for local approval
+before signing. [Scanner isolation](ISOLATION.md) explains how the two programs
+are kept separate.
 
 ## Recovery input
 
-- English BIP39 wordlist; 12, 15, 18, 21, or 24 words with a valid checksum.
+- English BIP39 wordlist; 12, 15, 18, 21 or 24 words with a valid checksum.
 - Enter lowercase words separated by single spaces, without leading/trailing spaces.
 - Optional passphrase of printable ASCII characters, including spaces.
 - Passphrase case and every space are significant. Unsupported bytes are rejected.
@@ -48,7 +45,7 @@ non-ASCII passphrases are an explicit compatibility limitation.
 
 All accounts use BIP-388 descriptor templates and ordered key-information vectors.
 Core interprets the expanded descriptors and Miniscript. The application checks
-key references, policy restrictions, seed ownership, authorization, and the actual
+key references, policy restrictions, seed ownership, authorization and the actual
 transaction scripts. It does not implement a second Miniscript engine.
 
 Exact BIP44/49/84/86 defaults with standard origins and verified account xpubs
@@ -56,13 +53,13 @@ do not require registration. Other supported policies require a named registrati
 The same engine handles multisig and SegWit/Taproot Miniscript. MuSig2 is outside
 the initial scope. Unsupported functions and excessive resource use are rejected.
 
-The native adapter parses key references and paths, then checks Core's parsed key
+Thunder Den parses key references and paths, then checks Core's parsed key
 count and public-key set against the supplied vector. Core handles nested script
 semantics and exposes warnings directly. Warning-bearing descriptors are rejected.
 
-Current library limits are 32 keys, 512 characters per key-information string,
+Thunder Den limits policies to 32 keys, 512 characters per key-information string,
 128 references, 8,192 template characters, 65,536 expanded descriptor characters,
-64 nesting levels, 64 Miniscript wrappers, and 32 origin-path steps.
+64 nesting levels, 64 Miniscript wrappers and 32 origin-path steps.
 Names contain at most 64 printable ASCII characters without leading/trailing
 spaces. Passphrases contain at most 128 characters.
 Default accounts are limited to account indices 0 through 100. The script-derivation
@@ -73,16 +70,16 @@ primitive permits any unhardened index, including existing inputs above 50,000.
 1. Receive the complete named BIP-388 policy.
 2. Validate its structure and resolve the descriptors through Core.
 3. Rederive local keys; fingerprint matches alone are not ownership proof.
-4. Show the name, exact template, all key origins/xpubs, and a receive address.
+4. Show the name, exact template, all key origins/xpubs and a receive address.
 5. Obtain approval and return a wallet ID and registration HMAC.
 
-Wallet IDs use Ledger version-2 serialization: name, template length/hash, and
+Wallet IDs use Ledger version-2 serialization: name, template length/hash and
 the ordered key-vector Merkle root. The exact approved bytes are authenticated;
 policy equivalence and rewriting are not part of registration.
 
 The HMAC key is derived from the BIP39 seed using SLIP-0021 with application label
 `Thunder Den wallet policy`. The proof is HMAC-SHA256 over the wallet ID.
-Proofs are seed-bound, deterministic, and non-revocable. A custom wallet still
+Proofs are seed-bound, deterministic and non-revocable. A custom wallet still
 requires a backup of its full policy.
 
 Software wallets retain the policy and proof and supply them for later operations.
@@ -91,10 +88,10 @@ every transaction still requires its own review and approval.
 
 ## Signing
 
-`ReviewedTransaction` owns a decoded PSBTv0, its authorized policy, and the review
+`ReviewedTransaction` owns a decoded PSBTv0, its authorized policy and the review
 facts. It accepts at most 1 MiB of PSBT data and 128 inputs/outputs each. Core checks
-the unsigned transaction; the adapter rejects conflicting previous-output data,
-out-of-range amounts, unsupported signing rules, and invalid finalized inputs.
+the unsigned transaction; Thunder Den rejects conflicting previous-output data,
+out-of-range amounts, unsupported signing rules and invalid finalized inputs.
 
 Every input requires its full previous transaction unless all inputs are Taproot.
 Legacy and SegWit-v0 signatures do not commit to other inputs' amounts; trusting
@@ -112,7 +109,7 @@ Supplied redeem/witness scripts and Taproot commitments are checked against Core
 public descriptor expansion before approval.
 
 The immutable review exposes wallet identity, network, input outpoints and amounts,
-destinations or raw output scripts, wallet flow, fee, sequences, locktime, and
+destinations or raw output scripts, wallet flow, fee, sequences, locktime and
 per-input signing rules. A weight-based size estimate uses Core's dummy signatures;
 unverified request signatures cannot shrink it. The estimate is unavailable when
 an unfinished external input or unsatisfied script prevents dummy finalization.
@@ -143,20 +140,20 @@ constructed and checked by the same policy engine. Named policy operations use
 explicit versioned requests carrying the complete wallet definition and proof.
 
 Captured frames are bounded and their row stride is honored. Incoming multipart
-messages must keep consistent types, lengths, counts, and checksums; conflicting
+messages must keep consistent types, lengths, counts and checksums; conflicting
 streams never silently replace scan state. Outgoing animation keeps a fixed QR
 geometry and a four-module quiet border, with pause and cancellation controls.
 
 ## Input trust boundary
 
-The security requirement covers keyboard input, camera images, decoded QR data,
+The security requirement covers keyboard input, camera images, decoded QR data
 and every future input channel. Data must pass bounded, typed interfaces and must
 never be executed as application/shell code or given authority to replace signer
 code. There is no seed/private-key export command. Imported data cannot supply
 local consent: signing requires approval of the exact immutable transaction review.
 
 Current controls include size/depth limits, strict schemas, duplicate-field and
-stream-conflict rejection, printable review text, and separate local confirmations.
+stream-conflict rejection, printable review text and separate local confirmations.
 These controls address protocol and terminal injection and authorization bypass in
 the exercised paths.
 
@@ -165,8 +162,8 @@ image/QR decoding bugs through attacker-controlled input. Decoding runs in a fre
 unprivileged process with filesystem/process restrictions. The main process retains
 the keys and local approval devices and validates the scanner's bounded output.
 Application files remain root-owned. Core's parsers, the review/signing logic,
-Linux, and hardware remain trust dependencies. The isolation guide explains the
-threat model, enforced boundary, and practical limits.
+Linux and hardware remain trust dependencies. The isolation guide explains the
+threat model, enforced boundary and practical limits.
 
 ## Build and independent review
 

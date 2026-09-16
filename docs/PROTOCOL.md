@@ -18,7 +18,7 @@ and `SIGHASH_DEFAULT` for Taproot. Derivation metadata supplies candidate wallet
 positions; exact policy-script matches establish ownership and change. See
 [Signing](DESIGN.md#signing) for the validation rules.
 
-Account export uses `ur:crypto-account` with a public HD key, origin, network,
+Account export uses `ur:crypto-account` with a public HD key, origin, network
 and script expression. It requires local approval before display.
 
 ## Wallet-policy operations
@@ -29,7 +29,7 @@ wallets need an integration to send the policy and store its proof. Transport
 support alone does not implement registration.
 
 JSON objects have exactly the documented fields. Duplicate or unknown keys,
-unsupported versions, and mismatched networks are rejected. Wallet strings are
+unsupported versions and mismatched networks are rejected. Wallet strings are
 passed unchanged to policy validation; JSON whitespace is not part of the wallet ID.
 
 Registration request:
@@ -79,14 +79,14 @@ Signing request:
 The `psbt` string must use canonical standard base64, including required padding
 and without whitespace. `wallet_hmac` encodes the 32-byte proof as 64 hexadecimal
 characters. `SIGN_PSBT` also accepts a verified BIP44/49/84/86 default policy with
-an empty name, account index 0–100, and 64 zero characters as its proof. Named
+an empty name, account index 0–100 and 64 zero characters as its proof. Named
 policies require the proof returned by registration.
 
 The response is standard `ur:crypto-psbt`. The complete policy accompanies every
 `SIGN_PSBT` request. Registration approval and transaction approval are distinct.
 Cancellation returns to the menu without displaying a response QR.
 
-Network identifiers are `main`, `testnet`, `testnet4`, `signet`, and `regtest`.
+Network identifiers are `main`, `testnet`, `testnet4`, `signet` and `regtest`.
 Network selection is local and fixed for an application session.
 
 ## Bounds and assembly
@@ -99,7 +99,7 @@ Network selection is local and fixed for an application session.
   128 outputs. Wallet-definition limits are listed in [Design](DESIGN.md#wallets).
 - At most 1,024 source fragments; at most `4 * fragment_count + 64` distinct
   sequence numbers per scan. Identical repeated frames do not consume this budget.
-- The type, fragment count/size, message length, and checksum must stay consistent.
+- The type, fragment count/size, message length and checksum must stay consistent.
 - Conflicting duplicate frames are rejected. A new stream requires a new scan.
 - Both individual Bytewords checksums and the completed fountain checksum must pass.
 - Lengths and geometry are checked before upstream fountain allocation/processing.
@@ -110,5 +110,5 @@ the CBOR byte-string length using unsigned bounds before iterator arithmetic; it
 does not expose the upstream generic CBOR parser directly to scanned lengths.
 
 `tests/transport.cpp` checks published UR vectors, mixed-frame recovery, malformed
-lengths/counts, stream conflicts, and image encoding/decoding through libqrencode
+lengths/counts, stream conflicts and image encoding/decoding through libqrencode
 and ZBar. These are development protocol tests, not physical webcam certification.
