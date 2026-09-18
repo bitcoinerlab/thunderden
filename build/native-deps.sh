@@ -13,9 +13,11 @@ fetch() {
 
 fetch "https://codeload.github.com/BlockchainCommons/bc-ur/tar.gz/$UR_COMMIT" "$UR_SHA256" bc-ur
 fetch "$URTYPES_TEST_URL" "$URTYPES_TEST_SHA256" urtypes
-fetch "https://www.linuxtv.org/downloads/zbar/zbar-$ZBAR_VERSION.tar.bz2" "$ZBAR_SHA256" zbar
+#fetch "https://www.linuxtv.org/downloads/zbar/zbar-$ZBAR_VERSION.tar.bz2" "$ZBAR_SHA256" zbar
+fetch "https://sources.buildroot.net/zbar/zbar-$ZBAR_VERSION.tar.bz2" "$ZBAR_SHA256" zbar
 fetch "https://codeload.github.com/fukuchi/libqrencode/tar.gz/v$QRENCODE_VERSION" "$QRENCODE_SHA256" qrencode
-fetch "https://linuxtv.org/downloads/v4l-utils/v4l-utils-$V4L_VERSION.tar.xz" "$V4L_SHA256" v4l
+#fetch "https://linuxtv.org/downloads/v4l-utils/v4l-utils-$V4L_VERSION.tar.xz" "$V4L_SHA256" v4l
+fetch "https://sources.buildroot.net/v4l-utils/v4l-utils-$V4L_VERSION.tar.xz" "$V4L_SHA256" v4l
 
 mkdir /tmp/zbar-build
 (
