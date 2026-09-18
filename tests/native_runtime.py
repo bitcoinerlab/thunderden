@@ -20,7 +20,7 @@ needed = set(re.findall(r'\(NEEDED\).*\[(.*?)\]', libraries))
 assert "libcrypto.so.3" in needed
 assert needed <= {
     "libcrypto.so.3", "libstdc++.so.6", "libm.so.6", "libgcc_s.so.1",
-    "libc.so.6", "ld-linux-x86-64.so.2",
+    "libc.so.6", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1",
 }, needed
 print("Dynamic dependencies: " + ", ".join(sorted(needed)), flush=True)
 # Core's shared descriptor/signing implementation retains MuSig code even though

@@ -1,7 +1,13 @@
 # Build and tests
 
-Requires Docker with Compose and Linux-container support. Build and test containers
-target Linux/amd64, as pinned by `BUILDER_PLATFORM` in `.env`.
+Requires Docker with Compose and Linux-container support. Docker runs the build
+tools on the host's native architecture: ARM64 on Apple Silicon or AMD64 on
+Intel/AMD machines. Buildroot cross-compiles the USB image for x86-64 laptops.
+Development tests run on the builder's architecture.
+
+The Debian image digest in `.env` pins a multi-architecture index containing the
+base images for both architectures. Use Docker's default platform selection;
+leave `DOCKER_DEFAULT_PLATFORM` unset.
 
 ```text
 docker compose run --build --rm test
@@ -61,8 +67,9 @@ The build inventories the packed initramfs and checks the resolved kernel option
 and installed files before assembling the disk image.
 
 Downloads are cached in Docker volumes; image products reside in `thunderden-v2-out`.
-Platform/toolchain configuration changes require a clean output volume for reliable
-rebuilds. Reassembling identical payloads tests disk metadata determinism. Complete
+Changing the builder architecture or platform/toolchain configuration requires a
+clean output volume. Cached build tools cannot be shared between AMD64 and ARM64.
+Reassembling identical payloads tests disk metadata determinism. Complete
 clean-build verification is described below; recorded results are in
 [Implementation status](STATUS.md).
 
@@ -70,12 +77,6 @@ clean-build verification is described below; recorded results are in
 containers using `thunderden-v2-out` (for example, `docker rm thunderden-image-build`),
 then run `docker volume rm thunderden-v2-out` and repeat the build command above.
 This removes generated build outputs; downloaded sources remain cached.
-
-The webcam library, libv4l, is configured with Meson. Its required JPEG library is
-located using pkg-config; optional CMake-based dependency searches are disabled.
-During this step, `Found CMake: NO` and a warning about `/bin/false` are expected.
-See [QR and camera configuration](DEPENDENCIES.md#qr-and-camera-configuration)
-for the dependency-selection details.
 
 ## Clean-build comparison
 

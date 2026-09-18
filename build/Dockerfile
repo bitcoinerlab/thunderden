@@ -28,7 +28,7 @@ RUN curl --fail --location --retry 3 "$BIP39_WORDLIST_URL" -o /opt/bip39-english
     && printf '%s  %s\n' "$BIP39_WORDLIST_SHA256" /opt/bip39-english.txt | sha256sum -c -
 
 COPY .env /opt/inputs.env
-COPY build/native-deps.sh build/meson-no-cmake.ini /work/build/
+COPY build/native-deps.sh /work/build/native-deps.sh
 RUN sh /work/build/native-deps.sh
 
 FROM dependencies AS development

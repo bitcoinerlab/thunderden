@@ -118,7 +118,7 @@ def inspect_linkage():
 
     libraries = subprocess.check_output(["readelf", "-d", HELPER], text=True)
     needed = re.findall(r'\(NEEDED\).*\[(.*?)\]', libraries)
-    assert set(needed) <= {"libstdc++.so.6", "libm.so.6", "libgcc_s.so.1", "libc.so.6", "ld-linux-x86-64.so.2"}, needed
+    assert set(needed) <= {"libstdc++.so.6", "libm.so.6", "libgcc_s.so.1", "libc.so.6", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1"}, needed
     print("Dynamic dependencies: " + ", ".join(needed), flush=True)
     subprocess.run(["size", HELPER], check=True)
     print(f"Unstripped helper: {HELPER.stat().st_size} bytes", flush=True)

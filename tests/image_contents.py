@@ -18,7 +18,7 @@ for symbol in (
     "SUSPEND", "HIBERNATION", "KEXEC", "KEXEC_FILE", "BPF_SYSCALL", "IO_URING", "EFIVAR_FS", "USER_NS",
 ):
     assert not re.search(rf'^CONFIG_{symbol}=[ym]$', config, re.M), symbol + " unexpectedly enabled"
-for symbol in ("USB_VIDEO_CLASS", "USB_HID", "VT", "FRAMEBUFFER_CONSOLE", "DEVTMPFS", "TMPFS", "SECURITY_LANDLOCK"):
+for symbol in ("X86_64", "USB_VIDEO_CLASS", "USB_HID", "VT", "FRAMEBUFFER_CONSOLE", "DEVTMPFS", "TMPFS", "SECURITY_LANDLOCK"):
     assert f"CONFIG_{symbol}=y" in config, symbol + " missing"
 assert 'CONFIG_LSM="landlock"' in config
 
@@ -36,6 +36,9 @@ for path in sorted(target.rglob("*")):
 binary = target / "usr/bin/thunderden-signer"
 assert binary.is_file() and os.access(binary, os.X_OK)
 assert (target / "usr/bin/thunderden-scanner").is_file()
+for program in ("thunderden-signer", "thunderden-scanner"):
+    header = subprocess.check_output(["readelf", "-h", target / "usr/bin" / program], text=True)
+    assert re.search(r"Machine:\s+Advanced Micro Devices X86-64", header), program + " must target x86-64"
 assert not (target / "etc/init.d").exists()
 dynamic = subprocess.check_output(["readelf", "-d", binary], text=True)
 assert "/cache/" not in dynamic and "/opt/" not in dynamic, "Build-path RPATH retained"

@@ -119,11 +119,9 @@ on another machine is still outstanding. The 67,108,864-byte image SHA-256 was:
 8d85faeb3a73bf23378691e8cde3c08cf1940057bda427917e13bc4c7faf1ab3
 ```
 
-A Linux build using the
-[documented dependency configuration](DEPENDENCIES.md#qr-and-camera-configuration)
-produces this image hash. Execution tracing confirms that libv4l's optional
-dependency searches do not launch CMake. Full builds on Apple Silicon Macs using
-x86-64 emulation remain unverified.
+Docker selects native AMD64 or ARM64 build tools while Buildroot targets x86-64.
+A complete image build on an ARM64 host and comparison with the AMD64-built image
+remain to be verified.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

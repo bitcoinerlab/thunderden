@@ -39,7 +39,7 @@ Use test networks only; this project is not ready to protect mainnet funds.
 - UR v2 scanning and animated QR output, with the scanner isolated from keys
   and approval.
 - One USB image for x86-64 laptops with legacy BIOS or UEFI.
-- A Docker/Compose build using pinned Linux/amd64 containers.
+- A Docker/Compose build using pinned Linux containers with native build tools.
 
 ## What you trust
 
