@@ -28,6 +28,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Verify BIOS/UEFI boot, local account review and framebuffer QR export in QEMU.
 - [x] Isolate the scanner from keys and local approval; verify privilege restrictions.
 - [x] Compare complete clean builds using separate rebuilt builders and volumes.
+- [x] Record a matching image hash from an Apple Silicon build.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 
 `platform/` defines the Buildroot application package, runtime launch, kernel
@@ -40,6 +41,10 @@ Linux/amd64 host: `foundation`, `transactions`, `core-keys`, `native-runtime`,
 `transport`, `application`, `export-compat`, `terminal` and `isolation`.
 Actual native confinement tests require Landlock ABI 6 and are reported as skipped
 on hosts without it; scanner operation never falls back to an unconfined mode.
+
+The ARM64 development image also compiles successfully, including the application
+and test executables. This compilation check ran under emulation on an AMD64 host;
+native ARM64 test execution remains unverified.
 
 - BIP39 seed vectors for all five standard word counts, ASCII rejection and
   exact preservation of passphrase spaces and case.
@@ -112,16 +117,17 @@ on hosts without it; scanner operation never falls back to an unconfined mode.
 
 The clean-build comparison on 2026-09-10 used source commit
 `e4c07d45348b94e2035d16f52bf97f9cffea0a9c`, its pinned inputs and
-`SOURCE_DATE_EPOCH=1787529600`. Both runs used the same Linux/amd64 host; confirmation
-on another machine is still outstanding. The 67,108,864-byte image SHA-256 was:
+`SOURCE_DATE_EPOCH=1787529600`. Both runs used the same Linux/amd64 host.
+The 67,108,864-byte image SHA-256 was:
 
 ```text
 8d85faeb3a73bf23378691e8cde3c08cf1940057bda427917e13bc4c7faf1ab3
 ```
 
 Docker selects native AMD64 or ARM64 build tools while Buildroot targets x86-64.
-A complete image build on an ARM64 host and comparison with the AMD64-built image
-remain to be verified.
+An Apple Silicon build was reported on 2026-09-21 to produce the same image hash.
+Local kernel and installed-file checks also pass, with all eight compared image
+artifacts byte-identical to the reference build.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the
@@ -131,6 +137,6 @@ confinement; physical hardware behavior requires separate validation.
 
 The application implements seed entry, policy registration, transaction rendering,
 account export, webcam capture/preview and animated QR output. Physical webcam
-tests and cross-machine rebuild confirmation remain release-verification work.
+tests and release-candidate verification remain outstanding.
 Synthetic-image, pseudo-terminal and emulated-display checks do not establish
 physical laptop/camera compatibility.
