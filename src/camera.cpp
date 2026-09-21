@@ -4,7 +4,6 @@
 #include <libv4l2.h>
 #include <linux/videodev2.h>
 #include <fcntl.h>
-#include <poll.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -36,7 +35,7 @@ Camera::Camera()
 {
     for (unsigned index = 0; index < 32; ++index) {
         const auto path = "/dev/video" + std::to_string(index);
-        const int fd = v4l2_open(path.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
+        const int fd = v4l2_open(path.c_str(), O_RDWR | O_CLOEXEC);
         if (fd < 0) continue;
         v4l2_capability cap{};
         v4l2_format format{};
@@ -77,10 +76,8 @@ Camera::~Camera() { if (fd_ >= 0) v4l2_close(fd_); }
 
 bool Camera::Capture()
 {
-    pollfd fd{fd_, POLLIN, 0};
-    const auto status = poll(&fd, 1, 50);
-    if (status == 0 || (status < 0 && errno == EINTR)) return false;
-    if (status < 0 || (fd.revents & (POLLERR | POLLHUP | POLLNVAL))) throw std::runtime_error("Webcam disconnected");
+    // libv4l starts streaming on the first read. The parent handles cancellation
+    // independently while this worker waits for a frame.
     const auto count = v4l2_read(fd_, frame_.data(), frame_.size());
     if (count < 0 && (errno == EAGAIN || errno == EINTR || errno == EIO)) return false;
     if (count <= 0) throw std::runtime_error("Webcam frame read failed");

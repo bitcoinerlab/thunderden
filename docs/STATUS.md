@@ -36,9 +36,9 @@ and bootloader configuration. `build/image.py` assembles the hybrid disk image.
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` passes nine suites on the checked
-Linux/amd64 host: `foundation`, `transactions`, `core-keys`, `native-runtime`,
-`transport`, `application`, `export-compat`, `terminal` and `isolation`.
+`docker compose run --build --rm test` runs ten suites on Linux/amd64:
+`foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
+`application`, `export-compat`, `terminal`, `camera` and `isolation`.
 Actual native confinement tests require Landlock ABI 6 and are reported as skipped
 on hosts without it; scanner operation never falls back to an unconfined mode.
 
@@ -74,6 +74,8 @@ native ARM64 test execution remains unverified.
   stream conflicts, duplicate-frame bounds and BBQR rejection.
 - QR generation and recognition through independent libraries, using rotated,
   low-contrast synthetic images.
+- Camera startup with a simulated streaming driver, frame conversion, transient
+  read errors and disconnection. Physical camera capture still needs verification.
 - Strict wallet-policy request schemas and registration approval bound to the
   original wallet ID even if the caller replaces its policy during the callback.
 - Full review traversal and typed consent through a pseudo-terminal, including

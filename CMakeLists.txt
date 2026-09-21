@@ -117,6 +117,13 @@ add_executable(qr-image-probe tests/qr_image_probe.cpp)
 target_link_libraries(qr-image-probe PRIVATE thunderden)
 target_compile_options(qr-image-probe PRIVATE -Wall -Wextra -Werror)
 
+add_executable(camera-tests tests/camera.cpp)
+target_link_libraries(camera-tests PRIVATE thunderden)
+target_compile_options(camera-tests PRIVATE -Wall -Wextra -Werror)
+target_link_options(camera-tests PRIVATE -Wl,--wrap=v4l2_open -Wl,--wrap=v4l2_ioctl
+  -Wl,--wrap=v4l2_read -Wl,--wrap=v4l2_close -Wl,--wrap=poll)
+add_test(NAME camera COMMAND camera-tests)
+
 add_executable(isolation-tests tests/isolation.cpp)
 pkg_check_modules(CAMERA_TEST REQUIRED IMPORTED_TARGET libv4lconvert libjpeg)
 target_link_libraries(isolation-tests PRIVATE thunderden PkgConfig::CAMERA_TEST)

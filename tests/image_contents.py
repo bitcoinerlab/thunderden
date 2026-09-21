@@ -26,7 +26,7 @@ forbidden = {
     "bitcoind", "bitcoin-cli", "bitcoin-wallet", "bitcoin-node", "python", "python3",
     "gcc", "g++", "cmake", "strace", "thunderden-tests", "transaction-tests", "transport-tests",
     "application-tests", "terminal-probe", "qr-image-probe", "core-key-probe", "core-key-edges",
-    "isolation-tests",
+    "isolation-tests", "camera-tests",
 }
 for path in sorted(target.rglob("*")):
     relative = str(path.relative_to(target))

@@ -25,9 +25,10 @@ The `BIP39_WORDLIST_SHA256` setting must match the pinned wordlist hash.
 
 The CTest suites cover seed/policy handling, transaction review/signing, Core key
 vectors, native dependency/syscall checks, UR transport, application requests,
-independent account-export compatibility and terminal interaction. Signing tests use
-public deterministic fixtures and synthetic previous transactions. Linker wrappers
-count ECDSA/Schnorr calls to check that review and rejection do not sign.
+independent account-export compatibility, terminal interaction and camera startup.
+Signing tests use public deterministic fixtures and synthetic previous transactions.
+Linker wrappers count ECDSA/Schnorr calls to check that review and rejection do
+not sign.
 
 The `isolation` suite checks scanner containment and communication with the signer.
 Landlock enforcement tests require ABI 6 support in the host kernel (normally
