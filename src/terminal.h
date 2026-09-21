@@ -20,7 +20,8 @@ public:
     int Key(int timeout_ms = -1);
     void Flush();
     void Screen(std::string_view title, const ReviewLines& lines);
-    SecretBytes Input(std::string_view prompt, size_t limit, bool hidden);
+    SecretBytes Input(std::string_view prompt, size_t limit, bool hidden, SecretBytes initial = {});
+    SecretBytes Mnemonic();
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation);
     void Notice(std::string_view title, const ReviewLines& lines);
 };

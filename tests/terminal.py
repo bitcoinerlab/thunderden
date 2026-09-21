@@ -129,6 +129,21 @@ pipe = subprocess.run([sys.argv[1]], input=b"nSIGN\n", capture_output=True, time
 assert pipe.returncode == 3 and b"Input must be a terminal" in pipe.stderr
 print("PASS: tty-only input, full review traversal, explicit consent, queued-input rejection, cancellation, resize and masked ASCII entry")
 
+MNEMONIC = ["abandon"] * 11 + ["about"]
+
+
+def word(p, index, count, value):
+    p.wait(f"Word {index}/{count}: ".encode())
+    p.send(value.encode() + b"\r")
+
+
+def mnemonic(p, words, choice=b"\r"):
+    p.wait(b"Enter: 12 words")
+    p.send(choice)
+    for index, value in enumerate(words, 1):
+        word(p, index, len(words), value)
+
+
 # Exercise the actual application with a controlling tty. The test container has
 # no framebuffer; a failed display must return to the menu and preserve the seed
 # session, rather than prompt again or export through an alternate channel.
@@ -143,13 +158,22 @@ for attempt in range(2):
     p.wait(b"Account number 0-100 [0]: ")
     p.send(b"\r")
     if attempt == 0:
-        p.wait(b"Recovery words: ")
-        p.send(b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\r")
+        mnemonic(p, ["abandon"] * 12)
+        p.wait(b"Invalid mnemonic checksum")
+        assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
+        for invalid in (b"0\r", b"13\r", b"x\r"):
+            p.wait(b"Word number (1-12): ")
+            p.send(invalid)
+            p.wait(b"Word number is out of range")
+        p.wait(b"Word number (1-12): ")
+        p.send(b"12\r")
+        p.wait(b"Word 12/12: ")
+        p.wait(b"abandon")
+        p.send(b"\x7f" * 7 + b"about\r")
         p.wait(b"Passphrase: ")
         p.send(b"\r")
-        p.wait(b"Repeat passphrase: ")
-        p.send(b"\r")
     p.wait(b"Page 1/1")
+    assert b"Repeat passphrase: " not in p.all_text, "Empty passphrase required confirmation"
     p.send(b"n")
     p.wait(b"Type EXPORT then Enter: ")
     p.send(b"EXPORT\r")
@@ -158,6 +182,80 @@ for attempt in range(2):
 p.wait(b"3: End session")
 p.send(b"3")
 p.finish(0)
-assert p.all_text.count(b"Recovery words: ") == 1
+assert p.all_text.count(b"Recovery word count") == 1
 assert b"abandon abandon" not in p.all_text
-print("PASS: native application menu, one seed entry per session and recovery from unavailable display")
+print("PASS: checksum checked before passphrase, single Enter for empty passphrase and one key session")
+
+# All standard lengths, with visible words and the same backend checksum checks.
+for choice, count, last in [(1, 12, "about"), (2, 15, "address"), (3, 18, "agent"),
+                            (4, 21, "admit"), (5, 24, "art")]:
+    words = ["abandon"] * (count - 1) + [last]
+    p = Probe("mnemonic")
+    mnemonic(p, words, str(choice).encode())
+    output, _ = p.finish(0)
+    assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
+    assert b"abandon" in p.all_text, "Recovery words were hidden"
+
+p = Probe("mnemonic")
+p.wait(b"Enter: 12 words")
+p.send(b"\r")
+word(p, 1, 12, "zzzz")
+p.wait(b"Invalid English recovery word")
+word(p, 1, 12, "toolongword")
+p.wait(b"Input is too long")
+word(p, 1, 12, "ability")
+word(p, 2, 12, "")  # Empty entry goes back without losing the earlier word.
+p.wait(b"Word 1/12: ")
+p.wait(b"ability")
+p.send(b"\x7f" * 7 + b"abandon\r")
+for index, value in enumerate(MNEMONIC[1:], 2):
+    word(p, index, 12, value)
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode()
+
+p = Probe("mnemonic")
+p.wait(b"Enter: 12 words")
+p.send(b"\x1b")
+output, _ = p.finish(2)
+assert not output
+
+p = Probe("mnemonic")
+p.wait(b"Enter: 12 words")
+p.send(b"\r")
+word(p, 1, 12, "abandon")
+p.wait(b"Word 2/12: ")
+p.send(b"\x1b")
+output, _ = p.finish(2)
+assert not output
+print("PASS: all mnemonic lengths, visible words, immediate validation, correction and cancellation")
+
+# A mistyped passphrase can be retried without entering the words again.
+p = Probe(executable=sys.argv[2], controlling=True, rows=24)
+p.wait(b"Esc: End session")
+p.send(b"4")
+p.wait(b"3: End session")
+p.send(b"2")
+p.wait(b"Esc: Cancel")
+p.send(b"1")
+p.wait(b"Account number 0-100 [0]: ")
+p.send(b"\r")
+mnemonic(p, MNEMONIC)
+p.wait(b"Passphrase: ")
+p.send(b" A Case  \r")
+p.wait(b"Repeat passphrase: ")
+p.send(b" A Case\r")
+p.wait(b"Page 1/1")
+assert b"Passphrases did not match" in p.all_text
+p.send(b"n")
+p.wait(b"Passphrase: ")
+p.send(b" A Case  \r")
+p.wait(b"Repeat passphrase: ")
+p.send(b" A Case  \r")
+p.wait(b"Page 1/1")
+p.send(b"q")
+p.wait(b"3: End session")
+p.send(b"3")
+p.finish(0)
+assert p.all_text.count(b"Recovery word count") == 1
+assert b" A Case" not in p.all_text, "Passphrase was displayed"
+print("PASS: non-empty passphrase confirmation, exact spaces/case and retry without re-entering words")

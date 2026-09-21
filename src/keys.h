@@ -7,6 +7,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace td {
@@ -19,6 +20,8 @@ inline void Require(bool condition, const char* message)
 {
     if (!condition) throw std::invalid_argument(message);
 }
+unsigned MnemonicWordIndex(std::string_view word);
+void ValidateMnemonic(std::span<const unsigned char> mnemonic);
 SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
                          std::span<const unsigned char> passphrase);
 std::string EncodePublic(const CExtPubKey& key, bool mainnet);

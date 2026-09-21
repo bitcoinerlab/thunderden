@@ -14,6 +14,11 @@ int main(int argc, char** argv)
             std::puts(HexStr(secret).c_str()); // Test-only public fixture output.
             return 0;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "mnemonic") {
+            const auto mnemonic = terminal.Mnemonic();
+            std::puts(HexStr(mnemonic).c_str()); // Test-only public fixture output.
+            return 0;
+        }
         td::ReviewLines lines;
         for (int i = 0; i < 11; ++i) lines.push_back("Review field " + std::to_string(i));
         lines.push_back(std::string(158, 'x') + "ADDRESS-END");

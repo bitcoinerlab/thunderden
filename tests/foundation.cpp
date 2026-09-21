@@ -47,6 +47,13 @@ std::string Key(const td::Keys& session, const td::Path& origin, bool mainnet = 
 
 void Seeds()
 {
+    Check(td::MnemonicWordIndex("abandon") == 0 && td::MnemonicWordIndex("zoo") == 2047,
+        "BIP39 word-list endpoints");
+    for (const auto& word : {std::string(""), std::string("Abandon"), std::string("aban"),
+            std::string("abandon "), std::string("abandon\0", 8)}) {
+        Reject([&] { td::MnemonicWordIndex(word); });
+    }
+    td::ValidateMnemonic(Bytes(MNEMONIC));
     const auto seed = td::MnemonicSeed(Bytes(MNEMONIC), Bytes("TREZOR"));
     Check(HexStr(seed) == "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04", "BIP39 seed vector");
     const std::vector<std::pair<std::string, std::string>> sizes{
@@ -66,6 +73,7 @@ void Seeds()
     Check(td::MnemonicSeed(Bytes(MNEMONIC), Bytes("PASSWORD")) != td::MnemonicSeed(Bytes(MNEMONIC), Bytes("password")), "Passphrase case must survive");
     for (const auto& bad : std::vector<std::string>{"", "abandon", " " + MNEMONIC, MNEMONIC + " ", "abandon " + MNEMONIC,
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"}) {
+        Reject([&] { td::ValidateMnemonic(Bytes(bad)); });
         Reject([&] { td::MnemonicSeed(Bytes(bad), {}); });
     }
     for (const auto& bad : {std::string("caf\xc3\xa9"), std::string("tab\t"), std::string("x\0y", 3), std::string(129, 'x')}) {

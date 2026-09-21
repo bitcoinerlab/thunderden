@@ -14,24 +14,24 @@
 #include <string_view>
 
 namespace td {
-SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
-                         std::span<const unsigned char> passphrase)
+unsigned MnemonicWordIndex(std::string_view word)
+{
+    const auto found = std::lower_bound(ENGLISH.begin(), ENGLISH.end(), word);
+    Require(found != ENGLISH.end() && *found == word, "Invalid English recovery word");
+    return static_cast<unsigned>(found - ENGLISH.begin());
+}
+
+void ValidateMnemonic(std::span<const unsigned char> mnemonic)
 {
     Require(!mnemonic.empty() && mnemonic.size() <= 256, "Invalid mnemonic length");
-    Require(passphrase.size() <= 128, "Passphrase exceeds 128 characters");
-    Require(std::all_of(passphrase.begin(), passphrase.end(), [](auto c) {
-        return c >= 0x20 && c <= 0x7e;
-    }), "Passphrase must contain printable ASCII only");
     const std::string_view sentence(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
     SecretBytes bits(33), checksum(32);
     size_t count = 0, start = 0;
     while (start < sentence.size()) {
         const size_t end = sentence.find(' ', start);
         const auto word = sentence.substr(start, end == sentence.npos ? end : end - start);
-        const auto found = std::lower_bound(ENGLISH.begin(), ENGLISH.end(), word);
-        Require(found != ENGLISH.end() && *found == word, "Invalid English recovery word");
+        const auto index = MnemonicWordIndex(word);
         Require(count < 24, "Too many recovery words");
-        const auto index = static_cast<unsigned>(found - ENGLISH.begin());
         for (unsigned bit = 0; bit < 11; ++bit) {
             const size_t position = count * 11 + bit;
             bits[position / 8] |= ((index >> (10 - bit)) & 1U) << (7 - position % 8);
@@ -46,7 +46,17 @@ SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
     CSHA256().Write(bits.data(), entropy_bytes).Finalize(checksum.data());
     const unsigned mask = 0xffU << (8 - count / 3);
     Require((bits[entropy_bytes] & mask) == (checksum[0] & mask), "Invalid mnemonic checksum");
+}
 
+SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
+                         std::span<const unsigned char> passphrase)
+{
+    ValidateMnemonic(mnemonic);
+    Require(passphrase.size() <= 128, "Passphrase exceeds 128 characters");
+    Require(std::all_of(passphrase.begin(), passphrase.end(), [](auto c) {
+        return c >= 0x20 && c <= 0x7e;
+    }), "Passphrase must contain printable ASCII only");
+    const std::string_view sentence(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
     constexpr std::string_view prefix = "mnemonic";
     SecretBytes salt(prefix.begin(), prefix.end()), seed(64);
     salt.insert(salt.end(), passphrase.begin(), passphrase.end());

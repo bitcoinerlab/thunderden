@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <charconv>
 #include <stdexcept>
 
 namespace td {
@@ -87,14 +88,22 @@ void Terminal::Screen(std::string_view title, const ReviewLines& lines)
     for (const auto& line : safe_lines) { Write(line); Write("\r\n"); }
 }
 
-SecretBytes Terminal::Input(std::string_view prompt, size_t limit, bool hidden)
+SecretBytes Terminal::Input(std::string_view prompt, size_t limit, bool hidden, SecretBytes result)
 {
     Wrap({std::string(prompt)}, 80);
+    Require(result.size() <= limit && std::all_of(result.begin(), result.end(), [](auto c) {
+        return c >= 32 && c <= 126;
+    }), "Invalid initial input");
     Flush();
     Write(prompt);
     Write("\033[?25h");
-    SecretBytes result;
     result.reserve(limit);
+    const auto echo = [&](unsigned char value) {
+        char output = hidden ? '*' : value;
+        Write(std::string_view(&output, 1));
+        memory_cleanse(&output, 1);
+    };
+    for (const auto value : result) echo(value);
     while (true) {
         const int key = Key();
         if (key == 27 || key == 3) throw Cancelled{};
@@ -108,11 +117,63 @@ SecretBytes Terminal::Input(std::string_view prompt, size_t limit, bool hidden)
         } else if (key >= 32 && key <= 126) {
             Require(result.size() < limit, "Input is too long");
             result.push_back(key);
-            char output = hidden ? '*' : key;
-            Write(std::string_view(&output, 1));
-            memory_cleanse(&output, 1);
+            echo(key);
         } else if (key > 126) {
             throw std::invalid_argument("Only printable ASCII is supported");
+        }
+    }
+}
+
+SecretBytes Terminal::Mnemonic()
+{
+    Flush();
+    Screen("Recovery word count", {"1: 12 words   2: 15 words   3: 18 words",
+        "4: 21 words   5: 24 words", "Enter: 12 words   Esc: Cancel"});
+    int choice;
+    do {
+        choice = Key();
+        if (choice == 27 || choice == 3) throw Cancelled{};
+        if (choice == '\r' || choice == '\n') choice = '1';
+    } while (choice < '1' || choice > '5');
+    const size_t count = 12 + (choice - '1') * 3;
+    std::vector<SecretBytes> words(count);
+    size_t index = 0;
+    std::string error;
+    while (true) {
+        while (index < count) {
+            Screen("Enter recovery words", {"Words are visible on this screen.",
+                "Enter: Accept   Backspace: Edit", "Empty entry: Previous word   Esc: Cancel", error});
+            try {
+                auto word = Input("Word " + std::to_string(index + 1) + "/" + std::to_string(count) + ": ",
+                    8, false, words[index]);
+                error.clear();
+                if (word.empty()) { if (index > 0) --index; continue; }
+                MnemonicWordIndex({reinterpret_cast<const char*>(word.data()), word.size()});
+                words[index++] = std::move(word);
+            } catch (const std::invalid_argument& invalid) { error = invalid.what(); }
+        }
+        SecretBytes mnemonic;
+        mnemonic.reserve(256);
+        for (const auto& word : words) {
+            if (!mnemonic.empty()) mnemonic.push_back(' ');
+            mnemonic.insert(mnemonic.end(), word.begin(), word.end());
+        }
+        try { ValidateMnemonic(mnemonic); return mnemonic; }
+        catch (const std::invalid_argument& invalid) { error = invalid.what(); }
+        while (index == count) {
+            Screen("Check recovery words", {error, "Check the words and their order.",
+                "Choose a word to correct. Esc: Cancel"});
+            try {
+                const auto answer = Input("Word number (1-" + std::to_string(count) + "): ", 2, false);
+                Require(!answer.empty(), "Enter a word number");
+                unsigned number = 0;
+                const auto* first = reinterpret_cast<const char*>(answer.data());
+                const auto [end, result] = std::from_chars(first, first + answer.size(), number);
+                Require(result == std::errc{} && end == first + answer.size() && number >= 1 && number <= count,
+                    "Word number is out of range");
+                index = number - 1;
+                error.clear();
+            } catch (const std::invalid_argument& invalid) { error = invalid.what(); }
         }
     }
 }

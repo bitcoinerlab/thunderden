@@ -75,11 +75,12 @@ with (args.output / "qemu.log").open("wb") as log:
         time.sleep(1)
         key("ret")  # Account zero
         time.sleep(1)
-        text("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\n")
+        key("ret")  # Default: 12 recovery words
+        time.sleep(1)
+        for word in ["abandon"] * 11 + ["about"]:
+            text(word + "\n")
         time.sleep(1)
         key("ret")  # Empty passphrase
-        time.sleep(1)
-        key("ret")  # Confirm empty passphrase
         time.sleep(2)
         screenshot("review.ppm")
         key("n")

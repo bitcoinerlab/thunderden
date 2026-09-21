@@ -31,9 +31,14 @@ are kept separate.
 ## Recovery input
 
 - English BIP39 wordlist; 12, 15, 18, 21 or 24 words with a valid checksum.
-- Enter lowercase words separated by single spaces, without leading/trailing spaces.
+- Choose the word count, then enter one lowercase word at a time. Words are visible
+  and checked against the wordlist immediately. An empty entry goes back one word.
+- The complete mnemonic's checksum is checked before asking for a passphrase.
+  If it fails, choose a word number to correct.
 - Optional passphrase of printable ASCII characters, including spaces.
 - Passphrase case and every space are significant. Unsupported bytes are rejected.
+- An empty passphrase needs one Enter. A non-empty passphrase must be entered twice;
+  a mismatch lets you retry without re-entering the recovery words.
 - The mnemonic is entered when first needed. Derived keys remain in RAM for the session.
 - No mnemonic generation or persistent seed storage.
 - The initial console interface uses the kernel's default US keyboard layout.
@@ -129,7 +134,8 @@ The local interface wraps full addresses/scripts onto review pages. Every page
 must be traversed before a separate typed `SIGN` confirmation is accepted. Queued
 input is discarded at screen/approval boundaries, and terminal resizing aborts
 the review. Registration and public-account export use separate `REGISTER` and
-`EXPORT` confirmations. Mnemonic/passphrase entry is masked and uses secure buffers.
+`EXPORT` confirmations. Recovery words are visible during entry and passphrases are
+masked. Both use secure buffers.
 
 ## QR exchange
 

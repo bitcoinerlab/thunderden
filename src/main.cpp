@@ -102,14 +102,16 @@ int main(int argc, char** argv)
         std::unique_ptr<td::Keys> session;
         const auto keys = [&]() -> const td::Keys& {
             if (!session) {
-                terminal.Screen("Enter recovery words", {"English BIP39; separate words with one space.",
-                    "Input is masked. Esc cancels.", "Keys remain in memory until this session ends."});
-                const auto mnemonic = terminal.Input("Recovery words: ", 256, true);
-                terminal.Screen("BIP39 passphrase", {"Optional printable ASCII passphrase.", "Every space and letter case is significant.", "Leave empty for no passphrase."});
-                const auto passphrase = terminal.Input("Passphrase: ", 128, true);
-                const auto repeat = terminal.Input("Repeat passphrase: ", 128, true);
-                td::Require(passphrase == repeat, "Passphrases did not match");
-                session = std::make_unique<td::Keys>(mnemonic, passphrase);
+                const auto mnemonic = terminal.Mnemonic();
+                while (!session) {
+                    terminal.Screen("BIP39 passphrase", {"Optional printable ASCII passphrase.", "Every space and letter case is significant.", "Leave empty for no passphrase."});
+                    const auto passphrase = terminal.Input("Passphrase: ", 128, true);
+                    if (!passphrase.empty() && passphrase != terminal.Input("Repeat passphrase: ", 128, true)) {
+                        terminal.Notice("Passphrases did not match", {"Enter the passphrase again."});
+                        continue;
+                    }
+                    session = std::make_unique<td::Keys>(mnemonic, passphrase);
+                }
             }
             return *session;
         };
