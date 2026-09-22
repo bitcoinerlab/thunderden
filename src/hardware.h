@@ -11,6 +11,7 @@ class Display {
     fb_fix_screeninfo fixed_{};
     fb_var_screeninfo variable_{};
     bool graphics_{false};
+    int preview_progress_{-1};
     std::vector<uint8_t> font_;
     unsigned font_width_{}, font_height_{};
     void Close();

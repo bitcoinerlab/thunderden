@@ -75,6 +75,7 @@ void Display::Pixel(unsigned x, unsigned y, uint8_t gray)
 
 void Display::Clear()
 {
+    preview_progress_ = -1;
     for (unsigned y = 0; y < variable_.yres; ++y) for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, 255);
 }
 
@@ -106,7 +107,11 @@ void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned he
         Pixel((fit_w - draw_w) / 2 + x, (fit_h - draw_h) / 2 + y,
             gray[(uint64_t(y) * height / draw_h) * width + uint64_t(x) * width / draw_w]);
     }
-    Caption("Scan UR v2: " + std::to_string(int(progress * 100)) + "%   Esc: Cancel");
+    const int percent = int(progress * 100);
+    if (percent != preview_progress_) {
+        Caption("Scan UR v2: " + std::to_string(percent) + "%   Esc: Cancel");
+        preview_progress_ = percent;
+    }
 }
 
 void Display::QR(const QRImage& image, std::string_view caption)

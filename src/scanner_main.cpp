@@ -3,21 +3,30 @@
 #include "scan.h"
 
 #include <sys/stat.h>
+#include <system_error>
 #include <unistd.h>
 
 int main()
 {
+    struct stat output{};
+    if (fstat(STDOUT_FILENO, &output) != 0 || !S_ISFIFO(output.st_mode)) return 1;
+    auto failure = td::ScanFailure::Startup;
     try {
         td::LockProcess();
-        struct stat output{};
-        td::Require(fstat(STDOUT_FILENO, &output) == 0 && S_ISFIFO(output.st_mode), "Scanner requires a pipe");
+        failure = td::ScanFailure::Camera;
         td::Camera camera;
+        failure = td::ScanFailure::Startup;
         td::QRScanner scanner;
         td::URReceiver receiver;
+        failure = td::ScanFailure::Confinement;
         td::ConfineScanner();
         while (!receiver.Result()) {
+            failure = td::ScanFailure::Capture;
             if (!camera.Capture()) continue;
-            for (const auto& frame : scanner.Scan(camera.Gray(), camera.Width(), camera.Height())) {
+            failure = td::ScanFailure::Decode;
+            const auto frames = scanner.Scan(camera.Gray(), camera.Width(), camera.Height());
+            failure = td::ScanFailure::Request;
+            for (const auto& frame : frames) {
                 receiver.Receive(frame);
                 if (receiver.Result()) break;
             }
@@ -25,5 +34,10 @@ int main()
         }
         td::SendScanResult(*receiver.Result());
         return 0;
-    } catch (...) { return 1; } // Never forward decoder diagnostics to the terminal.
+    } catch (const std::system_error& error) {
+        if (failure == td::ScanFailure::Camera && error.code() == std::errc::permission_denied)
+            failure = td::ScanFailure::CameraAccess;
+    } catch (...) {}
+    td::SendScanFailure(failure); // Never forward decoder-provided text to the terminal.
+    return 1;
 }

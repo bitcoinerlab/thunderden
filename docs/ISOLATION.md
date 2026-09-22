@@ -47,11 +47,11 @@ camera -> scanner -> limited data channel -> signer -> local review and approval
 ```
 
 Each scan starts a fresh scanner executable, without a copy of the signer's key
-memory or access to its keyboard and screen connections. The scanner sends only
-camera previews and completed request data through a pipe: a one-way channel
-between the programs. The signer checks each record's type and size before
-allocating memory, then validates the request through its normal wallet and
-transaction checks. Scanner output always remains untrusted.
+memory or access to its keyboard and screen connections. The scanner sends
+camera previews, completed request data or fixed failure codes through a pipe:
+a one-way channel between the programs. The signer checks each record's type and
+size before allocating memory, then validates requests through its normal wallet
+and transaction checks. Scanner output always remains untrusted.
 
 This channel has no way to approve a transaction. Camera previews appear only
 during scanning. Before review begins, the signer terminates the scanner and waits
@@ -74,8 +74,14 @@ applies these restrictions **before reading camera frames**:
 - New access to file contents, filesystem changes and execution of filesystem
   programs are denied. Already-open camera and pipe connections remain usable.
 - The scanner cannot inspect the signer's memory or send it process-control signals.
-- Memory, CPU work and open files/devices are bounded; additional processes and
-  threads are forbidden.
+- Memory and open files/devices are bounded; additional processes and threads
+  are forbidden.
+
+The signer stops a scan after ten seconds without a complete preview or result.
+Partial pipe traffic does not renew this deadline. Healthy scanning has no total
+CPU-time cutoff. This is a liveness check, not a CPU budget: a compromised scanner
+could keep it satisfied by sending valid preview records. Local cancellation
+still terminates the worker.
 
 The image's Linux kernel has networking disabled entirely. Landlock enforcement
 uses the kernel API directly. If the required protection is unavailable, the
@@ -95,7 +101,8 @@ also remain trust dependencies. Isolation limits the consequences of scanner
 compromise, without establishing that all native-code or kernel bugs are impossible.
 
 Camera/display permissions are assigned after initial Bitcoin network selection.
-A camera connected or recreated afterwards may require restarting the image.
+A camera connected or recreated afterwards may require a new session to refresh
+those permissions.
 Physical webcam streaming, reconnects and slow-camera behavior remain hardware
 validation work; current coverage is listed in [Implementation status](STATUS.md).
 
@@ -110,14 +117,19 @@ validation work; current coverage is listed in [Implementation status](STATUS.md
   Records have five little-endian uint32 fields: kind, width, height, progress and
   payload size. Previews are limited to 1920×1080 grayscale pixels and progress
   0–100; completed messages follow the [QR protocol limits](PROTOCOL.md).
+  Failure records have kind 4, a fixed failure code (1–7) in the progress field
+  and zero width, height and payload size. The signer maps these codes to its own
+  messages; decoder-provided text is never displayed.
   Nonblocking reads use a maximum 50 ms poll interval.
-- Per-scanner resource limits are 256 MiB of address space, 60 CPU seconds,
-  64 file descriptors and no additional child processes or threads.
+- Per-scanner resource limits are 256 MiB of address space, 64 file descriptors
+  and no additional child processes or threads. A parent-side ten-second
+  no-frame deadline covers startup and stalled capture/decoding.
 - [Isolation tests](../tests/isolation.cpp) check fresh process state, restricted
   privileges, denied application-file writes, real JPEG/QR/UR decoding under
   confinement, malformed and partial pipe records, cancellation, process cleanup,
-  memory limits and denied filesystem and parent-process access. JPEG conversion
-  uses the real conversion libraries with mocked camera-driver controls.
+  memory limits, no-frame timeouts, fixed failure reports and denied filesystem
+  and parent-process access. JPEG conversion uses the real conversion libraries
+  with mocked camera-driver controls.
 - [Build and tests](BUILD.md) describes the default native suites and optional
   checks on the image's own kernel and libraries. Host containment tests report
   a skip when Landlock ABI 6 is unavailable. Guest checks use a separate test-only

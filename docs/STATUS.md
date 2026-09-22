@@ -81,7 +81,9 @@ native ARM64 test execution remains unverified.
 - QR generation and recognition through independent libraries, using rotated,
   low-contrast synthetic images.
 - Camera startup with a simulated streaming driver, frame conversion, transient
-  read errors and disconnection. Physical camera capture still needs verification.
+  read errors, access-denied reporting and disconnection. A mock framebuffer
+  verifies that live preview updates do not erase an unchanged controls banner.
+  Reliability on physical cameras remains under validation.
 - Strict wallet-policy request schemas and registration approval bound to the
   original wallet ID even if the caller replaces its policy during the callback.
 - Full review traversal and typed consent through a pseudo-terminal, including
@@ -97,6 +99,9 @@ native ARM64 test execution remains unverified.
   `urtypes` codec with matching xpubs, origins, fingerprints and script types.
 - Fresh scanner execution with no inherited parent environment/extra descriptors;
   bounded preview/result pipes, stalled-worker cancellation and reaping.
+- Healthy preview streams outlive the no-frame deadline; silent workers, partial
+  packets and stalled previews time out. Known failure codes map to fixed messages,
+  malformed failure records are rejected and confinement adds no lifetime CPU cap.
 - Restricted uid/capabilities, denied application-file writes, real JPEG/QR/UR
   decoding under confinement and denied filesystem/parent-process access.
 - Recorded AddressSanitizer and UndefinedBehaviorSanitizer coverage includes the

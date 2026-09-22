@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -72,9 +73,34 @@ int Worker(const std::string& mode)
     if (mode == "geometry") { Header({1, UINT32_MAX, 2, 0, 1}); return 0; }
     if (mode == "progress") { Header({1, 1, 1, 101, 1}); return 0; }
     if (mode == "command") { Header({99, 0, 0, 0, 4}); return 0; }
+    if (mode == "bad-failure-code") { Header({4, 0, 0, UINT32_MAX, 0}); return 0; }
+    if (mode == "bad-failure-zero") { Header({4, 0, 0, 0, 0}); return 0; }
+    if (mode == "bad-failure-geometry") { Header({4, 1, 0, 1, 0}); return 0; }
+    if (mode == "bad-failure-payload") { Header({4, 0, 0, 1, 4}); return 0; }
+    if (mode.starts_with("failure-")) {
+        td::ConfineScanner();
+        td::SendScanFailure(static_cast<td::ScanFailure>(mode.back() - '0'));
+        return 1;
+    }
+    if (mode == "unexpected-exit") return 1;
     if (mode == "truncated") { Header({2, 0, 0, 0, 4}); return 0; }
     if (mode == "partial-header") { const char data = 2; return write(1, &data, 1) == 1 ? 0 : 1; }
-    if (mode == "stall") { Header({2, 0, 0, 0, 4}); for (;;) pause(); }
+    if (mode == "stall" || mode == "partial-timeout") { Header({2, 0, 0, 0, 4}); for (;;) pause(); }
+    if (mode == "silent-timeout") { for (;;) pause(); }
+    if (mode == "drip-timeout") {
+        Header({1, 16, 16, 0, 256});
+        const char byte = 0;
+        for (;;) { Check(write(1, &byte, 1) == 1, "Drip write failed"); usleep(100000); }
+    }
+    if (mode == "streaming" || mode == "preview-timeout") {
+        td::ConfineScanner();
+        const std::array<uint8_t, 4> black{};
+        for (;;) {
+            td::SendPreview(black, 2, 2, 0);
+            if (mode == "preview-timeout") { for (;;) pause(); }
+            usleep(100000);
+        }
+    }
     if (mode == "bytewise") {
         const auto message = Message();
         const std::array<uint32_t, 5> header{3, 0, 0, 0, static_cast<uint32_t>(message.cbor.size())};
@@ -138,7 +164,11 @@ int Worker(const std::string& mode)
     const pid_t parent = getppid();
     const int camera = open("/dev/null", O_RDWR | O_CLOEXEC);
     Check(camera >= 3, "Mock camera open failed");
+    rlimit cpu_before{}, cpu_after{};
+    Check(getrlimit(RLIMIT_CPU, &cpu_before) == 0, "Cannot read inherited CPU limit");
     td::ConfineScanner();
+    Check(getrlimit(RLIMIT_CPU, &cpu_after) == 0 && cpu_before.rlim_cur == cpu_after.rlim_cur
+        && cpu_before.rlim_max == cpu_after.rlim_max, "Confinement imposed a scanner lifetime CPU limit");
     long result;
     int expected_errno = EPERM;
     if (mode == "open") { result = syscall(SYS_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY, 0); expected_errno = EACCES; }
@@ -216,7 +246,8 @@ void Parent(const std::string& executable)
             }
             Check(complete, "Worker failed to return a result");
         }
-        for (const auto mode : {"oversize", "geometry", "progress", "command", "truncated", "partial-header"}) {
+        for (const auto mode : {"oversize", "geometry", "progress", "command", "truncated", "partial-header",
+                "bad-failure-code", "bad-failure-zero", "bad-failure-geometry", "bad-failure-payload"}) {
             bool rejected = false;
             td::ScanProcess process(path(mode));
             for (int i = 0; i < 100 && !rejected; ++i) {
@@ -225,6 +256,26 @@ void Parent(const std::string& executable)
             }
             Check(rejected, "Malformed worker output not rejected");
         }
+        for (const auto& [mode, expected] : std::array<std::pair<const char*, const char*>, 8>{{
+                {"failure-1", "Scanner initialization failed"},
+                {"failure-2", "Cannot open or configure a webcam"},
+                {"failure-3", "Camera access denied; try a new session"},
+                {"failure-4", "Scanner isolation setup failed"},
+                {"failure-5", "Camera frame capture failed; retry the scan"},
+                {"failure-6", "QR image decoding failed"},
+                {"failure-7", "Invalid or unsupported UR v2 request"},
+                {"unexpected-exit", "Camera/QR worker exited unexpectedly; retry the scan"}}}) {
+            td::ScanProcess process(path(mode));
+            bool reported = false;
+            for (int i = 0; i < 100 && !reported; ++i) {
+                try { Check(!process.Poll(), "Failure produced a successful result"); }
+                catch (const std::invalid_argument& error) {
+                    Check(std::strcmp(error.what(), expected) == 0, "Wrong scanner failure message");
+                    reported = true;
+                }
+            }
+            Check(reported, "Scanner failure was not reported");
+        }
         {
             const auto started = std::chrono::steady_clock::now();
             {
@@ -232,6 +283,33 @@ void Parent(const std::string& executable)
                 for (int i = 0; i < 3; ++i) Check(!process.Poll(), "Partial result was accepted");
             }
             Check(std::chrono::steady_clock::now() - started < std::chrono::seconds(1), "Worker prevented cancellation");
+        }
+        {
+            const auto started = std::chrono::steady_clock::now();
+            std::vector<std::unique_ptr<td::ScanProcess>> stalled;
+            for (const auto mode : {"silent-timeout", "partial-timeout", "drip-timeout", "preview-timeout"})
+                stalled.push_back(std::make_unique<td::ScanProcess>(path(mode)));
+            td::ScanProcess streaming(path("streaming"));
+            unsigned previews = 0;
+            while (std::chrono::steady_clock::now() - started < td::SCAN_FRAME_TIMEOUT + std::chrono::seconds(1)) {
+                for (size_t i = 0; i < stalled.size(); ++i) {
+                    if (!stalled[i]) continue;
+                    try { stalled[i]->Poll(); }
+                    catch (const std::invalid_argument& error) {
+                        Check(std::chrono::steady_clock::now() - started >= td::SCAN_FRAME_TIMEOUT,
+                            "Worker timed out too early");
+                        Check(std::string_view(error.what()).starts_with(i == 3
+                            ? "Camera stopped producing frames" : "Camera startup timed out"), "Wrong timeout reason");
+                        stalled[i].reset();
+                    }
+                }
+                if (auto update = streaming.Poll()) {
+                    Check(!update->message && update->gray == std::vector<uint8_t>(4, 0), "Invalid streaming preview");
+                    ++previews;
+                }
+            }
+            for (const auto& process : stalled) Check(!process, "Partial traffic prevented the frame timeout");
+            Check(previews > 1, "Healthy frames did not keep the scanner alive");
         }
         Check(waitpid(-1, nullptr, WNOHANG) == -1 && errno == ECHILD, "Worker was not reaped");
         for (const auto mode : {"open", "write-file", "exec", "ptrace", "read-parent", "signal", "fork", "raise-limit"}) {

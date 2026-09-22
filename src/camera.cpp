@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <memory>
 #include <stdexcept>
+#include <system_error>
 
 namespace td {
 std::vector<uint8_t> Grayscale(std::span<const uint8_t> frame, unsigned width,
@@ -33,10 +34,14 @@ std::vector<uint8_t> Grayscale(std::span<const uint8_t> frame, unsigned width,
 
 Camera::Camera()
 {
+    bool denied = false;
     for (unsigned index = 0; index < 32; ++index) {
         const auto path = "/dev/video" + std::to_string(index);
         const int fd = v4l2_open(path.c_str(), O_RDWR | O_CLOEXEC);
-        if (fd < 0) continue;
+        if (fd < 0) {
+            denied |= errno == EACCES || errno == EPERM;
+            continue;
+        }
         v4l2_capability cap{};
         v4l2_format format{};
         format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -69,6 +74,7 @@ Camera::Camera()
         format_ = pix.pixelformat;
         return;
     }
+    if (denied) throw std::system_error(EACCES, std::generic_category());
     throw std::runtime_error("No usable webcam found");
 }
 

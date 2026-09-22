@@ -167,6 +167,10 @@ streams never silently replace scan state. Outgoing animation keeps a fixed QR
 geometry and a four-module quiet border. Animated QR codes have Space to pause or
 resume; static codes show only Esc to go back and ignore Space.
 
+Scanning continues while complete previews arrive. Ten seconds without a complete
+preview or result ends the scan with a timeout message. The preview controls
+banner is redrawn only when its progress text changes.
+
 ## Input trust boundary
 
 The security requirement covers keyboard input, camera images, decoded QR data

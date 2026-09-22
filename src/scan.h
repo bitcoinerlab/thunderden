@@ -2,9 +2,15 @@
 #include "transport.h"
 
 #include <array>
+#include <chrono>
 #include <sys/types.h>
 
 namespace td {
+inline constexpr auto SCAN_FRAME_TIMEOUT = std::chrono::seconds(10);
+enum class ScanFailure : uint32_t {
+    Startup = 1, Camera, CameraAccess, Confinement, Capture, Decode, Request
+};
+
 struct ScanUpdate {
     unsigned width{}, height{}, progress{};
     std::vector<uint8_t> gray;
@@ -20,6 +26,8 @@ class ScanProcess {
     std::vector<uint8_t> payload_;
     size_t header_bytes_{0}, payload_bytes_{0};
     bool checked_{false}, complete_{false};
+    bool preview_seen_{false};
+    std::chrono::steady_clock::time_point deadline_{std::chrono::steady_clock::now() + SCAN_FRAME_TIMEOUT};
     bool Read(std::span<uint8_t> bytes, size_t& received);
 public:
     explicit ScanProcess(const std::string& executable);
@@ -33,4 +41,5 @@ public:
 // Internal, same-build, little-endian pipe protocol. No commands or approval bits.
 void SendPreview(std::span<const uint8_t> gray, unsigned width, unsigned height, unsigned progress);
 void SendScanResult(const QRMessage& message);
+void SendScanFailure(ScanFailure failure) noexcept;
 }

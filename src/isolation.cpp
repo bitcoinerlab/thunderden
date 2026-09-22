@@ -50,9 +50,9 @@ void ConfineScanner()
 {
     Require(syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION) >= 6,
         "Scanner requires Landlock ABI 6 or later");
-    const rlimit memory{256 * 1024 * 1024, 256 * 1024 * 1024}, cpu{60, 60}, files{64, 64}, children{0, 0};
-    Require(setrlimit(RLIMIT_AS, &memory) == 0 && setrlimit(RLIMIT_CPU, &cpu) == 0
-        && setrlimit(RLIMIT_NOFILE, &files) == 0 && setrlimit(RLIMIT_NPROC, &children) == 0,
+    const rlimit memory{256 * 1024 * 1024, 256 * 1024 * 1024}, files{64, 64}, children{0, 0};
+    Require(setrlimit(RLIMIT_AS, &memory) == 0 && setrlimit(RLIMIT_NOFILE, &files) == 0
+        && setrlimit(RLIMIT_NPROC, &children) == 0,
         "Cannot bound scanner resources");
     // Deny new file-content access and filesystem execution. Open camera and
     // pipe descriptors keep their rights. Ptrace is confined to this domain;

@@ -121,7 +121,8 @@ add_executable(camera-tests tests/camera.cpp)
 target_link_libraries(camera-tests PRIVATE thunderden)
 target_compile_options(camera-tests PRIVATE -Wall -Wextra -Werror)
 target_link_options(camera-tests PRIVATE -Wl,--wrap=v4l2_open -Wl,--wrap=v4l2_ioctl
-  -Wl,--wrap=v4l2_read -Wl,--wrap=v4l2_close -Wl,--wrap=poll)
+  -Wl,--wrap=v4l2_read -Wl,--wrap=v4l2_close -Wl,--wrap=poll
+  -Wl,--wrap=open -Wl,--wrap=ioctl -Wl,--wrap=mmap -Wl,--wrap=munmap -Wl,--wrap=close)
 add_test(NAME camera COMMAND camera-tests)
 
 add_executable(isolation-tests tests/isolation.cpp)
