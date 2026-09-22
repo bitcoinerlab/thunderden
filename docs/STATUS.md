@@ -50,7 +50,8 @@ native ARM64 test execution remains unverified.
 - BIP39 seed vectors for all five standard word counts, ASCII rejection and
   exact preservation of passphrase spaces and case.
 - Numbered recovery-word entry for all five word counts, immediate word validation,
-  earlier-word editing and checksum correction before the passphrase prompt.
+  earlier-word editing and full phrase retry after a failed checksum, before the
+  passphrase prompt.
 - Empty passphrases accepted with one Enter; non-empty passphrases require matching
   confirmation and can be retried without repeating the recovery words.
 - Core's published BIP32 vectors, leading zeros, depth limits and injected

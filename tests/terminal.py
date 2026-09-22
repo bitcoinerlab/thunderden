@@ -168,17 +168,10 @@ for attempt in range(2):
     p.send(b"\r")
     if attempt == 0:
         mnemonic(p, ["abandon"] * 12)
-        p.wait(b"Invalid mnemonic checksum")
+        p.wait(b"Invalid recovery phrase. Enter all 12 words again.")
         assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
-        for invalid in (b"0\r", b"13\r", b"x\r"):
-            p.wait(b"Word number (1-12): ")
-            p.send(invalid)
-            p.wait(b"Word number is out of range")
-        p.wait(b"Word number (1-12): ")
-        p.send(b"12\r")
-        p.wait(b"Word 12/12: ")
-        p.wait(b"abandon")
-        p.send(b"\x7f" * 7 + b"about\r")
+        for index, value in enumerate(MNEMONIC, 1):
+            word(p, index, 12, value)
         p.wait(b"Passphrase: ")
         p.send(b"\r")
     p.wait(b"Page 1/1")
@@ -192,6 +185,7 @@ p.wait(b"3: End session (clear keys)")
 p.send(b"3")
 p.finish(0)
 assert p.all_text.count(b"Recovery word count") == 1
+assert b"Word number" not in p.all_text
 assert b"abandon abandon" not in p.all_text
 print("PASS: checksum checked before passphrase, single Enter for empty passphrase and one key session")
 
@@ -204,6 +198,26 @@ for choice, count, last in [(1, 12, "about"), (2, 15, "address"), (3, 18, "agent
     output, _ = p.finish(0)
     assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
     assert b"abandon" in p.all_text, "Recovery words were hidden"
+
+# A failed checksum discards all words and retains the chosen length.
+p = Probe("mnemonic")
+mnemonic(p, ["abandon"] * 24, b"5")
+p.wait(b"Invalid recovery phrase. Enter all 24 words again.")
+words = ["abandon"] * 23 + ["art"]
+for index, value in enumerate(words, 1):
+    word(p, index, 24, value)
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
+assert p.all_text.count(b"Recovery word count") == 1
+
+p = Probe("mnemonic")
+mnemonic(p, ["abandon"] * 12)
+p.wait(b"Invalid recovery phrase. Enter all 12 words again.")
+p.wait(b"Word 1/12: ")
+p.send(b"\x1b")
+output, _ = p.finish(2)
+assert not output
+print("PASS: invalid phrases restart at word one with the same length and allow cancellation")
 
 p = Probe("mnemonic")
 p.wait(b"Enter: 12 words")

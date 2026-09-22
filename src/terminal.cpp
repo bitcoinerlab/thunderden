@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cerrno>
-#include <charconv>
 #include <stdexcept>
 
 namespace td {
@@ -136,10 +135,10 @@ SecretBytes Terminal::Mnemonic()
         if (choice == '\r' || choice == '\n') choice = '1';
     } while (choice < '1' || choice > '5');
     const size_t count = 12 + (choice - '1') * 3;
-    std::vector<SecretBytes> words(count);
-    size_t index = 0;
     std::string error;
     while (true) {
+        std::vector<SecretBytes> words(count);
+        size_t index = 0;
         while (index < count) {
             Screen("Enter recovery words", {"Words are visible on this screen.",
                 "Enter: Accept   Backspace: Edit", "Empty entry: Previous word   Esc: Cancel", error});
@@ -159,21 +158,8 @@ SecretBytes Terminal::Mnemonic()
             mnemonic.insert(mnemonic.end(), word.begin(), word.end());
         }
         try { ValidateMnemonic(mnemonic); return mnemonic; }
-        catch (const std::invalid_argument& invalid) { error = invalid.what(); }
-        while (index == count) {
-            Screen("Check recovery words", {error, "Check the words and their order.",
-                "Choose a word to correct. Esc: Cancel"});
-            try {
-                const auto answer = Input("Word number (1-" + std::to_string(count) + "): ", 2, false);
-                Require(!answer.empty(), "Enter a word number");
-                unsigned number = 0;
-                const auto* first = reinterpret_cast<const char*>(answer.data());
-                const auto [end, result] = std::from_chars(first, first + answer.size(), number);
-                Require(result == std::errc{} && end == first + answer.size() && number >= 1 && number <= count,
-                    "Word number is out of range");
-                index = number - 1;
-                error.clear();
-            } catch (const std::invalid_argument& invalid) { error = invalid.what(); }
+        catch (const std::invalid_argument&) {
+            error = "Invalid recovery phrase. Enter all " + std::to_string(count) + " words again.";
         }
     }
 }

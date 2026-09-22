@@ -34,7 +34,8 @@ are kept separate.
 - Choose the word count, then enter one lowercase word at a time. Words are visible
   and checked against the wordlist immediately. An empty entry goes back one word.
 - The complete mnemonic's checksum is checked before asking for a passphrase.
-  If it fails, choose a word number to correct.
+  If it fails, the attempt is cleared and entry restarts at word 1 with the same
+  word count.
 - Optional passphrase of printable ASCII characters, including spaces.
 - Passphrase case and every space are significant. Unsupported bytes are rejected.
 - An empty passphrase needs one Enter. A non-empty passphrase must be entered twice;
