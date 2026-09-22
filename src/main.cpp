@@ -52,6 +52,7 @@ void Show(Terminal& terminal, const QRMessage& message)
 {
     URSender sender(message);
     auto frame = sender.Next();
+    const bool animated = sender.Parts() > 1;
     // Allow the full sequence-number growth while keeping every frame's geometry
     // fixed. The initial fragment is at least as large as subsequent fragments.
     const QRImage probe(std::string(std::min(MAX_QR_TEXT, frame.size() + 64), 'A'));
@@ -60,12 +61,13 @@ void Show(Terminal& terminal, const QRMessage& message)
     terminal.Flush();
     bool paused = false;
     while (true) {
-        display.QR(QRImage(frame, version), "UR v2 / " + std::to_string(sender.Parts())
-            + " parts   Space: " + (paused ? "Resume" : "Pause") + "   Esc: Back");
-        const int key = terminal.Key(paused || sender.Parts() == 1 ? -1 : 250);
+        display.QR(QRImage(frame, version), animated
+            ? "UR v2 / " + std::to_string(sender.Parts()) + " parts   Space: " + (paused ? "Resume" : "Pause") + "   Esc: Back"
+            : "QR code   Esc: Back");
+        const int key = terminal.Key(animated && !paused ? 250 : -1);
         if (key == 27 || key == 3 || key == 'q' || key == '\r' || key == '\n') return;
-        if (key == ' ') paused = !paused;
-        if (!paused) frame = sender.Next();
+        if (animated && key == ' ') paused = !paused;
+        if (animated && !paused) frame = sender.Next();
     }
 }
 

@@ -164,7 +164,8 @@ explicit versioned requests carrying the complete wallet definition and proof.
 Captured frames are bounded and their row stride is honored. Incoming multipart
 messages must keep consistent types, lengths, counts and checksums; conflicting
 streams never silently replace scan state. Outgoing animation keeps a fixed QR
-geometry and a four-module quiet border, with pause and cancellation controls.
+geometry and a four-module quiet border. Animated QR codes have Space to pause or
+resume; static codes show only Esc to go back and ignore Space.
 
 ## Input trust boundary
 
