@@ -3,11 +3,16 @@ import errno
 import atexit
 import fcntl
 import os
+from pathlib import Path
 import pty
+import re
 import select
+import shlex
+import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import termios
 import time
 
@@ -18,7 +23,10 @@ probes = []
 def cleanup():
     for p in probes:
         if p.process.poll() is None:
-            p.process.kill()
+            if p.controlling:
+                os.killpg(p.process.pid, signal.SIGKILL)
+            else:
+                p.process.kill()
             p.process.communicate()
         if p.master >= 0:
             os.close(p.master)
@@ -26,18 +34,19 @@ def cleanup():
 
 
 class Probe:
-    def __init__(self, *args, executable=None, controlling=False, rows=12):
+    def __init__(self, *args, executable=None, controlling=False, rows=12, tty_output=False):
         self.master, slave = pty.openpty()
         self.slave = slave
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, 80, 0, 0))
         self.saved = termios.tcgetattr(slave)
+        self.controlling = controlling
 
         def session():
             os.setsid()
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
         self.process = subprocess.Popen([executable or sys.argv[1], *args], stdin=slave,
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        stdout=slave if tty_output else subprocess.PIPE, stderr=subprocess.PIPE,
                                         preexec_fn=session if controlling else None)
         self.screen = b""
         self.all_text = b""
@@ -148,10 +157,10 @@ def mnemonic(p, words, choice=b"\r"):
 # no framebuffer; a failed display must return to the menu and preserve the seed
 # session, rather than prompt again or export through an alternate channel.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
-p.wait(b"Esc: End session")
+p.wait(b"Esc: End session (clear keys)")
 p.send(b"4")
 for attempt in range(2):
-    p.wait(b"3: End session")
+    p.wait(b"3: End session (clear keys)")
     p.send(b"2")
     p.wait(b"Esc: Cancel")
     p.send(b"1")
@@ -179,7 +188,7 @@ for attempt in range(2):
     p.send(b"EXPORT\r")
     p.wait(b"framebuffer display is required")
     p.send(b"n")
-p.wait(b"3: End session")
+p.wait(b"3: End session (clear keys)")
 p.send(b"3")
 p.finish(0)
 assert p.all_text.count(b"Recovery word count") == 1
@@ -231,9 +240,9 @@ print("PASS: all mnemonic lengths, visible words, immediate validation, correcti
 
 # A mistyped passphrase can be retried without entering the words again.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
-p.wait(b"Esc: End session")
+p.wait(b"Esc: End session (clear keys)")
 p.send(b"4")
-p.wait(b"3: End session")
+p.wait(b"3: End session (clear keys)")
 p.send(b"2")
 p.wait(b"Esc: Cancel")
 p.send(b"1")
@@ -253,9 +262,76 @@ p.wait(b"Repeat passphrase: ")
 p.send(b" A Case  \r")
 p.wait(b"Page 1/1")
 p.send(b"q")
-p.wait(b"3: End session")
+p.wait(b"3: End session (clear keys)")
 p.send(b"3")
 p.finish(0)
 assert p.all_text.count(b"Recovery word count") == 1
 assert b" A Case" not in p.all_text, "Passphrase was displayed"
 print("PASS: non-empty passphrase confirmation, exact spaces/case and retry without re-entering words")
+
+# Run the real appliance launcher with fixture mount tables and the native signer.
+# All session control remains in the production script; poweroff is redirected so
+# a regression cannot request shutdown on the test machine.
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    mounts, swaps, launcher = (root / name for name in ("mounts", "swaps", "session"))
+    mounts.write_text("rootfs / rootfs rw 0 0\ntmpfs /tmp tmpfs rw 0 0\ntmpfs /run tmpfs rw 0 0\n")
+    swaps.write_text("Filename Type Size Used Priority\n")
+    script = (Path(__file__).resolve().parents[1] / "platform/overlay/usr/bin/thunderden-session").read_text()
+    for original, replacement in [("/proc/mounts", mounts), ("/proc/swaps", swaps),
+                                  ("/sbin/poweroff", root / "unexpected-poweroff")]:
+        script = script.replace(original, shlex.quote(str(replacement)))
+    launcher.write_text(script.replace("/usr/bin/thunderden-signer", shlex.quote(str(Path(sys.argv[2]).resolve()))))
+    p = Probe(str(launcher), executable="/bin/sh", controlling=True, rows=24, tty_output=True)
+    children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
+    pids, fingerprints = [], []
+    for words, passphrase, network in [(MNEMONIC, b"", b"4"), (["all"] * 12, b"TREZOR", b"1")]:
+        p.wait(b"Esc: End session (clear keys)")
+        pid, = children.read_text().split()
+        assert pid not in pids, "Session reused the previous signer process"
+        pids.append(pid)
+        p.send(network)
+        p.wait(b"Thunder Den - " + (b"regtest" if network == b"4" else b"testnet4"))
+        p.wait(b"3: End session (clear keys)")
+        p.send(b"2")
+        p.wait(b"Esc: Cancel")
+        p.send(b"1")
+        p.wait(b"Account number 0-100 [0]: ")
+        p.send(b"\r")
+        mnemonic(p, words)
+        p.wait(b"Passphrase: ")
+        p.send(passphrase + b"\r")
+        if passphrase:
+            p.wait(b"Repeat passphrase: ")
+            p.send(passphrase + b"\r")
+        p.wait(b"Page 1/1")
+        fingerprints.append(re.findall(rb"Signer fingerprint: ([0-9a-f]{8})", p.all_text)[-1])
+        p.send(b"q")
+        p.wait(b"3: End session (clear keys)")
+        p.send(b"3")
+        p.wait(b"Session ended\r\nLoaded keys cleared.")
+        p.wait(b"You can now turn off the laptop.")
+        p.wait(b"Enter: Start a new session")
+        assert not children.read_text().strip(), "Completion appeared before the signer exited"
+        assert not Path(f"/proc/{pid}").exists(), "Old signer is still alive"
+        p.send(b"x")
+        time.sleep(0.05)
+        assert not children.read_text().strip(), "Session restarted without Enter"
+        if len(pids) == 1:
+            p.send(b"\r")
+    assert fingerprints[0] != fingerprints[1], "New seed reused the old wallet"
+    assert p.all_text.count(b"Recovery word count") == 2
+    assert b"TREZOR" not in p.all_text
+    p.send(b"\x15\x04")  # Clear the pending line, then end input at the logout screen.
+    p.wait(b"Signer stopped.")
+    assert not children.read_text().strip(), "End of input restarted the signer"
+    p.process.terminate()
+    p.finish(-signal.SIGTERM)
+
+    launcher.write_text(script.replace("/usr/bin/thunderden-signer", "/bin/false"))
+    p = Probe(str(launcher), executable="/bin/sh", controlling=True, tty_output=True)
+    p.wait(b"Signer stopped.")
+    assert b"Loaded keys cleared" not in p.all_text, "Failed signer reported successful cleanup"
+    p.process.terminate()
+    p.finish(-signal.SIGTERM)
+print("PASS: logout waits for process exit, stays idle until Enter and starts fresh keys, passphrase and network")

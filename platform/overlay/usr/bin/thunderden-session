@@ -19,9 +19,11 @@ if [ -r /proc/swaps ]; then
 fi
 
 if [ "$root_ok$tmp_ok$run_ok$swap_ok" = 1111 ]; then
-    if /usr/bin/thunderden-signer; then
-        exec /sbin/poweroff -f
-    fi
+    while /usr/bin/thunderden-signer; do
+        # The signer has exited normally and completed its key cleanup.
+        printf 'Session ended\nLoaded keys cleared.\n\nYou can now turn off the laptop.\nEnter: Start a new session\n'
+        read -r _ || break
+    done
 else
     printf 'RAM-only runtime checks failed.\n'
 fi

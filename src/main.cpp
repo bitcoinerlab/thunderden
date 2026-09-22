@@ -73,7 +73,7 @@ ChainType Network(Terminal& terminal)
 {
     terminal.Flush();
     terminal.Screen("Thunder Den - Select network", {"1: Testnet4", "2: Mainnet", "3: Signet",
-        "4: Regtest", "5: Legacy testnet3", "Esc: End session"});
+        "4: Regtest", "5: Legacy testnet3", "Esc: End session (clear keys)"});
     while (true) {
         switch (terminal.Key()) {
         case '1': return ChainType::TESTNET4;
@@ -118,7 +118,7 @@ int main(int argc, char** argv)
         while (true) {
             terminal.Flush();
             terminal.Screen("Thunder Den - " + ChainTypeToString(Params().GetChainType()), {
-                "1: Scan transaction / wallet-policy request", "2: Export default account", "3: End session"});
+                "1: Scan transaction / wallet-policy request", "2: Export default account", "3: End session (clear keys)"});
             const int choice = terminal.Key();
             if (choice == '3' || choice == 27 || choice == 3) return 0;
             try {

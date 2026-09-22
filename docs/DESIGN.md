@@ -46,6 +46,17 @@ are kept separate.
 ASCII is unchanged by BIP39 NFKD normalization. Non-English mnemonics and
 non-ASCII passphrases are an explicit compatibility limitation.
 
+Recovery-word, passphrase and intermediate BIP39 seed buffers are zeroed before
+release after key derivation. The master private key, chain code and wallet-policy
+registration key remain available for the session.
+
+**End session (clear keys)** destroys the key session and exits the signer normally.
+Only after that process exits does the launcher display **Session ended / Loaded
+keys cleared**. The laptop stays on at this screen. The user can turn it off or
+press Enter to launch a fresh signer at network selection. Each new session
+requires recovery input when first needed. This cleanup clears managed secret
+buffers; it does not guarantee erasure of every trace in physical memory.
+
 ## Wallets
 
 All accounts use BIP-388 descriptor templates and ordered key-information vectors.

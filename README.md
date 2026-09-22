@@ -31,7 +31,8 @@ Use test networks only; this project is not ready to protect mainnet funds.
 
 ## Implemented in the development image
 
-- Import English BIP39 recovery words and an optional ASCII passphrase once per boot.
+- Import English BIP39 recovery words and an optional ASCII passphrase once per session.
+- End a session to clear loaded keys, then power off or start a new session.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.
 - BIP-388 wallet policies with seed-bound registration proofs.
 - BIP44, BIP49, BIP84 and BIP86 defaults without prior registration.

@@ -87,6 +87,9 @@ native ARM64 test execution remains unverified.
   buffered-input rejection, cancellation, resize detection and masked passphrase entry.
 - The actual application retains one seed session across operations and recovers
   to its menu when framebuffer display is unavailable.
+- Normal logout displays its key-clear confirmation only after the signer exits.
+  The launcher waits for Enter before starting a fresh process; a new mnemonic,
+  passphrase and network produce a new account. Failed exits remain stopped.
 - Eight main/test-network account exports decoded/re-encoded by the independent
   `urtypes` codec with matching xpubs, origins, fingerprints and script types.
 - Fresh scanner execution with no inherited parent environment/extra descriptors;
