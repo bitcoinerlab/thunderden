@@ -4,6 +4,11 @@
 !src/**
 !tests/
 !tests/**
+!platform/
+!platform/overlay/
+!platform/overlay/usr/
+!platform/overlay/usr/bin/
+!platform/overlay/usr/bin/thunderden-session
 !build/
 !build/Dockerfile
 !build/native-deps.sh

@@ -42,6 +42,7 @@ RUN python3 -B /work/tests/core_keys.py --source-hash > /opt/bitcoin-source.sha2
     && cmake --build /build --parallel 2 \
     && python3 -B /work/tests/core_keys.py --source-hash > /tmp/source-after.sha256 \
     && cmp /opt/bitcoin-source.sha256 /tmp/source-after.sha256
+COPY platform/overlay/usr/bin/thunderden-session /work/platform/overlay/usr/bin/thunderden-session
 
 FROM dependencies AS image-builder
 RUN apt-get update \
