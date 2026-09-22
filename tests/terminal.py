@@ -157,7 +157,12 @@ def mnemonic(p, words, choice=b"\r"):
 # no framebuffer; a failed display must return to the menu and preserve the seed
 # session, rather than prompt again or export through an alternate channel.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
-p.wait(b"Esc: End session (clear keys)")
+p.wait(b"5: Legacy testnet3")
+for key in (b"\x1b", b"\x03"):
+    for _ in range(5):
+        p.send(key)
+        time.sleep(0.02)
+    assert p.process.poll() is None, "Cancel key ended network selection"
 p.send(b"4")
 for attempt in range(2):
     p.wait(b"3: End session (clear keys)")
@@ -182,12 +187,31 @@ for attempt in range(2):
     p.wait(b"framebuffer display is required")
     p.send(b"n")
 p.wait(b"3: End session (clear keys)")
+for key in (b"\x1b", b"\x03"):
+    p.send(b"2")
+    p.wait(b"Esc: Cancel")
+    p.send(key)
+    p.wait(b"3: End session (clear keys)")
+    # Autorepeat continues after the next screen has flushed queued input.
+    for _ in range(5):
+        p.send(key)
+        time.sleep(0.02)
+    assert p.process.poll() is None, "Repeated cancellation ended the loaded session"
+p.send(b"2")
+p.wait(b"Esc: Cancel")
+p.send(b"1")
+p.wait(b"Account number 0-100 [0]: ")
+p.send(b"\r")
+p.wait(b"Page 1/1")  # The same keys remain usable without re-entering the phrase.
+p.send(b"q")
+p.wait(b"3: End session (clear keys)")
 p.send(b"3")
 p.finish(0)
 assert p.all_text.count(b"Recovery word count") == 1
 assert b"Word number" not in p.all_text
 assert b"abandon abandon" not in p.all_text
 print("PASS: checksum checked before passphrase, single Enter for empty passphrase and one key session")
+print("PASS: repeated Esc/Ctrl-C cancel operations without ending the session; explicit logout still works")
 
 # All standard lengths, with visible words and the same backend checksum checks.
 for choice, count, last in [(1, 12, "about"), (2, 15, "address"), (3, 18, "agent"),
@@ -254,7 +278,7 @@ print("PASS: all mnemonic lengths, visible words, immediate validation, correcti
 
 # A mistyped passphrase can be retried without entering the words again.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
-p.wait(b"Esc: End session (clear keys)")
+p.wait(b"5: Legacy testnet3")
 p.send(b"4")
 p.wait(b"3: End session (clear keys)")
 p.send(b"2")
@@ -300,7 +324,7 @@ with tempfile.TemporaryDirectory() as temporary:
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
     pids, fingerprints = [], []
     for words, passphrase, network in [(MNEMONIC, b"", b"4"), (["all"] * 12, b"TREZOR", b"1")]:
-        p.wait(b"Esc: End session (clear keys)")
+        p.wait(b"5: Legacy testnet3")
         pid, = children.read_text().split()
         assert pid not in pids, "Session reused the previous signer process"
         pids.append(pid)

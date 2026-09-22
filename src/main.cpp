@@ -73,7 +73,7 @@ ChainType Network(Terminal& terminal)
 {
     terminal.Flush();
     terminal.Screen("Thunder Den - Select network", {"1: Testnet4", "2: Mainnet", "3: Signet",
-        "4: Regtest", "5: Legacy testnet3", "Esc: End session (clear keys)"});
+        "4: Regtest", "5: Legacy testnet3"});
     while (true) {
         switch (terminal.Key()) {
         case '1': return ChainType::TESTNET4;
@@ -81,7 +81,6 @@ ChainType Network(Terminal& terminal)
         case '3': return ChainType::SIGNET;
         case '4': return ChainType::REGTEST;
         case '5': return ChainType::TESTNET;
-        case 27: case 3: throw Cancelled{};
         }
     }
 }
@@ -119,8 +118,9 @@ int main(int argc, char** argv)
             terminal.Flush();
             terminal.Screen("Thunder Den - " + ChainTypeToString(Params().GetChainType()), {
                 "1: Scan transaction / wallet-policy request", "2: Export default account", "3: End session (clear keys)"});
-            const int choice = terminal.Key();
-            if (choice == '3' || choice == 27 || choice == 3) return 0;
+            int choice;
+            do { choice = terminal.Key(); } while (choice < '1' || choice > '3');
+            if (choice == '3') return 0;
             try {
                 if (choice == '2') {
                     const auto [purpose, account] = Account(terminal);
@@ -158,6 +158,5 @@ int main(int argc, char** argv)
                 terminal.Notice("Operation stopped", {error.what()});
             }
         }
-    } catch (const td::Cancelled&) { return 0; }
-    catch (const std::exception& error) { std::fprintf(stderr, "Thunder Den: %s\n", error.what()); return 1; }
+    } catch (const std::exception& error) { std::fprintf(stderr, "Thunder Den: %s\n", error.what()); return 1; }
 }

@@ -86,6 +86,8 @@ native ARM64 test execution remains unverified.
   original wallet ID even if the caller replaces its policy during the callback.
 - Full review traversal and typed consent through a pseudo-terminal, including
   buffered-input rejection, cancellation, resize detection and masked passphrase entry.
+- Repeated Esc/Ctrl-C input at network selection and after cancelling an operation
+  does not end the session; loaded keys remain usable until explicit logout.
 - The actual application retains one seed session across operations and recovers
   to its menu when framebuffer display is unavailable.
 - Normal logout displays its key-clear confirmation only after the signer exits.

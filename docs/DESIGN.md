@@ -58,6 +58,10 @@ press Enter to launch a fresh signer at network selection. Each new session
 requires recovery input when first needed. This cleanup clears managed secret
 buffers; it does not guarantee erasure of every trace in physical memory.
 
+Only menu option **3** ends the session. Esc and Ctrl-C cancel operations but do
+nothing at network selection or the main menu, so held cancellation keys cannot
+clear the session after returning from an operation.
+
 ## Wallets
 
 All accounts use BIP-388 descriptor templates and ordered key-information vectors.
