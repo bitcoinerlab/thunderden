@@ -64,6 +64,7 @@ that every trace in physical memory becomes unrecoverable at power-off.
 - [QR protocol](docs/PROTOCOL.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Implementation status](docs/STATUS.md)
+- [QR bridge roadmap](docs/QR_BRIDGE_PLAN.md)
 
 Tests and development tools run on the build computer. They are not part of the
 production image. Software-wallet integrations and reference clients will follow
