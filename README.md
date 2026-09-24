@@ -62,6 +62,7 @@ that every trace in physical memory becomes unrecoverable at power-off.
 - [Design](docs/DESIGN.md)
 - [Scanner isolation](docs/ISOLATION.md)
 - [Build and tests](docs/BUILD.md)
+- [Test a timelocked wallet on Tape](docs/TAPE.md)
 - [Thunder Den QR protocol](docs/PROTOCOL.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Implementation status](docs/STATUS.md)
