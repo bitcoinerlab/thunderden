@@ -59,7 +59,7 @@ The user sees a short summary with optional details and presses Enter to show th
 QR. Public exports are not registration instructions. The scanner accepts only
 PSBTs and Thunder Den commands, not arbitrary descriptors or key exports as commands.
 
-## Thunder Den commands, version 2
+## Thunder Den commands
 
 The client sends one complete request and receives one complete reply in
 `ur:bytes`. Each request carries its complete arguments; the signer does not ask
@@ -76,45 +76,53 @@ Command signing replies carry raw PSBT bytes and an explicit partial/completed
 status. A declined approval returns a correlated refusal. Cancelling before a
 request has been decoded returns to the menu without a reply.
 
-Network identifiers are `main`, `testnet`, `testnet4`, `signet` and `regtest`.
-Network selection is local and fixed for an application session.
+Network identifiers are CBOR text strings matching Bitcoin Core's chain names:
+`main`, `test`, `testnet4`, `signet` and `regtest`. `test` means legacy testnet3.
+Network selection is local and fixed for an application session. Testnet3,
+Testnet4 and Signet share address encodings; regtest uses `bcrt1` for SegWit/Taproot
+addresses. The network name still identifies the intended chain.
 
 ### Encoding and reply matching
 
 Each command message is a deterministic CBOR array wrapped in the CBOR byte string
 of `ur:bytes`. Only definite arrays, unsigned integers, byte strings and printable
 ASCII text are used. Integers and lengths use their shortest encoding. Field order
-and array lengths are exact. Unknown fields, trailing data and version-1 JSON are
-rejected.
+and array lengths are exact. Unknown fields, trailing data and incompatible
+message formats are rejected. Standard `crypto-psbt` exchange is unchanged.
 
 The inner request is at most 1 MiB + 64 KiB. A reply, including its UR wrapper,
 must fit 2 MiB + 64 KiB. Paths contain at most 32 uint32 BIP32 indexes, including
 the hardened bit. Flags are unsigned 0 or 1, not CBOR booleans.
 
+The leading `3` below is an internal message-format marker, not a Thunder Den
+release number. Thunder Den has not been released.
+
 ```text
-request = [2, request_id, network, expected_key, operation, arguments]
-reply   = [2, request_id, network, key_id, fingerprint, app_version, operation,
-           request_hash, status, result]
+request = [3, request_id, network, operation, arguments]
+reply   = [3, request_id, network, fingerprint, app_version, operation, status, result]
 ```
 
 - `request_id`: 16 bytes, unique for every request, including retries. Clients
   start a 128-bit counter at a fresh OS-random value. Never replay approval
   requests automatically after a timeout or disconnect.
 - `network`: one of the network identifiers above.
-- `key_id`: SHA256 of the master compressed public key (33 bytes) followed by
-  its chain code (32 bytes). This is a public identity, not device attestation.
-- `expected_key`: that 32-byte identity. Empty is allowed only for information
-  or xpub retrieval during first contact. All wallet operations require it.
 - `fingerprint`: the four raw master-fingerprint bytes, in display order.
-- `app_version`: the signer's application version as printable ASCII text.
-- `request_hash`: SHA256 of the exact inner request bytes. The client checks all
-  correlation fields before using the result. Hashes do not authenticate an
-  untrusted coordinator or replace verification on the offline screen.
+  This is standard BIP32 origin information and a useful display/selection label.
+  It can collide and must not be treated as proof of ownership.
+- `app_version`: the signer's build label as printable ASCII text, currently
+  `development`.
 
-Identity is tied to the loaded seed/passphrase, not a particular boot. Clients
-pin it after first contact and require an explicit new connection to change it.
-Cached metadata describes an observed key, not live device availability. Fresh
-signing and address confirmation always need a new optical exchange.
+The client checks the request ID, operation and network before using a reply.
+The request ID catches stale/mismatched QR replies; it is not authentication.
+The signer establishes ownership by deriving and comparing the full policy xpubs.
+Wallet IDs and seed-bound registration HMACs retain their existing roles and
+formats. A fingerprint match alone never authorizes registration or signing.
+
+Clients may cache observed fingerprint/version metadata, but that does not prove
+live device availability. Fresh signing and address confirmation always need a
+new optical exchange. Saved proofs should be associated with full cosigner key
+information rather than a fingerprint alone. No identity handshake is required
+before a wallet operation carrying its complete policy and proof.
 
 ### Operations
 
@@ -156,12 +164,12 @@ Status zero means success. Nonzero statuses have result `[]`:
 | --- | --- |
 | 1 | User refused |
 | 2 | Invalid request, policy, proof or transaction |
-| 3 | Loaded key does not match, or wallet operation lacks a key identity |
 | 4 | Local network does not match |
 | 5 | Unsupported operation |
 
 Invalid outer headers have no response. Errors contain no input data or exception
-strings. The reply always reports the signer's actual local network and key.
+strings. The reply always reports the signer's actual local network and master fingerprint.
+Status 3 is unused.
 Malformed requests must not reach local approval or signing.
 
 Clients must discard late replies to cancelled requests. Cancelling on the online

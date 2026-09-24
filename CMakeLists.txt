@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(ThunderDen VERSION 2.0 LANGUAGES C CXX)
+project(ThunderDen LANGUAGES C CXX)
 option(TD_BUILD_TESTS "Build development tests and probes" ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

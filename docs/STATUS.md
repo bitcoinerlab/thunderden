@@ -1,7 +1,8 @@
 # Implementation status
 
-V2 is under development. The development image builds and passes emulated
-BIOS/UEFI boot and display checks. Physical-hardware and release verification remain.
+Thunder Den is under development and has not been released. The development image
+builds and passes emulated BIOS/UEFI boot and display checks. Physical-hardware and
+release verification remain.
 Image sizes and hashes refer to the recorded build below.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
@@ -92,6 +93,8 @@ native ARM64 test execution remains unverified.
   original wallet ID even if the caller replaces its policy during the callback.
 - Command parsing rejects malformed/truncated/non-canonical requests, wrong
   networks, wrong keys, wrong proofs and missing approval callbacks.
+- Thunder Den commands use a request ID and standard fingerprint metadata. A claimed
+  matching fingerprint with another xpub is rejected before registration approval.
 - The test-only `qr-command-runner` verifies two-signer HTLC claim/refund paths,
   delayed preimages and stable wallet-ID/HMAC vectors with Bitcoin Core.
 - Full review traversal and typed consent through a pseudo-terminal, including
@@ -167,6 +170,20 @@ That snapshot contains a 2,537,744-byte signer and an 88,184-byte scanner. Its
 installed-file and repeat-assembly checks passed, as did BIOS/UEFI boot and public
 descriptor export in QEMU. It includes uncommitted implementation work after
 `057d4c6`; it has not been tested on the physical HP during this phase.
+
+The image with the simplified command format rebuilt on 2026-09-24 is
+67,108,864 bytes with SHA256:
+
+```text
+8db022d60c556f81aa004c5e4cf279df231ec97ffadc94f3c042c55475ccd2cf
+```
+
+It includes the uncommitted protocol simplification after `f3677f0`. The checksum,
+installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
+Physical HP validation remains outstanding.
+
+The later network-name and development-label corrections have not been rebuilt
+or tested yet. The recorded checksums and results describe the earlier builds.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

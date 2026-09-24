@@ -13,8 +13,9 @@ Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
 designs, including Ledger and BitBox02. Bitcoin Core provides the Bitcoin
 functionality at its heart.
 
-**Status: v2 is under development.** Docker can build a development image;
-physical-hardware validation and release verification are ongoing.
+**Status: Thunder Den is under development and has not been released.** Docker can
+build a development image; physical-hardware validation and release verification
+are ongoing.
 Use test networks only; this project is not ready to protect mainnet funds.
 
 ## Claims we are building toward

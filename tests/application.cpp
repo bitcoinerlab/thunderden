@@ -26,11 +26,11 @@ void Reject(const std::function<void()>& operation)
 }
 td::QRMessage Message(std::span<const uint8_t> bytes) { return {"bytes", td::CborBytes(bytes)}; }
 
-td::CborWriter Envelope(const td::Policy& policy, const td::Keys& session, unsigned operation, const std::string& network = "regtest")
+td::CborWriter Envelope(const td::Policy& policy, unsigned operation, const std::string& network = "regtest")
 {
     td::CborWriter out;
-    out.Array(6); out.UInt(2); out.Bytes(std::array<uint8_t, 16>{}); out.Text(network);
-    out.Bytes(td::KeyIdentity(session)); out.UInt(operation); out.Array(operation == 2 ? 1 : 3);
+    out.Array(5); out.UInt(3); out.Bytes(std::array<uint8_t, 16>{}); out.Text(network);
+    out.UInt(operation); out.Array(operation == 2 ? 1 : 3);
     out.Array(3); out.Text(policy.Name()); out.Text(policy.Template());
     out.Array(policy.KeyInformation().size());
     for (const auto& key : policy.KeyInformation()) out.Text(key.text);
@@ -39,8 +39,8 @@ td::CborWriter Envelope(const td::Policy& policy, const td::Keys& session, unsig
 
 unsigned Header(td::CborReader& in)
 {
-    in.Tuple(10); Check(in.UInt() == 2, "Wrong reply version"); in.Bytes(16); in.Text(16);
-    in.Bytes(32); in.Bytes(4); in.Text(32); in.UInt(); in.Bytes(32);
+    in.Tuple(8); Check(in.UInt() == 3, "Wrong reply version"); in.Bytes(16); in.Text(16);
+    in.Bytes(4); in.Text(32); in.UInt();
     return in.UInt();
 }
 
@@ -54,7 +54,7 @@ void Registration(const td::Keys& keys)
 {
     auto base = td::DefaultPolicy(keys, 84, 0);
     td::Policy policy("Savings", base.Template(), {base.KeyInformation()[0].text}, false);
-    auto root = Envelope(policy, keys, 2);
+    auto root = Envelope(policy, 2);
     bool called = false;
     Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines) { called = !lines.empty(); return false; }, {}, {}})) == 1,
         "Declined registration exported proof");
@@ -75,12 +75,18 @@ void Registration(const td::Keys& keys)
     reply.End();
     td::Keys other(Bytes(MNEMONIC), Bytes("another seed"));
     const td::QRApproval never{{}, [](const auto&) { throw std::runtime_error("Unexpected approval"); return true; }, {}, {}};
-    Check(Status(td::HandleQRRequest(Message(Envelope(policy, other, 2).data), other, never)) == 2, "Unowned wallet approved");
+    Check(Status(td::HandleQRRequest(Message(Envelope(policy, 2).data), other, never)) == 2, "Unowned wallet approved");
+    // A claimed matching fingerprint is not ownership: the derived xpub must match.
+    auto foreign_key = td::DefaultPolicy(other, 84, 0).KeyInformation()[0].text;
+    foreign_key.replace(1, 8, HexStr(keys.RootFingerprint()));
+    td::Policy spoofed("Spoofed origin", base.Template(), {foreign_key}, false);
+    Check(spoofed.OwnedKeys(keys).empty(), "Fingerprint alone established ownership");
+    Check(Status(td::HandleQRRequest(Message(Envelope(spoofed, 2).data), keys, never)) == 2, "Spoofed origin approved");
     Check(Status(td::HandleQRRequest(Message(root.data), keys, {})) == 2, "Missing approval accepted");
-    auto bad = root.data; bad[1] = 1;
+    auto bad = root.data; bad[1] = 2;
     Reject([&] { td::HandleQRRequest(Message(bad), keys, never); });
-    Check(Status(td::HandleQRRequest(Message(Envelope(policy, keys, 2, "main").data), keys, never)) == 4, "Wrong network accepted");
-    Check(Status(td::HandleQRRequest(Message(Envelope(policy, keys, 99).data), keys, never)) == 5, "Unknown operation accepted");
+    Check(Status(td::HandleQRRequest(Message(Envelope(policy, 2, "main").data), keys, never)) == 4, "Wrong network accepted");
+    Check(Status(td::HandleQRRequest(Message(Envelope(policy, 99).data), keys, never)) == 5, "Unknown operation accepted");
     bad = root.data; bad.push_back(0);
     Check(Status(td::HandleQRRequest(Message(bad), keys, never)) == 2, "Trailing field accepted");
     bad = root.data; bad.insert(bad.begin() + 1, 0x18);
@@ -110,7 +116,7 @@ void Signing(const td::Keys& keys)
         == PSBTError::INCOMPLETE, "Public fixture provider unexpectedly signed");
     UpdatePSBTOutput(policy.PublicProvider({1, 1}), psbt, 0);
     DataStream stream; stream << psbt;
-    auto root = Envelope(policy, keys, 4);
+    auto root = Envelope(policy, 4);
     root.Bytes(keys.RegistrationTag(policy.ID()));
     root.Bytes({reinterpret_cast<const uint8_t*>(stream.data()), stream.size()});
     const auto message = Message(root.data);
@@ -135,7 +141,7 @@ void Signing(const td::Keys& keys)
     txdata = PrecomputePSBTData(result);
     Check(PSBTInputSignedAndVerified(result, 0, &txdata), "Signed response is invalid");
     Check(reply.UInt() == 1 && reply.UInt() == 1, "Wrong signature count/completion"); reply.End();
-    root = Envelope(policy, keys, 4); root.Bytes(td::Digest{});
+    root = Envelope(policy, 4); root.Bytes(td::Digest{});
     root.Bytes({reinterpret_cast<const uint8_t*>(stream.data()), stream.size()});
     Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, {}, {}, [](const auto&) {
         throw std::runtime_error("Unexpected approval"); return true;

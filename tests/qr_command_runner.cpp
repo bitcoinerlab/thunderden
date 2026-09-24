@@ -81,11 +81,11 @@ void Verify(PartiallySignedTransaction psbt)
     for (size_t i = 0; i < psbt.inputs.size(); ++i)
         td::Require(PSBTInputSignedAndVerified(psbt, i, &data), "Core rejected the signed fixture");
 }
-td::CborWriter Request(const td::Keys& keys, unsigned operation)
+td::CborWriter Request(unsigned operation)
 {
     td::CborWriter out;
-    out.Array(6); out.UInt(2); out.Bytes(std::array<uint8_t, 16>{}); out.Text("regtest");
-    out.Bytes(td::KeyIdentity(keys)); out.UInt(operation);
+    out.Array(5); out.UInt(3); out.Bytes(std::array<uint8_t, 16>{}); out.Text("regtest");
+    out.UInt(operation);
     return out;
 }
 void Policy(td::CborWriter& out, const td::Policy& policy)
@@ -98,7 +98,7 @@ unsigned Status(const td::QRMessage& response)
 {
     const auto bytes = td::UnwrapBytes(response.cbor);
     td::CborReader in(bytes);
-    in.Tuple(10); in.UInt(); in.Bytes(16); in.Text(16); in.Bytes(32); in.Bytes(4); in.Text(32); in.UInt(); in.Bytes(32);
+    in.Tuple(8); in.UInt(); in.Bytes(16); in.Text(16); in.Bytes(4); in.Text(32); in.UInt();
     return in.UInt();
 }
 void Tests(const td::Keys& alice, const td::Keys& bob)
@@ -112,13 +112,14 @@ void Tests(const td::Keys& alice, const td::Keys& bob)
     for (unsigned n : {1, 5, 10}) {
         auto psbt = Fixture(policy, n);
         const auto raw = Serialize(psbt);
-        auto req = Request(alice, 4); req.Array(3); Policy(req, policy);
+        auto req = Request(4); req.Array(3); Policy(req, policy);
         req.Bytes(alice.RegistrationTag(policy.ID()));
         req.Bytes({reinterpret_cast<const uint8_t*>(raw.data()), raw.size()});
         td::Require(Status(td::HandleQRRequest({"bytes", td::CborBytes(req.data)}, alice, {deny, deny, deny, deny})) == 1,
             "Refusal did not return a refusal");
-        td::Require(Status(td::HandleQRRequest({"bytes", td::CborBytes(req.data)}, bob, {allow, allow, allow, allow})) == 3,
-            "Wrong key accepted");
+        const auto unexpected = [](const auto&) { throw std::runtime_error("Wrong seed reached approval"); return true; };
+        td::Require(Status(td::HandleQRRequest({"bytes", td::CborBytes(req.data)}, bob, {unexpected, unexpected, unexpected, unexpected})) == 2,
+            "Another cosigner's proof accepted");
         auto first = td::ReviewedTransaction(Wallet(alice, bob), alice, alice.RegistrationTag(policy.ID()), raw).Sign(alice, allow);
         td::Require(first && !first->complete && first->added_signatures > 0, "Expected partial signature");
         auto second = td::ReviewedTransaction(Wallet(alice, bob), bob, bob.RegistrationTag(policy.ID()), first->psbt).Sign(bob, allow);
@@ -137,7 +138,7 @@ void Tests(const td::Keys& alice, const td::Keys& bob)
     const auto signed_refund = td::ReviewedTransaction(Wallet(alice, bob), alice, alice.RegistrationTag(policy.ID()), Serialize(refund)).Sign(alice, allow);
     td::Require(signed_refund && signed_refund->complete, "Refund did not complete");
     Verify(Decode(signed_refund->psbt));
-    auto req = Request(alice, 2); req.Array(1); Policy(req, policy);
+    auto req = Request(2); req.Array(1); Policy(req, policy);
     size_t approvals = 0;
     const auto spy = [&](const auto&) { ++approvals; return true; };
     const td::QRApproval callbacks{spy, spy, spy, spy};
@@ -151,7 +152,7 @@ void Tests(const td::Keys& alice, const td::Keys& bob)
     td::Require(approvals == 0, "Malformed request reached approval");
     req.data.push_back(0);
     td::Require(Status(td::HandleQRRequest({"bytes", td::CborBytes(req.data)}, alice, callbacks)) == 2 && approvals == 0, "Trailing data accepted");
-    std::cout << "PASS: CBOR truncation, key binding, refusal, two-signer HTLC claim/refund and delayed preimages\n";
+    std::cout << "PASS: CBOR truncation, seed-bound proofs, refusal, two-signer HTLC claim/refund and delayed preimages\n";
 }
 void Fixtures(const td::Keys& alice, const td::Keys& bob)
 {
@@ -161,7 +162,7 @@ void Fixtures(const td::Keys& alice, const td::Keys& bob)
     result.pushKV("descriptor", policy.DescriptorText()); result.pushKV("wallet_id", HexStr(policy.ID()));
     for (const auto& key : policy.KeyInformation()) keys.push_back(key.text);
     result.pushKV("keys", keys);
-    result.pushKV("alice_id", HexStr(td::KeyIdentity(alice))); result.pushKV("bob_id", HexStr(td::KeyIdentity(bob)));
+    result.pushKV("alice_fingerprint", HexStr(alice.RootFingerprint())); result.pushKV("bob_fingerprint", HexStr(bob.RootFingerprint()));
     result.pushKV("alice_proof", HexStr(alice.RegistrationTag(policy.ID()))); result.pushKV("bob_proof", HexStr(bob.RegistrationTag(policy.ID())));
     for (unsigned n : {1, 5, 10}) {
         const auto raw = Serialize(Fixture(policy, n));
@@ -172,7 +173,7 @@ void Fixtures(const td::Keys& alice, const td::Keys& bob)
         row.pushKV("bytes", raw.size()); row.pushKV("partial_bytes", first->psbt.size()); row.pushKV("signed_bytes", second->psbt.size());
         row.pushKV("alice_signatures", first->added_signatures); row.pushKV("bob_signatures", second->added_signatures);
         for (const auto& [name, signer, input] : {std::tuple{"alice", &alice, &raw}, std::tuple{"bob", &bob, &first->psbt}}) {
-            auto request = Request(*signer, 4); request.Array(3); Policy(request, policy);
+            auto request = Request(4); request.Array(3); Policy(request, policy);
             request.Bytes(signer->RegistrationTag(policy.ID()));
             request.Bytes({reinterpret_cast<const uint8_t*>(input->data()), input->size()});
             const td::QRMessage message{"bytes", td::CborBytes(request.data)};

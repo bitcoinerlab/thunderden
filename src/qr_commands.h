@@ -12,6 +12,5 @@ struct QRApproval {
     std::function<bool(const TransactionReview&)> transaction;
 };
 
-Digest KeyIdentity(const Keys& keys);
 QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve);
 }

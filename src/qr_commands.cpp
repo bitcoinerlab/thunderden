@@ -2,19 +2,11 @@
 #include "cbor.h"
 
 #include <chainparams.h>
-#include <crypto/sha256.h>
 #include <key_io.h>
 #include <util/strencodings.h>
 
 namespace td {
 namespace {
-Digest Hash(std::span<const uint8_t> data)
-{
-    Digest result;
-    CSHA256().Write(data.data(), data.size()).Finalize(result.data());
-    return result;
-}
-
 Policy ReadPolicy(CborReader& in)
 {
     in.Tuple(3);
@@ -33,37 +25,24 @@ bool Approve(const std::function<bool(const ReviewLines&)>& callback, const Revi
 }
 }
 
-Digest KeyIdentity(const Keys& keys)
-{
-    const auto pub = keys.PublicAt({});
-    Digest result;
-    CSHA256().Write(pub.pubkey.data(), pub.pubkey.size()).Write(pub.chaincode.data(), pub.chaincode.size()).Finalize(result.data());
-    return result;
-}
-
 QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve)
 {
     Require(message.type == "bytes", "Expected a Thunder Den QR command");
     const auto raw = UnwrapBytes(message.cbor);
     Require(raw.size() <= ReviewedTransaction::MAX_PSBT_BYTES + 65536, "Request too large");
     CborReader in(raw);
-    in.Tuple(6);
-    Require(in.UInt() == 2, "Unsupported Thunder Den command version");
+    in.Tuple(5);
+    Require(in.UInt() == 3, "Unsupported Thunder Den message format");
     const auto id = in.Bytes(16);
     Require(id.size() == 16, "Invalid request ID");
     const auto network = in.Text(16);
-    const auto expected = in.Bytes(32);
-    Require(expected.empty() || expected.size() == 32, "Invalid key identity");
     const auto operation = in.UInt();
     const auto chain = Params().GetChainType();
-    const auto identity = KeyIdentity(keys);
     unsigned status = 0;
     CborWriter body;
     // Error replies contain fixed codes only, never exception strings or input data.
     if (network != ChainTypeToString(chain)) status = 4;
     else if (operation > 4) status = 5;
-    else if ((!expected.empty() && !std::equal(expected.begin(), expected.end(), identity.begin()))
-        || (operation >= 2 && expected.empty())) status = 3;
     else try {
         if (operation == 0) {
             in.Tuple(0); in.End();
@@ -123,9 +102,8 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
     } catch (const std::invalid_argument&) { status = 2; }
     Require(Params().GetChainType() == chain, "Network changed during operation");
     CborWriter out;
-    out.Array(10); out.UInt(2); out.Bytes(id); out.Text(ChainTypeToString(chain));
-    out.Bytes(identity); out.Bytes(keys.RootFingerprint()); out.Text("2.0"); out.UInt(operation);
-    out.Bytes(Hash(raw)); out.UInt(status);
+    out.Array(8); out.UInt(3); out.Bytes(id); out.Text(ChainTypeToString(chain));
+    out.Bytes(keys.RootFingerprint()); out.Text("development"); out.UInt(operation); out.UInt(status);
     if (status) out.Array(0);
     else out.data.insert(out.data.end(), body.data.begin(), body.data.end());
     return {"bytes", CborBytes(out.data)};
