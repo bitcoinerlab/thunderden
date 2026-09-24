@@ -70,17 +70,17 @@ signer. Each subsequent CLI request waits for one human-operated exchange:
 ## 3. Get an xpub and register a timelocked wallet
 
 Results from this CLI go to stderr, so `2>&1` lets Bash capture them. The xpub
-request asks for local approval. **Copy the fingerprint shown on Thunder Den's
-public-key review screen** before dismissing it; `device list` does not know it.
-Run the xpub command first; it waits while you choose **1** on Thunder Den,
-select 12 words and enter your new mnemonic one word at a time. Leave the BIP39
-passphrase empty. The offline camera starts after recovery entry. Do not start
-the online response camera until the recovery words are no longer on screen.
+request asks for local approval. `--with-origin` includes the fingerprint and
+path from the same reply, without a second scan. Run the command first. While
+it waits, choose **1** on Thunder Den, select 12 words and enter your new
+mnemonic one word at a time. Leave the BIP39 passphrase empty. The offline
+camera starts after recovery entry. Do not start the online response camera
+until the recovery words are no longer on screen.
 
 ```sh
-XPUB=$("$HWI" --network regtest xpub get --path "m/48h/1h/0h/2h" 2>&1)
-printf 'Account xpub: %s\n' "$XPUB"
-FP=YOUR_EIGHT_HEX_DIGIT_FINGERPRINT
+KEY=$("$HWI" --network regtest xpub get --path "m/48h/1h/0h/2h" --with-origin 2>&1)
+export KEY
+printf 'Account key: %s\n' "$KEY"
 ```
 
 The policy uses the project's fixed public [NUMS internal key](../tests/qr_command_runner.cpp)
@@ -89,7 +89,6 @@ below belongs to your test mnemonic:
 
 ```sh
 export NUMS=tpubD6NzVbkrYhZ4Wzt8snb1hHKjrMidYf5xQBsjMqshTmRQDhF12fEyHWCaBWXCZ3UUaaRPfbPP4AvFSQdSoqijQRsg1wb4xE2XbYGFUai3ME3
-export KEY="[$FP/48'/1'/0'/2']$XPUB"
 NAME='Tape timelock test'
 POLICY="tr($NUMS/**,and_v(v:pk($KEY/**),older(6)))"
 
