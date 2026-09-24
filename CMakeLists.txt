@@ -48,7 +48,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(QR REQUIRED IMPORTED_TARGET libqrencode zbar libv4l2)
 
 add_library(thunderden STATIC src/keys.cpp src/policy.cpp src/transaction.cpp src/transport.cpp src/qr.cpp
-  src/review.cpp src/terminal.cpp src/application.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
+  src/review.cpp src/terminal.cpp src/application.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
 target_include_directories(thunderden PUBLIC src "${CORE_SOURCE_DIR}/src"
   "${CORE_SOURCE_DIR}/src/secp256k1/include" "${CMAKE_BINARY_DIR}/core/src"
   PRIVATE "${CMAKE_BINARY_DIR}")
@@ -68,6 +68,10 @@ install(TARGETS thunderden-scanner RUNTIME DESTINATION bin)
 
 if(TD_BUILD_TESTS)
 enable_testing()
+add_executable(qr-command-runner tests/qr_command_runner.cpp)
+target_link_libraries(qr-command-runner PRIVATE thunderden)
+target_compile_options(qr-command-runner PRIVATE -Wall -Wextra -Werror)
+add_test(NAME qr-commands COMMAND qr-command-runner --test)
 add_executable(thunderden-tests tests/foundation.cpp)
 target_link_libraries(thunderden-tests PRIVATE thunderden)
 target_compile_options(thunderden-tests PRIVATE -Wall -Wextra -Werror)

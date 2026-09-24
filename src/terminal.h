@@ -23,6 +23,7 @@ public:
     SecretBytes Input(std::string_view prompt, size_t limit, bool hidden, SecretBytes initial = {});
     SecretBytes Mnemonic();
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation);
+    bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {});
     void Notice(std::string_view title, const ReviewLines& lines);
 };
 

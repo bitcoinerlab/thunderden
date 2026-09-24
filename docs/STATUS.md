@@ -4,6 +4,10 @@ V2 is under development. The development image builds and passes emulated
 BIOS/UEFI boot and display checks. Physical-hardware and release verification remain.
 Image sizes and hashes refer to the recorded build below.
 
+The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
+exports and wallet-independent commands. Physical camera measurements remain
+separate from the automated checks below.
+
 ## Architecture
 
 Native code links pinned, unmodified Bitcoin Core libraries for keys, descriptors,
@@ -37,8 +41,8 @@ and bootloader configuration. `build/image.py` assembles the hybrid disk image.
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` runs ten suites on Linux/amd64:
-`foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
+`docker compose run --build --rm test` runs eleven suites on Linux/amd64:
+`qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
 `application`, `export-compat`, `terminal`, `camera` and `isolation`.
 Actual native confinement tests require Landlock ABI 6 and are reported as skipped
 on hosts without it; scanner operation never falls back to an unconfined mode.
@@ -86,6 +90,10 @@ native ARM64 test execution remains unverified.
   Reliability on physical cameras remains under validation.
 - Strict wallet-policy request schemas and registration approval bound to the
   original wallet ID even if the caller replaces its policy during the callback.
+- Command parsing rejects malformed/truncated/non-canonical requests, wrong
+  networks, wrong keys, wrong proofs and missing approval callbacks.
+- The test-only `qr-command-runner` verifies two-signer HTLC claim/refund paths,
+  delayed preimages and stable wallet-ID/HMAC vectors with Bitcoin Core.
 - Full review traversal and typed consent through a pseudo-terminal, including
   buffered-input rejection, cancellation, resize detection and masked passphrase entry.
 - Repeated Esc/Ctrl-C input at network selection and after cancelling an operation
@@ -95,8 +103,9 @@ native ARM64 test execution remains unverified.
 - Normal logout displays its key-clear confirmation only after the signer exits.
   The launcher waits for Enter before starting a fresh process; a new mnemonic,
   passphrase and network produce a new account. Failed exits remain stopped.
-- Eight main/test-network account exports decoded/re-encoded by the independent
-  `urtypes` codec with matching xpubs, origins, fingerprints and script types.
+- Eight main/test-network public `hdkey` exports decoded/re-encoded by `urtypes`
+  with updated registry tags and matching xpubs, origins and fingerprints. Full
+  `output-descriptor` CBOR maps carry receive/change descriptors with checksums.
 - Fresh scanner execution with no inherited parent environment/extra descriptors;
   bounded preview/result pipes, stalled-worker cancellation and reaping.
 - Healthy preview streams outlive the no-frame deadline; silent workers, partial
@@ -146,6 +155,18 @@ Docker selects native AMD64 or ARM64 build tools while Buildroot targets x86-64.
 An Apple Silicon build was reported on 2026-09-21 to produce the same image hash.
 Local kernel and installed-file checks also pass, with all eight compared image
 artifacts byte-identical to the reference build.
+
+The QR-command implementation image built on 2026-09-24, before the command-file
+naming cleanup, is also 67,108,864 bytes. Its SHA256 is:
+
+```text
+540156e7f1812bd778a38bb3699ab77e00308a5bb1584d743f97d6c49280444b
+```
+
+That snapshot contains a 2,537,744-byte signer and an 88,184-byte scanner. Its
+installed-file and repeat-assembly checks passed, as did BIOS/UEFI boot and public
+descriptor export in QEMU. It includes uncommitted implementation work after
+`057d4c6`; it has not been tested on the physical HP during this phase.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

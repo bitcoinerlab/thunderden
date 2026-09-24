@@ -36,6 +36,7 @@ public:
     Keys(const Keys&) = delete;
     Keys& operator=(const Keys&) = delete;
     CExtKey Derive(std::span<const uint32_t> path) const;
+    CExtPubKey PublicAt(std::span<const uint32_t> path) const;
     Fingerprint RootFingerprint() const;
     Digest RegistrationTag(const Digest& wallet_id) const;
     bool VerifyTag(const Digest& wallet_id, std::span<const unsigned char> tag) const;

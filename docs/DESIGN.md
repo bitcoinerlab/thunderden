@@ -149,17 +149,22 @@ it does not establish current-chain validity or timelock maturity.
 The local interface wraps full addresses/scripts onto review pages. Every page
 must be traversed before a separate typed `SIGN` confirmation is accepted. Queued
 input is discarded at screen/approval boundaries, and terminal resizing aborts
-the review. Registration and public-account export use separate `REGISTER` and
-`EXPORT` confirmations. Recovery words are visible during entry and passphrases are
-masked. Both use secure buffers.
+the review. Registration uses a separate `REGISTER` confirmation. Public exports
+use a short summary with optional details and Enter to show the QR. Recovery words
+are visible during entry and passphrases are masked. Both use secure buffers.
 
 ## QR exchange
 
 The [protocol](PROTOCOL.md) uses UR v2, including animated fountain-coded messages.
-Standard PSBT exchange uses `crypto-psbt`; public default-account export uses
-`crypto-account`. Plain PSBT input prompts for a local default account, which is
+Standard PSBT exchange uses `crypto-psbt`; public exports use `output-descriptor`
+and `hdkey`. Plain PSBT input prompts for a local default account, which is
 constructed and checked by the same policy engine. Named policy operations use
 explicit versioned requests carrying the complete wallet definition and proof.
+The [Thunder Den commands](PROTOCOL.md#thunder-den-commands-version-2) use a small
+fixed-array CBOR parser, raw PSBT bytes and replies bound to the request hash and
+loaded key identity.
+Public-key derivation returns only `CExtPubKey` through `Keys::PublicAt()`; its
+temporary private key and chain code are cleared before returning.
 
 Captured frames are bounded and their row stride is honored. Incoming multipart
 messages must keep consistent types, lengths, counts and checksums; conflicting

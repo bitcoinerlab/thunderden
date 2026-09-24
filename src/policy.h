@@ -22,7 +22,7 @@ struct KeyInfo {
 // must be selected before construction and remain fixed while policies are used.
 class Policy {
     struct Reference { size_t key; uint32_t receive; uint32_t change; };
-    std::string name_, text_;
+    std::string name_, text_, public_text_;
     std::vector<KeyInfo> keys_;
     std::vector<Reference> references_;
     std::vector<std::unique_ptr<Descriptor>> descriptors_;
@@ -38,6 +38,7 @@ public:
     bool Authorized(const Keys& session, std::span<const unsigned char> tag) const;
     CScript Script(unsigned branch, uint32_t index) const;
     std::string DescriptorText(unsigned branch) const;
+    std::string DescriptorText() const { return public_text_ + "#" + GetDescriptorChecksum(public_text_); }
     std::vector<Position> Positions(const KeyOriginInfo& hint) const;
     FlatSigningProvider PublicProvider(Position position) const;
     FlatSigningProvider PrivateProvider(Position position, const Keys& session) const;

@@ -210,4 +210,34 @@ void Terminal::Notice(std::string_view title, const ReviewLines& lines)
 {
     Approve(title, lines, {});
 }
+
+bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details)
+{
+    winsize size{};
+    Require(ioctl(fd_, TIOCGWINSZ, &size) == 0 && size.ws_col >= 40 && size.ws_row >= 12, "Display is too small");
+    const auto wrapped = Wrap(lines, std::min<unsigned>(size.ws_col - 1, 100));
+    const size_t height = size.ws_row - 7;
+    const size_t pages = std::max<size_t>(1, (wrapped.size() + height - 1) / height);
+    size_t page = 0;
+    while (true) {
+        winsize current{};
+        Require(ioctl(fd_, TIOCGWINSZ, &current) == 0 && current.ws_col == size.ws_col
+            && current.ws_row == size.ws_row, "Display changed; start again");
+        const auto first = std::min(page * height, wrapped.size());
+        const auto end = std::min(first + height, wrapped.size());
+        ReviewLines visible(wrapped.begin() + first, wrapped.begin() + end);
+        visible.push_back("");
+        if (pages > 1) visible.push_back("Page " + std::to_string(page + 1) + "/" + std::to_string(pages));
+        if (!details.empty()) visible.push_back("d: Details");
+        visible.push_back((page ? std::string("b: Previous page   ") : "")
+            + (page + 1 < pages ? "n: Next page" : "Enter: " + std::string(action)) + "   Esc: Cancel");
+        Flush(); Screen(title, visible);
+        const int key = Key();
+        if (key == 27 || key == 3 || key == 'q') return false;
+        if (key == 'd' && !details.empty()) Confirm(title, details, "Back to summary");
+        if (key == 'b' && page) --page;
+        if (key == 'n' && page + 1 < pages) ++page;
+        if ((key == '\r' || key == '\n') && page + 1 == pages) return true;
+    }
+}
 }

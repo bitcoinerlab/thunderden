@@ -1,6 +1,8 @@
 #include "application.h"
 #include "camera.h"
 #include "hardware.h"
+#include "qr_commands.h"
+#include "cbor.h"
 
 #include <chainparams.h>
 #include <key_io.h>
@@ -22,61 +24,69 @@ void Reject(const std::function<void()>& operation)
     catch (const std::invalid_argument&) { return; }
     throw std::runtime_error("Invalid application request accepted");
 }
-td::QRMessage Message(const std::string& json) { return {"bytes", td::CborBytes(Bytes(json))}; }
+td::QRMessage Message(std::span<const uint8_t> bytes) { return {"bytes", td::CborBytes(bytes)}; }
 
-UniValue Envelope(const td::Policy& policy)
+td::CborWriter Envelope(const td::Policy& policy, const td::Keys& session, unsigned operation, const std::string& network = "regtest")
 {
-    UniValue wallet(UniValue::VOBJ), keys(UniValue::VARR), root(UniValue::VOBJ);
-    wallet.pushKV("name", policy.Name());
-    wallet.pushKV("template", policy.Template());
-    for (const auto& key : policy.KeyInformation()) keys.push_back(key.text);
-    wallet.pushKV("keys", keys);
-    root.pushKV("version", 1);
-    root.pushKV("command", "REGISTER_WALLET");
-    root.pushKV("network", "regtest");
-    root.pushKV("wallet", wallet);
-    return root;
+    td::CborWriter out;
+    out.Array(6); out.UInt(2); out.Bytes(std::array<uint8_t, 16>{}); out.Text(network);
+    out.Bytes(td::KeyIdentity(session)); out.UInt(operation); out.Array(operation == 2 ? 1 : 3);
+    out.Array(3); out.Text(policy.Name()); out.Text(policy.Template());
+    out.Array(policy.KeyInformation().size());
+    for (const auto& key : policy.KeyInformation()) out.Text(key.text);
+    return out;
+}
+
+unsigned Header(td::CborReader& in)
+{
+    in.Tuple(10); Check(in.UInt() == 2, "Wrong reply version"); in.Bytes(16); in.Text(16);
+    in.Bytes(32); in.Bytes(4); in.Text(32); in.UInt(); in.Bytes(32);
+    return in.UInt();
+}
+
+unsigned Status(const td::QRMessage& message)
+{
+    const auto raw = td::UnwrapBytes(message.cbor);
+    td::CborReader in(raw); return Header(in);
 }
 
 void Registration(const td::Keys& keys)
 {
     auto base = td::DefaultPolicy(keys, 84, 0);
     td::Policy policy("Savings", base.Template(), {base.KeyInformation()[0].text}, false);
-    auto root = Envelope(policy);
-    auto request = td::ParseRequest(Message(root.write()));
-    Check(request.registration && request.policy.ID() == policy.ID(), "Policy request changed identity");
+    auto root = Envelope(policy, keys, 2);
     bool called = false;
-    Check(!td::Register(policy, keys, [&](const auto& lines) { called = !lines.empty(); return false; }), "Declined registration exported proof");
+    Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines) { called = !lines.empty(); return false; }, {}, {}})) == 1,
+        "Declined registration exported proof");
     Check(called, "Approval was not requested");
     const auto id = policy.ID();
-    auto response = td::Register(policy, keys, [&](const auto& lines) {
+    auto response = td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines) {
         Check(std::find(lines.begin(), lines.end(), "Wallet: Savings") != lines.end(), "Wrong displayed policy");
         // The caller can replace its policy object; approval must still bind to
         // the original reviewed ID rather than recompute it after the callback.
         policy = td::Policy("Changed", base.Template(), {base.KeyInformation()[0].text}, false);
         return true;
-    });
-    const auto payload = td::UnwrapBytes(response->cbor);
-    UniValue reply;
-    Check(reply.read(std::string_view(reinterpret_cast<const char*>(payload.data()), payload.size())), "Invalid registration response");
-    Check(reply["wallet_id"].get_str() == HexStr(id)
-        && reply["wallet_hmac"].get_str() == HexStr(keys.RegistrationTag(id)), "Proof did not bind to approved policy");
+    }, {}, {}});
+    const auto payload = td::UnwrapBytes(response.cbor);
+    td::CborReader reply(payload);
+    Check(Header(reply) == 0, "Registration failed"); reply.Tuple(2);
+    Check(HexStr(reply.Bytes(32)) == HexStr(id) && HexStr(reply.Bytes(32)) == HexStr(keys.RegistrationTag(id)),
+        "Proof did not bind to approved policy");
+    reply.End();
     td::Keys other(Bytes(MNEMONIC), Bytes("another seed"));
-    Reject([&] { td::Register(policy, other, [](const auto&) { throw std::runtime_error("Unexpected approval"); return true; }); });
-    Reject([&] { td::Register(policy, keys, {}); });
-    auto bad = root;
-    bad.pushKV("version", 2);
-    Reject([&] { td::ParseRequest(Message(bad.write())); });
-    bad = root; bad.pushKV("network", "main");
-    Reject([&] { td::ParseRequest(Message(bad.write())); });
-    bad = root; bad.pushKV("unexpected", true);
-    Reject([&] { td::ParseRequest(Message(bad.write())); });
-    bad = root; bad.pushKV("command", "EXPORT_SEED");
-    Reject([&] { td::ParseRequest(Message(bad.write())); });
-    auto duplicate = root.write(); duplicate.insert(1, "\"version\":1,");
-    Reject([&] { td::ParseRequest(Message(duplicate)); });
-    Reject([&] { td::ParseRequest(Message("{\"version\":1e0}")); });
-    Reject([&] { td::ParseRequest(Message(std::string(1536 * 1024 + 1, ' '))); });
+    const td::QRApproval never{{}, [](const auto&) { throw std::runtime_error("Unexpected approval"); return true; }, {}, {}};
+    Check(Status(td::HandleQRRequest(Message(Envelope(policy, other, 2).data), other, never)) == 2, "Unowned wallet approved");
+    Check(Status(td::HandleQRRequest(Message(root.data), keys, {})) == 2, "Missing approval accepted");
+    auto bad = root.data; bad[1] = 1;
+    Reject([&] { td::HandleQRRequest(Message(bad), keys, never); });
+    Check(Status(td::HandleQRRequest(Message(Envelope(policy, keys, 2, "main").data), keys, never)) == 4, "Wrong network accepted");
+    Check(Status(td::HandleQRRequest(Message(Envelope(policy, keys, 99).data), keys, never)) == 5, "Unknown operation accepted");
+    bad = root.data; bad.push_back(0);
+    Check(Status(td::HandleQRRequest(Message(bad), keys, never)) == 2, "Trailing field accepted");
+    bad = root.data; bad.insert(bad.begin() + 1, 0x18);
+    Reject([&] { td::HandleQRRequest(Message(bad), keys, never); });
+    Reject([&] { td::HandleQRRequest(Message(Bytes("{\"version\":1}")), keys, never); });
+    Reject([&] { td::HandleQRRequest(Message(std::vector<uint8_t>(1024 * 1024 + 65537)), keys, never); });
     Reject([&] { td::Wrap({"Wallet\033[2Jhidden"}, 79); });
     std::puts("PASS: strict request schema, registration consent and immutable approved wallet ID");
 }
@@ -100,13 +110,12 @@ void Signing(const td::Keys& keys)
         == PSBTError::INCOMPLETE, "Public fixture provider unexpectedly signed");
     UpdatePSBTOutput(policy.PublicProvider({1, 1}), psbt, 0);
     DataStream stream; stream << psbt;
-    auto root = Envelope(policy);
-    root.pushKV("command", "SIGN_PSBT");
-    root.pushKV("wallet_hmac", HexStr(keys.RegistrationTag(policy.ID())));
-    root.pushKV("psbt", EncodeBase64(std::span(reinterpret_cast<const uint8_t*>(stream.data()), stream.size())));
-    const auto message = Message(root.write());
-    Check(!td::Sign(td::ParseRequest(message), keys, [](const auto&) { return false; }), "Declined transaction exported signature");
-    const auto signed_message = td::Sign(td::ParseRequest(message), keys, [&](const auto& review) {
+    auto root = Envelope(policy, keys, 4);
+    root.Bytes(keys.RegistrationTag(policy.ID()));
+    root.Bytes({reinterpret_cast<const uint8_t*>(stream.data()), stream.size()});
+    const auto message = Message(root.data);
+    Check(Status(td::HandleQRRequest(message, keys, {{}, {}, {}, [](const auto&) { return false; }})) == 1, "Declined transaction exported signature");
+    const auto signed_message = td::HandleQRRequest(message, keys, {{}, {}, {}, [&](const auto& review) {
         const auto lines = td::TransactionLines(review);
         Check(std::find(lines.begin(), lines.end(), "Transaction fee: 0.00001 BTC (1000 sats)") != lines.end(), "Fee missing from review");
         Check(std::find(lines.begin(), lines.end(), "VERIFIED CHANGE") != lines.end(), "Change classification missing");
@@ -114,18 +123,23 @@ void Signing(const td::Keys& keys)
         Check(std::find(lines.begin(), lines.end(), previous->GetHash().ToString() + ":0") != lines.end(), "Input txid was truncated");
         Check(std::find(lines.begin(), lines.end(), "Signing rule: ALL") != lines.end(), "Signing rule missing");
         return true;
-    });
-    Check(signed_message && signed_message->type == "crypto-psbt", "Wrong signed response type");
-    const auto raw = td::UnwrapBytes(signed_message->cbor);
+    }});
+    Check(signed_message.type == "bytes", "Wrong signed response type");
+    const auto payload = td::UnwrapBytes(signed_message.cbor);
+    td::CborReader reply(payload);
+    Check(Header(reply) == 0, "Signing failed"); reply.Tuple(3);
+    const auto raw = reply.Bytes(2 * 1024 * 1024);
     PartiallySignedTransaction result;
     std::string error;
     Check(DecodeRawPSBT(result, std::as_bytes(std::span(raw)), error) && FinalizePSBT(result), "Signed response cannot finalize");
     txdata = PrecomputePSBTData(result);
     Check(PSBTInputSignedAndVerified(result, 0, &txdata), "Signed response is invalid");
-    root.pushKV("wallet_hmac", std::string(64, '0'));
-    Reject([&] { td::Sign(td::ParseRequest(Message(root.write())), keys, [](const auto&) { throw std::runtime_error("Unexpected approval"); return true; }); });
-    root.pushKV("psbt", "cHNidP8= ");
-    Reject([&] { td::ParseRequest(Message(root.write())); });
+    Check(reply.UInt() == 1 && reply.UInt() == 1, "Wrong signature count/completion"); reply.End();
+    root = Envelope(policy, keys, 4); root.Bytes(td::Digest{});
+    root.Bytes({reinterpret_cast<const uint8_t*>(stream.data()), stream.size()});
+    Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, {}, {}, [](const auto&) {
+        throw std::runtime_error("Unexpected approval"); return true;
+    }})) == 2, "Wrong proof accepted");
     std::puts("PASS: policy request -> complete review -> approval -> independently verified signed PSBT response");
 }
 
@@ -157,7 +171,9 @@ void ExportVectors(const td::Keys& keys)
             row.pushKV("key", td::EncodePublic(info.key, network == ChainType::MAIN));
             row.pushKV("fingerprint", HexStr(info.fingerprint));
             row.pushKV("path", td::PathText(info.origin));
-            row.pushKV("cbor", HexStr(td::PublicAccount(policy, keys).cbor));
+            row.pushKV("cbor", HexStr(td::PublicHDKey(keys, info.origin).cbor));
+            row.pushKV("descriptor_cbor", HexStr(td::PublicDescriptor(policy).cbor));
+            row.pushKV("descriptor", policy.DescriptorText());
             vectors.push_back(row);
         }
     }

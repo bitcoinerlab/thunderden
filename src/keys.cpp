@@ -108,6 +108,14 @@ Fingerprint Keys::RootFingerprint() const
     return result;
 }
 
+CExtPubKey Keys::PublicAt(std::span<const uint32_t> path) const
+{
+    auto key = Derive(path);
+    const auto pub = key.Neuter();
+    memory_cleanse(key.chaincode.begin(), key.chaincode.size());
+    return pub;
+}
+
 std::string EncodePublic(const CExtPubKey& key, bool mainnet)
 {
     std::array<unsigned char, 78> bytes;

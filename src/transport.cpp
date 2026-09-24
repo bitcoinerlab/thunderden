@@ -45,7 +45,8 @@ uint32_t Number(std::string_view text)
 size_t FragmentSize(const QRMessage& message, size_t preferred)
 {
     Require(!message.cbor.empty() && message.cbor.size() <= MAX_UR_MESSAGE, "UR message size limit exceeded");
-    Require(message.type == "crypto-psbt" || message.type == "bytes" || message.type == "crypto-account",
+    Require(message.type == "crypto-psbt" || message.type == "bytes"
+        || message.type == "output-descriptor" || message.type == "hdkey",
         "Unsupported outgoing UR type");
     const auto size = std::max(preferred, (message.cbor.size() + MAX_UR_PARTS - 1) / MAX_UR_PARTS);
     Require(size >= 10 && size <= 2080, "UR fragment size limit exceeded");

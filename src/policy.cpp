@@ -182,6 +182,7 @@ Policy::Policy(std::string name, std::string text, std::vector<std::string> keys
         descriptor->GetPubKeys(bare, extended);
         Require(bare.empty() && extended == expected_keys, "Unexpected descriptor key");
     }
+    public_text_ = std::move(expanded);
 }
 
 Digest Policy::ID() const
@@ -204,7 +205,7 @@ std::vector<size_t> Policy::OwnedKeys(const Keys& session) const
     for (size_t index = 0; index < keys_.size(); ++index) {
         const auto& key = keys_[index];
         if (key.has_origin && key.fingerprint == session.RootFingerprint()
-            && session.Derive(key.origin).Neuter() == key.key) owned.push_back(index);
+            && session.PublicAt(key.origin) == key.key) owned.push_back(index);
     }
     return owned;
 }

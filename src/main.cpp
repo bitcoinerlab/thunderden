@@ -2,8 +2,11 @@
 #include "hardware.h"
 #include "isolation.h"
 #include "scan.h"
+#include "qr_commands.h"
 
 #include <chainparams.h>
+#include <util/strencodings.h>
+#include <util/bip32.h>
 
 #include <algorithm>
 #include <charconv>
@@ -119,17 +122,33 @@ int main(int argc, char** argv)
         while (true) {
             terminal.Flush();
             terminal.Screen("Thunder Den - " + ChainTypeToString(Params().GetChainType()), {
-                "1: Scan transaction / wallet-policy request", "2: Export default account", "3: End session (clear keys)"});
+                "1: Scan request or transaction", "2: Export descriptor", "3: End session (clear keys)", "4: Export xpub"});
             int choice;
-            do { choice = terminal.Key(); } while (choice < '1' || choice > '3');
+            do { choice = terminal.Key(); } while (choice < '1' || choice > '4');
             if (choice == '3') return 0;
             try {
                 if (choice == '2') {
                     const auto [purpose, account] = Account(terminal);
                     auto policy = td::DefaultPolicy(keys(), purpose, account);
-                    const auto message = td::PublicAccount(policy, keys());
-                    if (terminal.Approve("Export public account", td::PolicyReview(policy, keys()), "EXPORT")) Show(terminal, message);
+                    const auto& info = policy.KeyInformation()[0];
+                    auto details = td::PolicyReview(policy, keys());
+                    details.push_back("Full public descriptor:"); details.push_back(policy.DescriptorText());
+                    if (terminal.Confirm("Export descriptor", {"Network: " + ChainTypeToString(Params().GetChainType()),
+                        "Account: " + std::to_string(account), "Type: BIP" + std::to_string(purpose),
+                        "Path: " + td::PathText(info.origin), "Fingerprint: " + HexStr(info.fingerprint),
+                        "This export can reveal account activity.", "No private keys are shared."}, "Show QR", details))
+                        Show(terminal, td::PublicDescriptor(policy));
+                } else if (choice == '4') {
+                    const auto answer = terminal.Input("BIP32 path (for example m/48h/1h/0h/2h): ", 384, false);
+                    std::vector<uint32_t> path;
+                    td::Require(ParseHDKeypath(std::string(answer.begin(), answer.end()), path) && path.size() <= 32, "Invalid BIP32 path");
+                    const auto message = td::PublicHDKey(keys(), path);
+                    if (terminal.Confirm("Export xpub", {"Network: " + ChainTypeToString(Params().GetChainType()),
+                        "Path: " + td::PathText(path), "Fingerprint: " + HexStr(keys().RootFingerprint()),
+                        "This public key can reveal account activity.", "No private keys are shared."}, "Show QR",
+                        {td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)})) Show(terminal, message);
                 } else if (choice == '1') {
+                    keys(); // Recovery words must be entered before the online webcam faces this screen.
                     const auto message = Scan(terminal);
                     std::optional<td::QRMessage> response;
                     const auto approve = [&](const td::TransactionReview& review) {
@@ -140,17 +159,15 @@ int main(int argc, char** argv)
                         td::Require(bytes.size() <= td::ReviewedTransaction::MAX_PSBT_BYTES, "PSBT size limit exceeded");
                         const auto [purpose, account] = Account(terminal);
                         const auto raw = std::as_bytes(std::span(bytes));
-                        td::Request request{false, td::DefaultPolicy(keys(), purpose, account), {}, {raw.begin(), raw.end()}};
-                        response = td::Sign(std::move(request), keys(), approve);
+                        const td::ReviewedTransaction reviewed(td::DefaultPolicy(keys(), purpose, account), keys(), td::Digest{}, raw);
+                        const auto result = reviewed.Sign(keys(), approve);
+                        if (result) response = td::QRMessage{"crypto-psbt", td::CborBytes({
+                            reinterpret_cast<const uint8_t*>(result->psbt.data()), result->psbt.size()})};
                     } else {
-                        auto request = td::ParseRequest(message);
-                        if (request.registration) {
-                            response = td::Register(request.policy, keys(), [&](const td::ReviewLines& lines) {
-                                return terminal.Approve("Register wallet policy", lines, "REGISTER");
-                            });
-                        } else {
-                            response = td::Sign(std::move(request), keys(), approve);
-                        }
+                        response = td::HandleQRRequest(message, keys(), {
+                            [&](const auto& lines) { return terminal.Confirm("Share public key", lines, "Show QR"); },
+                            [&](const auto& lines) { return terminal.Approve("Register wallet policy", lines, "REGISTER"); },
+                            [&](const auto& lines) { return terminal.Confirm("Check address", lines, "Confirm address"); }, approve});
                     }
                     if (response) Show(terminal, *response);
                 }

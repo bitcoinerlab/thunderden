@@ -83,9 +83,7 @@ with (args.output / "qemu.log").open("wb") as log:
         key("ret")  # Empty passphrase
         time.sleep(2)
         screenshot("review.ppm")
-        key("n")
-        time.sleep(1)
-        text("EXPORT\n")
+        key("ret")  # Show the public descriptor directly.
         time.sleep(3)
         screenshot("account.ppm")
         subprocess.run(["docker", "compose", "run", "--rm", "-v", f"{args.output.resolve()}:/captures:ro",

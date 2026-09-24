@@ -61,14 +61,14 @@ that every trace in physical memory becomes unrecoverable at power-off.
 - [Design](docs/DESIGN.md)
 - [Scanner isolation](docs/ISOLATION.md)
 - [Build and tests](docs/BUILD.md)
-- [QR protocol](docs/PROTOCOL.md)
+- [Thunder Den QR protocol](docs/PROTOCOL.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Implementation status](docs/STATUS.md)
-- [QR bridge roadmap](docs/QR_BRIDGE_PLAN.md)
 
 Tests and development tools run on the build computer. They are not part of the
-production image. Software-wallet integrations and reference clients will follow
-the signer protocol; no particular software wallet defines Thunder Den's design.
+production image. Wallet applications can use the standard PSBT QR format or
+implement Thunder Den's QR commands. No particular software wallet defines
+Thunder Den's design.
 
 ## Contributing
 
