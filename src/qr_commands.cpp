@@ -103,7 +103,7 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
     Require(Params().GetChainType() == chain, "Network changed during operation");
     CborWriter out;
     out.Array(8); out.UInt(3); out.Bytes(id); out.Text(ChainTypeToString(chain));
-    out.Bytes(keys.RootFingerprint()); out.Text("development"); out.UInt(operation); out.UInt(status);
+    out.Bytes(keys.RootFingerprint()); out.Text("0.0.1"); out.UInt(operation); out.UInt(status);
     if (status) out.Array(0);
     else out.data.insert(out.data.end(), body.data.begin(), body.data.end());
     return {"bytes", CborBytes(out.data)};

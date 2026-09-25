@@ -109,8 +109,8 @@ reply   = [3, request_id, network, fingerprint, app_version, operation, status, 
 - `fingerprint`: the four raw master-fingerprint bytes, in display order.
   This is standard BIP32 origin information and a useful display/selection label.
   It can collide and must not be treated as proof of ownership.
-- `app_version`: the signer's build label as printable ASCII text, currently
-  `development`.
+- `app_version`: the signer's application version as printable ASCII text,
+  currently `0.0.1`. This version labels the development build, not a release.
 
 The client checks the request ID, operation and network before using a reply.
 The request ID catches stale/mismatched QR replies; it is not authentication.

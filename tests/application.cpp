@@ -40,7 +40,7 @@ td::CborWriter Envelope(const td::Policy& policy, unsigned operation, const std:
 unsigned Header(td::CborReader& in)
 {
     in.Tuple(8); Check(in.UInt() == 3, "Wrong reply version"); in.Bytes(16); in.Text(16);
-    in.Bytes(4); in.Text(32); in.UInt();
+    in.Bytes(4); Check(in.Text(32) == "0.0.1", "Wrong application version"); in.UInt();
     return in.UInt();
 }
 

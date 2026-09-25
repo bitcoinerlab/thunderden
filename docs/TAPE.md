@@ -7,6 +7,8 @@ a transaction and broadcasts it after a six-block relative timelock. No Bitcoin
 Core wallet or local node is needed: Tape supplies the funding transaction and
 broadcast API.
 
+For this walkthrough, disconnect other hardware wallets and stop their simulators.
+
 Use a **new test mnemonic only**. The mnemonic in this guide is generated on the
 online computer, so never use it for real bitcoin.
 
@@ -55,11 +57,10 @@ It opens the local QR page. Leave it running. Back in the first terminal, set
 ```sh
 HWI=/path/to/your/hwi
 test -x "$HWI"
-"$HWI" --network regtest device list
 ```
 
-`device list` reports the bridge without scanning or checking the offline
-signer. Each subsequent CLI request waits for one human-operated exchange:
+Each CLI request below, including `device list`, waits for a human-operated
+QR exchange:
 
 1. Run the CLI request first, then choose **1: Scan request or transaction** on
    Thunder Den and scan the QR shown in the bridge.
@@ -69,17 +70,22 @@ signer. Each subsequent CLI request waits for one human-operated exchange:
 
 ## 3. Get an xpub and register a timelocked wallet
 
-Results from this CLI go to stderr, so `2>&1` lets Bash capture them. The xpub
-request asks for local approval. `--with-origin` includes the fingerprint and
-path from the same reply, without a second scan. Run the command first. While
-it waits, choose **1** on Thunder Den, select 12 words and enter your new
-mnemonic one word at a time. Leave the BIP39 passphrase empty. The offline
-camera starts after recovery entry. Do not start the online response camera
-until the recovery words are no longer on screen.
+Results from this CLI go to stderr, so `2>&1` lets Bash capture them. Run
+`device list` first. While it waits, choose **1** on Thunder Den, select 12 words
+and enter your new mnemonic one word at a time. Leave the BIP39 passphrase empty.
+The offline camera starts after recovery entry. Do not start the online response
+camera until the recovery words are no longer on screen.
+
+Listing returns the master fingerprint from the signer's reply. The xpub command
+then needs a separate QR exchange and local approval. The commands below build
+the public key expression automatically, with no fingerprint to copy by hand:
 
 ```sh
-KEY=$("$HWI" --network regtest xpub get --path "m/48h/1h/0h/2h" --with-origin 2>&1)
-export KEY
+DEVICES=$("$HWI" --network regtest device list 2>&1)
+printf '%s\n' "$DEVICES"
+FP=$(printf '%s\n' "$DEVICES" | awk '$2 == "thunderden" {print $1}')
+XPUB=$("$HWI" --network regtest xpub get --path "m/48h/1h/0h/2h" 2>&1)
+export KEY="[$FP/48'/1'/0'/2']$XPUB"
 printf 'Account key: %s\n' "$KEY"
 ```
 
