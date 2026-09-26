@@ -6,8 +6,10 @@ Thunder Den's development image boots from USB and runs in memory. Import your
 existing recovery words, review transactions on the laptop and exchange data
 through QR codes.
 
-Thunder Den is designed to be easy to audit with AI before you use it. We aim for
-small, clear code, few dependencies and a simple build process.
+Thunder Den is designed so you can use AI to check its claims against the code
+before you use it. Its own signer and scanner code, build scripts, boot settings
+and image checks total only around 3,500 lines. We keep that code clear, with
+few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
 designs, including Ledger and BitBox02. Bitcoin Core provides the Bitcoin
@@ -46,8 +48,9 @@ Use test networks only; this project is not ready to protect mainnet funds.
 ## What you trust
 
 Thunder Den relies on your hardware and firmware, your build computer and pinned
-dependencies such as Bitcoin Core and Linux. Reviewing this repository still
-leaves those dependencies to review or trust.
+dependencies. We use widely scrutinized projects such as Bitcoin Core and Linux,
+and disable Linux features the signer does not need. Reviewing Thunder Den's
+code still leaves those dependencies and your hardware to review or trust.
 
 Start with the [source-reading map](docs/DESIGN.md#build-and-independent-review),
 the [dependency inventory](docs/DEPENDENCIES.md) and the
