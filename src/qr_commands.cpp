@@ -62,7 +62,7 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
             body.Array(2); body.Array(path.size());
             for (const auto index : path) body.UInt(index);
             body.Text(xpub);
-        } else if (operation >= 2 && operation <= 4) {
+        } else {
             in.Tuple(operation == 2 ? 1 : operation == 3 ? 4 : 3);
             auto policy = ReadPolicy(in);
             if (operation == 2) {
@@ -83,7 +83,8 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
                     Require(ExtractDestination(policy.Script(branch, index), destination), "Invalid address");
                     const auto address = EncodeDestination(destination);
                     if (!Approve(approve.address, {"Your wallet app is asking you to check this address. Compare the complete address with the one shown in your wallet app.", "",
-                        "Network: " + NetworkName(chain), "Wallet: " + policy.Name(),
+                        "Network: " + NetworkName(chain),
+                        policy.IsDefault(keys) ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name(),
                         "Wallet ID: " + HexStr(policy.ID()), AddressPosition({static_cast<unsigned>(branch), static_cast<uint32_t>(index)}), address})) status = 1;
                     body.Array(1); body.Text(address);
                 } else {
@@ -99,7 +100,7 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
                     }
                 }
             }
-        } else status = 5;
+        }
     } catch (const std::invalid_argument&) { status = 2; }
     Require(Params().GetChainType() == chain, "Network changed during operation");
     CborWriter out;

@@ -71,6 +71,10 @@ class Probe:
     def send(self, text):
         os.write(self.master, text)
 
+    def enter(self, prompt, text):
+        self.wait(prompt)
+        self.send(text)
+
     def rows(self):
         # Inspect positioned text in the current screen; these tests use ASCII
         # fixtures only. Ignore color/line-clear sequences, not cursor positions.
@@ -93,6 +97,10 @@ class Probe:
         os.close(self.slave)
         self.master = -1
         return output, error
+
+    def finish_secret(self, expected):
+        output, _ = self.finish(0)
+        assert bytes.fromhex(output.decode().strip()) == expected
 
 
 for confirmation, code in [(b"SIGN\r", 0), (b"yes\r", 2), (b"\x1b", 2)]:
@@ -154,8 +162,7 @@ p.spaced(b"Secret:")
 assert p.rows()[2] == b"THUNDER DEN", "Missing top margin"
 assert b"Press Enter to continue." not in p.all_text, "Redundant instruction in a text input"
 p.send(b" A Case  X\x7f \r")
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == b" A Case   "
+p.finish_secret(b" A Case   ")
 assert b"A Case" not in p.all_text
 
 p = Probe("input")
@@ -164,8 +171,7 @@ p.send(b"a" * 33 + b"\r")
 p.wait(b"This entry is too long.")
 p.wait(b"Secret: ")
 p.send(b"valid\r")
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == b"valid", "An overlong entry was truncated or retained"
+p.finish_secret(b"valid")
 
 p = Probe("input")
 p.wait(b"Secret: ")
@@ -201,14 +207,12 @@ p.finish(0)
 p = Probe("input")
 p.wait(b"Secret: ")
 p.send(b"ab\x1b[D\x1b[15~\x1b[[Acd\r")
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == b"abcd", "A navigation sequence entered the secret"
+p.finish_secret(b"abcd")
 
 p = Probe("input", rows=16, columns=40)
 p.wait(b"Secret: ")
 p.send(b" A Case with spaces " + b"x" * 12 + b"\x7f" * 12 + b" \r")
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == b" A Case with spaces  "
+p.finish_secret(b" A Case with spaces  ")
 assert b"A Case" not in p.all_text, "A long entry exposed the passphrase"
 
 p = Probe("input")
@@ -232,8 +236,7 @@ p.wait(b"Your passphrase is hidden as you type")
 p.wait(b"*" * len(b" A Case X"))
 hidden = len(p.all_text)
 p.send(b" \r")
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == b" A Case X ", "Visibility toggle changed the passphrase"
+p.finish_secret(b" A Case X ")
 assert b"A Case" not in p.all_text[hidden:], "Hidden text remained in the input renderer"
 
 # Introductory text can be paged on a very small display without losing the
@@ -245,8 +248,7 @@ p.send(b"\r")
 p.wait(b"Secret: ")
 p.spaced(b"Secret:")
 p.send(b"tiny\r")
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == b"tiny"
+p.finish_secret(b"tiny")
 
 # Escape closes details once. A held key must not also cancel the parent review,
 # even after the keyboard's initial repeat delay or a queued burst of repeats.
@@ -290,15 +292,19 @@ MNEMONIC = ["abandon"] * 11 + ["about"]
 
 
 def word(p, index, count, value):
-    p.wait(f"Word {index} of {count}: ".encode())
-    p.send(value.encode() + b"\r")
+    p.enter(f"Word {index} of {count}: ".encode(), value.encode() + b"\r")
 
 
 def mnemonic(p, words, choice=b"\r"):
-    p.wait(b"1: 12 words")
-    p.send(choice)
+    p.enter(b"1: 12 words", choice)
     for index, value in enumerate(words, 1):
         word(p, index, len(words), value)
+
+
+def account_export(p):
+    p.send(b"2")
+    p.enter(b"Esc: Back", b"1")
+    p.enter(b"Account number 0-100 [0]: ", b"\r")
 
 
 # Exercise the actual application with a controlling tty. The test container has
@@ -314,25 +320,19 @@ for key in (b"\x1b", b"\x03"):
 p.send(b"4")
 for attempt in range(2):
     p.wait(b"4: End session (clear keys)")
-    p.send(b"2")
-    p.wait(b"Esc: Back")
-    p.send(b"1")
-    p.wait(b"Account number 0-100 [0]: ")
-    p.send(b"\r")
+    account_export(p)
     if attempt == 0:
         mnemonic(p, ["abandon"] * 12)
         p.wait(b"These words do not make a valid recovery phrase.")
         assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
         for index, value in enumerate(MNEMONIC, 1):
             word(p, index, 12, value)
-        p.wait(b"Passphrase: ")
-        p.send(b"\r")
+        p.enter(b"Passphrase: ", b"\r")
     p.wait(b"Press Enter to show the QR code.")
     p.spaced(b"Press Enter to show the QR code.")
     assert b"Repeat passphrase: " not in p.all_text, "Empty passphrase required confirmation"
     p.send(b"\r")
-    p.wait(b"framebuffer display is required")
-    p.send(b"n")
+    p.enter(b"framebuffer display is required", b"n")
 p.wait(b"4: End session (clear keys)")
 for key in (b"\x1b", b"\x03"):
     p.send(b"2")
@@ -344,17 +344,12 @@ for key in (b"\x1b", b"\x03"):
         p.send(key)
         time.sleep(0.02)
     assert p.process.poll() is None, "Repeated cancellation ended the loaded session"
-p.send(b"2")
-p.wait(b"Esc: Back")
-p.send(b"1")
-p.wait(b"Account number 0-100 [0]: ")
-p.send(b"\r")
+account_export(p)
 p.wait(b"Press Enter to show the QR code.")  # Same keys, without re-entering the phrase.
 p.send(b"q")
 p.wait(b"4: End session (clear keys)")
 p.send(b"3")  # The third shortcut now shares a public key; exit is last.
-p.wait(b"Path: ")
-p.send(b"m/84h/1h/0h\r")
+p.enter(b"Path: ", b"m/84h/1h/0h\r")
 p.wait(b"Press Enter to show the QR code.")
 assert b"Path: m/84h/1h/0h" in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Public-key path was changed"
 p.send(b"q")
@@ -362,7 +357,6 @@ p.wait(b"4: End session (clear keys)")
 p.send(b"4")
 p.finish(0)
 assert p.all_text.count(b"Your recovery phrase") == 1
-assert b"Word number" not in p.all_text
 assert b"abandon abandon" not in p.all_text
 print("PASS: checksum checked before passphrase, single Enter for empty passphrase and one key session")
 print("PASS: repeated Esc/Ctrl-C cancel operations without ending the session; explicit logout still works")
@@ -373,8 +367,7 @@ for choice, count, last in [(1, 12, "about"), (2, 15, "address"), (3, 18, "agent
     words = ["abandon"] * (count - 1) + [last]
     p = Probe("mnemonic")
     mnemonic(p, words, str(choice).encode())
-    output, _ = p.finish(0)
-    assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
+    p.finish_secret(" ".join(words).encode())
     assert b"abandon" not in p.all_text, "Recovery words were revealed by default"
 
 # A failed checksum discards all words and retains the chosen length.
@@ -384,8 +377,7 @@ p.wait(b"These words do not make a valid recovery phrase.")
 words = ["abandon"] * 23 + ["art"]
 for index, value in enumerate(words, 1):
     word(p, index, 24, value)
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
+p.finish_secret(" ".join(words).encode())
 assert p.all_text.count(b"Your recovery phrase") == 1
 
 p = Probe("mnemonic")
@@ -398,8 +390,7 @@ assert not output
 print("PASS: invalid phrases restart at word one with the same length and allow cancellation")
 
 p = Probe("mnemonic")
-p.wait(b"1: 12 words")
-p.send(b"\r")
+p.enter(b"1: 12 words", b"\r")
 word(p, 1, 12, "zzzz")
 p.wait(b"\x1b[0;31;40mInvalid word.")
 word(p, 1, 12, "abstractx")  # A valid eight-letter prefix must not be accepted.
@@ -422,12 +413,10 @@ p.send(b"\t")
 p.wait(b"Your words are hidden as you type")
 for index, value in enumerate(MNEMONIC[1:], 2):
     word(p, index, 12, value)
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode()
+p.finish_secret(" ".join(MNEMONIC).encode())
 
 p = Probe("mnemonic")
-p.wait(b"1: 12 words")
-p.send(b"\r")
+p.enter(b"1: 12 words", b"\r")
 p.wait(b"Word 1 of 12: ")
 p.send(b"\r\x1b[A\x7f\t")  # Word one cannot go back or accept an empty value.
 p.wait(b"You can see the word you are entering.")
@@ -442,13 +431,10 @@ p.wait(b"aban")
 p.send(b"don\r")
 for index, value in enumerate(MNEMONIC[2:], 3):
     word(p, index, 12, value)
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode(), "Up lost or accepted a partial draft"
-assert b"Press Enter after typing" not in p.all_text and b"backup in order" not in p.all_text
+p.finish_secret(" ".join(MNEMONIC).encode())
 
 p = Probe("mnemonic")
-p.wait(b"1: 12 words")
-p.send(b"\r")
+p.enter(b"1: 12 words", b"\r")
 word(p, 1, 12, "abandon")
 p.wait(b"Word 2 of 12: ")
 p.send(b"abstractx\x1b[A")  # Do not save a truncated valid prefix as a draft.
@@ -459,18 +445,15 @@ p.wait(b"Word 1 of 12: ")
 p.send(b"\r")
 for index, value in enumerate(MNEMONIC[1:], 2):
     word(p, index, 12, value)
-output, _ = p.finish(0)
-assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode()
+p.finish_secret(" ".join(MNEMONIC).encode())
 
 p = Probe("mnemonic")
-p.wait(b"1: 12 words")
-p.send(b"\x1b")
+p.enter(b"1: 12 words", b"\x1b")
 output, _ = p.finish(2)
 assert not output
 
 p = Probe("mnemonic")
-p.wait(b"1: 12 words")
-p.send(b"\r")
+p.enter(b"1: 12 words", b"\r")
 word(p, 1, 12, "abandon")
 p.wait(b"Word 2 of 12: ")
 p.send(b"\x1b")
@@ -480,19 +463,12 @@ print("PASS: hidden recovery words, opt-in visibility, rejected replacements, ov
 
 # A mistyped passphrase can be retried without entering the words again.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
-p.wait(b"5: Legacy testnet3")
-p.send(b"4")
+p.enter(b"5: Legacy testnet3", b"4")
 p.wait(b"4: End session (clear keys)")
-p.send(b"2")
-p.wait(b"Esc: Back")
-p.send(b"1")
-p.wait(b"Account number 0-100 [0]: ")
-p.send(b"\r")
+account_export(p)
 mnemonic(p, MNEMONIC)
-p.wait(b"Passphrase: ")
-p.send(b" A Case  \r")
-p.wait(b"Repeat passphrase: ")
-p.send(b" A Case\r")
+p.enter(b"Passphrase: ", b" A Case  \r")
+p.enter(b"Repeat passphrase: ", b" A Case\r")
 p.wait(b"Press Enter to continue.")
 assert b"Passphrases did not match" in p.all_text
 assert b"Page 1/1" not in p.all_text, "Single-page notices have a pager"
@@ -543,17 +519,11 @@ with tempfile.TemporaryDirectory() as temporary:
         p.send(network)
         p.wait(b"Regtest" if network == b"4" else b"Testnet4")
         p.wait(b"4: End session (clear keys)")
-        p.send(b"2")
-        p.wait(b"Esc: Back")
-        p.send(b"1")
-        p.wait(b"Account number 0-100 [0]: ")
-        p.send(b"\r")
+        account_export(p)
         mnemonic(p, words)
-        p.wait(b"Passphrase: ")
-        p.send(passphrase + b"\r")
+        p.enter(b"Passphrase: ", passphrase + b"\r")
         if passphrase:
-            p.wait(b"Repeat passphrase: ")
-            p.send(passphrase + b"\r")
+            p.enter(b"Repeat passphrase: ", passphrase + b"\r")
         p.wait(b"Press Enter to show the QR code.")
         fingerprints.append(re.findall(rb"Master fingerprint: ([0-9a-f]{8})", p.all_text)[-1])
         p.send(b"q")

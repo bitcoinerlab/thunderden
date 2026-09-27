@@ -133,12 +133,13 @@ void Policies()
         Check(!policy.Authorized(wrong, proof), "Wrong seed proof accepted");
         td::Policy renamed("Other", text, {keys.begin(), keys.begin() + count}, false);
         Check(!renamed.Authorized(session, proof), "Renamed policy accepted");
+        FlatSigningProvider provider;
+        std::string error;
+        const auto parsed = Parse(policy.DescriptorText(), provider, error);
+        Check(parsed.size() == 2, "Public export must contain both address branches");
         for (unsigned branch : {0, 1}) {
-            FlatSigningProvider provider;
-            std::string error;
-            const auto parsed = Parse(policy.DescriptorText(branch), provider, error);
             std::vector<CScript> scripts;
-            Check(parsed.size() == 1 && parsed[0]->Expand(7, provider, scripts, provider), "Descriptor expansion");
+            Check(parsed[branch]->Expand(7, provider, scripts, provider), "Descriptor expansion");
             Check(scripts.size() == 1 && scripts[0] == policy.Script(branch, 7), "Policy script mismatch");
         }
     }

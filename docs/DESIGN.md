@@ -184,6 +184,9 @@ input text. Escape and Ctrl-C repeats are suppressed across screen transitions
 until there has been a one-second gap or a different key is pressed. This keeps
 a held cancellation key from also cancelling the parent screen. All styling
 comes from the renderer; wallet-provided text is still printable ASCII only.
+Menus, inputs and reviews prepare their body rows using their own layout.
+The renderer draws those rows without rewrapping them or starting another
+interactive screen. Text validation is separate from wrapping.
 
 GRUB uses the firmware's automatic graphics mode. Before loading keys or dropping
 privileges, the signer selects a built-in Terminus font when the screen is large
@@ -200,10 +203,11 @@ Standard PSBT exchange uses `crypto-psbt`; public exports use `output-descriptor
 and `hdkey`. Plain PSBT input prompts for a local default account, which is
 constructed and checked by the same policy engine. Named policy operations use
 explicit versioned requests carrying the complete wallet definition and proof.
-The [Thunder Den commands](PROTOCOL.md#thunder-den-commands) use a small
-fixed-array CBOR parser and raw PSBT bytes. A request ID matches each reply to its
-operation. Fingerprints label keys; full xpub comparison and registration HMACs
-establish ownership and wallet authorization.
+The [Thunder Den commands](PROTOCOL.md#thunder-den-commands) and UR transport
+share a bounded CBOR reader. It rejects non-minimal encodings and checks lengths
+before slicing data. Commands carry raw PSBT bytes, and a request ID matches each
+reply to its operation. Fingerprints label keys; full xpub comparison and
+registration HMACs establish ownership and wallet authorization.
 Public-key derivation returns only `CExtPubKey` through `Keys::PublicAt()`; its
 temporary private key and chain code are cleared before returning.
 

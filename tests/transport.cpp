@@ -106,6 +106,12 @@ void Adversarial()
     Check(active.Progress() == progress, "Duplicate changed progress");
     Reject([&] { active.Receive(SINGLE); });
     auto part = ur::Bytewords::decode(ur::Bytewords::style::minimal, GOLDEN[0].substr(GOLDEN[0].rfind('/') + 1));
+    auto noncanonical = part;
+    noncanonical.insert(noncanonical.begin() + 1, 0x18); // Sequence 1 encoded in two bytes.
+    Reject([&] { td::URReceiver{}.Receive(Frame(noncanonical, "ur:bytes/1-9/")); });
+    auto trailing = part;
+    trailing.push_back(0);
+    Reject([&] { td::URReceiver{}.Receive(Frame(trailing, "ur:bytes/1-9/")); });
     part.back() ^= 1;
     Reject([&] { active.Receive(Frame(part, "ur:bytes/1-9/")); });
     Reject([&] { active.Receive(Frame(part, "ur:crypto-psbt/1-9/")); });

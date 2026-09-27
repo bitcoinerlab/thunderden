@@ -1,38 +1,15 @@
 #include "transport.h"
+#include "cbor.h"
 
 #include <bytewords.hpp>
-#include <cbor-lite.hpp>
 #include <crypto/sha256.h>
 
 #include <algorithm>
 #include <charconv>
-#include <limits>
 #include <stdexcept>
 
 namespace td {
 namespace {
-using Iterator = std::vector<uint8_t>::const_iterator;
-
-uint64_t Value(Iterator& pos, Iterator end, uint64_t expected)
-{
-    CborLite::Tag tag;
-    uint64_t value;
-    CborLite::decodeTagAndValue(pos, end, tag, value, CborLite::Flag::requireMinimalEncoding);
-    Require(tag == expected, "Unexpected CBOR field type");
-    return value;
-}
-
-std::vector<uint8_t> Bytes(Iterator& pos, Iterator end)
-{
-    const auto size = Value(pos, end, CborLite::Major::byteString);
-    // Check as unsigned before iterator arithmetic. The upstream generic byte
-    // decoder casts a supplied uint64 length to a signed iterator distance.
-    Require(size <= static_cast<uint64_t>(end - pos), "Truncated CBOR byte string");
-    std::vector<uint8_t> result(pos, pos + size);
-    pos += size;
-    return result;
-}
-
 uint32_t Number(std::string_view text)
 {
     uint32_t result{};
@@ -65,14 +42,10 @@ std::vector<uint8_t> CborBytes(std::span<const uint8_t> bytes)
 std::vector<uint8_t> UnwrapBytes(const std::vector<uint8_t>& cbor)
 {
     Require(cbor.size() <= MAX_UR_MESSAGE, "UR message size limit exceeded");
-    try {
-        auto pos = cbor.begin();
-        auto result = Bytes(pos, cbor.end());
-        Require(pos == cbor.end(), "Trailing CBOR data");
-        return result;
-    } catch (const CborLite::Exception&) {
-        throw std::invalid_argument("Invalid CBOR byte string");
-    }
+    CborReader in(cbor);
+    const auto bytes = in.Bytes(MAX_UR_MESSAGE);
+    in.End();
+    return {bytes.begin(), bytes.end()};
 }
 
 bool URReceiver::Receive(std::string frame)
@@ -112,41 +85,34 @@ bool URReceiver::Receive(std::string frame)
     const auto number = Number(sequence.substr(0, dash)), parts = Number(sequence.substr(dash + 1));
     Require(parts <= MAX_UR_PARTS, "Too many UR fragments");
 
-    try {
-        auto pos = cbor.cbegin();
-        Require(Value(pos, cbor.end(), CborLite::Major::array) == 5, "Invalid fountain header");
-        Require(Value(pos, cbor.end(), CborLite::Major::unsignedInteger) == number
-            && Value(pos, cbor.end(), CborLite::Major::unsignedInteger) == parts, "UR sequence/header mismatch");
-        const auto length = Value(pos, cbor.end(), CborLite::Major::unsignedInteger);
-        const auto checksum = Value(pos, cbor.end(), CborLite::Major::unsignedInteger);
-        auto data = Bytes(pos, cbor.end());
-        Require(pos == cbor.end() && !data.empty(), "Invalid fountain fragment");
-        Require(length > 0 && length <= MAX_UR_MESSAGE && checksum <= UINT32_MAX, "Fountain header limit exceeded");
-        Require(length <= parts * data.size() && (parts - 1) * data.size() < length,
-            "Inconsistent fountain fragment geometry");
-        const Header header{parts, length, checksum, data.size()};
-        Require(!header_ || *header_ == header, "Conflicting UR stream");
-        Digest digest;
-        CSHA256().Write(cbor.data(), cbor.size()).Finalize(digest.data());
-        if (const auto found = seen_.find(number); found != seen_.end()) {
-            Require(found->second == digest, "Conflicting repeated UR fragment");
-            return false;
-        }
-        Require(seen_.size() < 4 * parts + 64, "UR scan work limit exceeded; restart scan");
-        type_ = type;
-        header_ = header;
-        seen_.emplace(number, digest);
-        // Construct a validated part rather than invoking upstream's generic
-        // CBOR/URI parser on coordinator-supplied lengths and sequence numbers.
-        ur::FountainEncoder::Part part(number, parts, length, checksum, data);
-        Require(decoder_.receive_part(part) && !decoder_.is_failure(), "Invalid fountain message");
-        if (decoder_.is_success()) {
-            auto message = decoder_.result_message();
-            UnwrapBytes(message);
-            result_ = QRMessage{type, std::move(message)};
-        }
-    } catch (const CborLite::Exception&) {
-        throw std::invalid_argument("Invalid fountain CBOR");
+    CborReader in(cbor);
+    in.Tuple(5);
+    Require(in.UInt() == number && in.UInt() == parts, "UR sequence/header mismatch");
+    const auto length = in.UInt(MAX_UR_MESSAGE), checksum = in.UInt();
+    const auto data = in.Bytes(MAX_QR_TEXT);
+    in.End();
+    Require(length > 0 && !data.empty(), "Invalid fountain fragment");
+    Require(length <= parts * data.size() && (parts - 1) * data.size() < length,
+        "Inconsistent fountain fragment geometry");
+    const Header header{parts, length, checksum, data.size()};
+    Require(!header_ || *header_ == header, "Conflicting UR stream");
+    Digest digest;
+    CSHA256().Write(cbor.data(), cbor.size()).Finalize(digest.data());
+    if (const auto found = seen_.find(number); found != seen_.end()) {
+        Require(found->second == digest, "Conflicting repeated UR fragment");
+        return false;
+    }
+    Require(seen_.size() < 4 * parts + 64, "UR scan work limit exceeded; restart scan");
+    type_ = type;
+    header_ = header;
+    seen_.emplace(number, digest);
+    // Only validated fields reach the upstream fountain decoder.
+    ur::FountainEncoder::Part part(number, parts, length, checksum, {data.begin(), data.end()});
+    Require(decoder_.receive_part(part) && !decoder_.is_failure(), "Invalid fountain message");
+    if (decoder_.is_success()) {
+        auto message = decoder_.result_message();
+        UnwrapBytes(message);
+        result_ = QRMessage{type, std::move(message)};
     }
     return true;
 }

@@ -30,7 +30,7 @@ td::CborWriter Envelope(const td::Policy& policy, unsigned operation, const std:
 {
     td::CborWriter out;
     out.Array(5); out.UInt(3); out.Bytes(std::array<uint8_t, 16>{}); out.Text(network);
-    out.UInt(operation); out.Array(operation == 2 ? 1 : 3);
+    out.UInt(operation); out.Array(operation == 2 ? 1 : operation == 3 ? 4 : 3);
     out.Array(3); out.Text(policy.Name()); out.Text(policy.Template());
     out.Array(policy.KeyInformation().size());
     for (const auto& key : policy.KeyInformation()) out.Text(key.text);
@@ -59,6 +59,13 @@ void Registration(const td::Keys& keys)
             "Standard account review lost the actual account number");
         Check(std::find(lines.begin(), lines.end(), "Master fingerprint: " + HexStr(keys.RootFingerprint())) != lines.end(),
             "Review did not identify the master key");
+        auto request = Envelope(standard, 3);
+        request.Bytes(td::Digest{}); request.UInt(0); request.UInt(7);
+        bool displayed = false;
+        Check(Status(td::HandleQRRequest(Message(request.data), keys, {{}, {}, [&](const auto& address) {
+            displayed = std::find(address.begin(), address.end(), "Account: " + std::to_string(account)) != address.end();
+            return true;
+        }, {}})) == 0 && displayed, "Address review lost the standard account number");
     }
     auto base = td::DefaultPolicy(keys, 84, 0);
     td::Policy policy("Savings", base.Template(), {base.KeyInformation()[0].text}, false);
@@ -70,9 +77,6 @@ void Registration(const td::Keys& keys)
     const auto id = policy.ID();
     auto response = td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines) {
         Check(std::find(lines.begin(), lines.end(), "Wallet: Savings") != lines.end(), "Wrong displayed policy");
-        // The caller can replace its policy object; approval must still bind to
-        // the original reviewed ID rather than recompute it after the callback.
-        policy = td::Policy("Changed", base.Template(), {base.KeyInformation()[0].text}, false);
         return true;
     }, {}, {}});
     const auto payload = td::UnwrapBytes(response.cbor);
@@ -109,7 +113,7 @@ void Registration(const td::Keys& keys)
     Check(restored == address, "Wrapping lost part of a public value");
     Check(td::Wrap({"Check the complete address before continuing."}, 20)
         == td::ReviewLines({"Check the complete", "address before", "continuing."}), "Prose was split mid-word");
-    std::puts("PASS: strict request schema, registration consent and immutable approved wallet ID");
+    std::puts("PASS: strict request schema, registration consent and matching wallet ID/proof");
 }
 
 void Signing(const td::Keys& keys)

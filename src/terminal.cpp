@@ -11,13 +11,20 @@
 #include <stdexcept>
 
 namespace td {
+namespace {
+void Printable(std::string_view text)
+{
+    Require(std::all_of(text.begin(), text.end(), [](unsigned char c) { return c >= 32 && c <= 126; }),
+        "Unprintable review text");
+}
+}
+
 ReviewLines Wrap(const ReviewLines& lines, size_t columns)
 {
     Require(columns >= 20, "Display is too narrow");
     ReviewLines result;
     for (const auto& line : lines) {
-        Require(std::all_of(line.begin(), line.end(), [](unsigned char c) { return c >= 32 && c <= 126; }),
-            "Unprintable review text");
+        Printable(line);
         if (line.empty()) result.emplace_back();
         for (size_t offset = 0; offset < line.size();) {
             size_t count = std::min(columns, line.size() - offset);
@@ -136,7 +143,7 @@ void Terminal::At(size_t row, size_t column)
 void Terminal::Row(const Layout& view, size_t index, std::string_view text, Tone tone)
 {
     Require(index < view.height && text.size() <= view.width, "Text row does not fit");
-    Wrap({std::string(text)}, view.width);
+    Printable(text);
     // Only public screen text uses this combined write. Secret input is rendered
     // directly from its secure buffer, never copied into a screen cache.
     Write("\033[" + std::to_string(view.body + index) + ";" + std::to_string(view.left) + "H\033[2K"
@@ -144,34 +151,25 @@ void Terminal::Row(const Layout& view, size_t index, std::string_view text, Tone
         + std::string(text) + "\033[0;37;40m");
 }
 
-void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::string_view footer,
-    int selected, std::string_view pager)
+void Terminal::Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
+    std::string_view footer, int selected, std::string_view pager)
 {
-    const auto view = View();
-    const auto safe_title = Wrap({std::string(title)}, view.width);
-    const auto safe_lines = Wrap(lines, view.width);
+    // Navigation prepares body rows and owns the layout. Drawing never reads keys
+    // or repaginates a review; every emitted field is still checked as plain text.
+    for (const auto text : {title, std::string_view(network_), pager}) Printable(text);
     const auto safe_footer = Wrap({std::string(footer)}, view.width);
-    const auto network = Wrap({network_}, view.width);
-    Wrap({std::string(pager)}, view.width);
-    Require(safe_title.size() == 1 && safe_footer.size() <= 2,
+    Require(title.size() <= view.width && rows.size() <= view.height && safe_footer.size() <= 2,
         "The text does not fit this screen.");
     Require(pager.size() + 2 <= view.width, "Page counter does not fit");
-    if (safe_lines.size() > view.height) {
-        // Introductory text on a small console uses the same reader as reviews.
-        // Pages only passes slices that fit, so it cannot recurse here.
-        if (!Pages(title, lines, "continue", {}, PageMode::Review)) throw Cancelled{};
-        Screen(title, {}, footer);
-        return;
-    }
     Write("\033[0;37;40m\033[2J\033[3J\033[H\033[?25l");
     At(view.body - 4, view.left); Write("\033[1mTHUNDER DEN\033[0;37;40m");
     if (!network_.empty()) {
-        Require(network.size() == 1 && network_.size() + 14 <= view.width, "Network label does not fit");
+        Require(network_.size() + 14 <= view.width, "Network label does not fit");
         Write(std::string(view.width - 11 - network_.size(), ' ')); Write("\033[33m"); Write(network_);
     }
     At(view.body - 3, view.left); Write("\033[90m"); Write(std::string(view.width, '-'));
-    At(view.body - 2, view.left); Write("\033[1;37m"); Write(safe_title[0]); Write("\033[0;37;40m");
-    for (size_t i = 0; i < safe_lines.size(); ++i) Row(view, i, safe_lines[i], int(i) == selected ? Tone::Selected : Tone::Plain);
+    At(view.body - 2, view.left); Write("\033[1;37m"); Write(title); Write("\033[0;37;40m");
+    for (size_t i = 0; i < rows.size(); ++i) Row(view, i, rows[i], int(i) == selected ? Tone::Selected : Tone::Plain);
     At(view.rows - 2, view.left); Write("\033[90m"); Write(std::string(view.width, '-'));
     if (!pager.empty()) {
         At(view.rows - 2, view.left + view.width - pager.size() - 2);
@@ -179,6 +177,12 @@ void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::str
     }
     for (size_t i = 0; i < safe_footer.size(); ++i) { At(view.rows - 1 + i, view.left); Write(safe_footer[i]); }
     Write("\033[0;37;40m");
+}
+
+void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::string_view footer)
+{
+    const auto view = View();
+    Draw(view, title, Wrap(lines, view.width), footer);
 }
 
 int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction,
@@ -205,7 +209,7 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
         }
         lines.emplace_back(""); lines.insert(lines.end(), instruction.begin(), instruction.end());
         if (!previous_view || *previous_view != view) {
-            Screen(title, lines, std::string("Up/Down: Choose   Enter/1-") + std::to_string(choices.size())
+            Draw(view, title, lines, std::string("Up/Down: Choose   Enter/1-") + std::to_string(choices.size())
                 + ": Select" + (cancellable ? "   Esc: Back" : ""), highlight);
         } else if (first != previous_first) {
             for (size_t i = 0; i < lines.size(); ++i) Row(view, i, lines[i], int(i) == highlight ? Tone::Selected : Tone::Plain);
@@ -228,7 +232,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     size_t limit, SecretInput* secret, SecretBytes result, std::string error)
 {
     const auto view = View();
-    Wrap({std::string(prompt)}, view.width);
+    Printable(prompt);
     Require(prompt.size() + 2 < view.width, "Input prompt does not fit");
     Require(result.size() <= limit && std::all_of(result.begin(), result.end(), [](auto c) {
         return c >= 32 && c <= 126;
@@ -245,13 +249,8 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     const size_t hint_rows = std::max(hidden_hint.size(), visible_hint.size());
     size_t input_row{}, overflow{};
     const auto erase = [&]() { At(input_row, view.left); Write("\033[2K\033[?25l"); };
-    const auto clear = [&]() {
-        memory_cleanse(result.data(), result.size()); result.clear(); overflow = 0;
-    };
     const auto draw = [&]() {
-        auto text = introduction;
-        if (!error.empty()) text = {error};
-        text = Wrap(text, view.width);
+        auto text = Wrap(error.empty() ? introduction : ReviewLines{error}, view.width);
         if (hint_rows + (secret && !text.empty() ? 1 : 0) + text.size() + 2 > view.height) {
             if (!Pages(title, error.empty() ? introduction : ReviewLines{error}, "continue", {},
                 error.empty() ? PageMode::Review : PageMode::Error)) throw Cancelled{};
@@ -264,7 +263,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
         lines.insert(lines.end(), text.begin(), text.end());
         lines.emplace_back(""); // A blank row always separates instructions from input.
         Require(lines.size() < view.height, "Not enough room for the input field");
-        Screen(title, lines, word ? std::string("Enter: Next   Backspace: Edit")
+        Draw(view, title, lines, word ? std::string("Enter: Next   Backspace: Edit")
             + (secret->word_number > 1 ? "   Up: Previous word" : "") + "   Esc: Cancel" : "Enter: Continue   Esc: Cancel");
         if (!error.empty()) for (size_t i = 0; i < text.size(); ++i) Row(view, text_row + i, text[i], Tone::Error);
         input_row = view.body + lines.size();
@@ -304,7 +303,9 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
                     erase(); return result;
                 } catch (const std::invalid_argument& invalid) {
                     error = word ? "Invalid word. Check your backup and try again." : invalid.what();
-                    clear(); draw();
+                    memory_cleanse(result.data(), result.size());
+                    result.clear(); overflow = 0;
+                    draw();
                 }
             } else if (key == 127 || key == 8) {
                 if (overflow) --overflow;
@@ -380,7 +381,7 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
             + (page ? "  Left/b: Back" : "") + (!details.empty() ? "  d: Details" : "")
             + (mode == PageMode::Details ? "  d/Esc: Back" : "  Esc: Cancel");
         Flush();
-        Screen(title, visible, footer, -1, pager);
+        Draw(view, title, visible, footer, -1, pager);
         if (mode == PageMode::Error) for (size_t i = 0; i < end - first; ++i) Row(view, i, visible[i], Tone::Error);
         const int key = Key();
         Require(View() == view, "Display changed during review. Start the review again.");
@@ -397,7 +398,6 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
 bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation)
 {
     if (!Pages(title, lines, "continue", {}, PageMode::Review)) return false;
-    if (confirmation.empty()) return true;
     try {
         const auto answer = Input(title, {"You have reached the end of this review.",
             "Confirm only if the details match what you intended."}, "Type " + std::string(confirmation) + " then Enter: ", 32);

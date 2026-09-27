@@ -19,7 +19,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,558,224-byte signer and an 88,184-byte scanner, with
+Buildroot executables are a 2,558,192-byte signer and an 88,176-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -89,8 +89,8 @@ native ARM64 test execution remains unverified.
   read errors, access-denied reporting and disconnection. A mock framebuffer
   verifies that live preview updates do not erase an unchanged controls banner.
   Reliability on physical cameras remains under validation.
-- Strict wallet-policy request schemas and registration approval bound to the
-  original wallet ID even if the caller replaces its policy during the callback.
+- Strict wallet-policy request schemas and registration replies containing the
+  reviewed wallet ID and its seed-bound authorization tag.
 - Command parsing rejects malformed/truncated/non-canonical requests, wrong
   networks, wrong keys, wrong proofs and missing approval callbacks.
 - Thunder Den commands use a request ID and standard fingerprint metadata. A claimed
@@ -182,50 +182,22 @@ It includes the uncommitted protocol simplification after `f3677f0`. The checksu
 installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
 Physical HP validation remains outstanding.
 
-The console refresh built on 2026-09-26 from `feature/console-refresh` after
-`4e2d770` includes the application version `0.0.1`, dark console styling,
-automatic fonts and arrow-key menus. Its 67,108,864-byte image SHA256 is:
+The current console image built on 2026-09-27 from `feature/console-refresh`
+includes uncommitted consolidation after `a5f0d0f`. Its application version is
+`0.0.1` and its 67,108,864-byte image SHA256 is:
 
 ```text
-be75162aefabd5300e5c586a60bd5bb3a2bf1e2285044ff2af9661d9a0b49faf
+d24a2e4e164665603be2a53aadd702474a07d112f4578a45b3c345771ab48019
 ```
 
-All eleven native suites passed, including additional checks for word wrapping,
-function keys during secret entry, held Escape/Ctrl-C across nested reviews and
-bounded font enlargement. The installed-file checks and repeat image assembly
-passed. QEMU boot/export tests passed for BIOS and UEFI at 1280x800, BIOS at
-640x480 and UEFI at 2560x1600. Each run selected a network with arrow keys,
-decoded the displayed public descriptor, held Escape on the QR screen and
-exported again using the same loaded keys. These runs used public test words.
-The full clean-build comparison was not repeated for this image; physical
-laptop and camera checks remain outstanding.
-
-The input and layout refinement on the same branch has SHA256:
-
-```text
-3d9feb00f5c1dde80420968edb7263b09c78c46a762fe48954d17d1f71911fe1
-```
-
-It adds hidden-by-default recovery entry, Tab visibility controls, cleared invalid
-replacements, blank rows before input and inline Enter instructions. Menus update
-their selection without clearing the whole screen. All eleven native suites,
-installed-file checks, repeat assembly and the same four boot/display runs passed.
-Additional regressions cover exact passphrase bytes through visibility changes,
-held Tab, default-hidden confirmation and resizing on the final approval page.
-
-The navigation and terminology polish built on 2026-09-27 has SHA256:
-
-```text
-605465478f3e26d7355ad6f02714a4a69f4acf619a3c252e415e7f2e95c806f7
-```
-
-Tab now responds to each key event without a cooldown. Up returns to a previous
-recovery word while preserving a draft; empty Enter and Backspace do not navigate.
-Single-page reviews omit the pager, `d` returns from details and session exit is
-the last menu option. Account numbers and master fingerprints use precise labels.
-All eleven native suites and the four boot/display runs passed, including QR
-checks after returning from details and holding Escape. The image's kernel/content
-checks, checksum and repeat assembly passed. Its size remains 67,108,864 bytes.
+All eleven native suites passed. Coverage includes the shared CBOR reader,
+standard-account address labels, full review traversal, secret-input editing,
+immediate Tab toggles, Up draft preservation and final-page resize rejection.
+QEMU boot/export tests passed for BIOS and UEFI at 1280x800, BIOS at 640x480 and
+UEFI at 2560x1600. Each run used public test words, corrected an invalid word,
+returned from details with `d`, decoded the descriptor QR and exported again
+after holding Escape without re-entering recovery words. Kernel/content checks,
+checksum verification and repeat assembly passed.
 The full clean-build comparison and physical-hardware checks have not been
 repeated for this snapshot.
 

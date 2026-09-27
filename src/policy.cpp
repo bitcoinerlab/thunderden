@@ -227,9 +227,9 @@ bool Policy::IsDefault(const Keys& session) const
 
 bool Policy::Authorized(const Keys& session, std::span<const unsigned char> tag) const
 {
-    if (tag.size() != 32 || OwnedKeys(session).empty()) return false;
-    if (IsDefault(session)) return std::all_of(tag.begin(), tag.end(), [](auto c) { return c == 0; });
-    return !name_.empty() && session.VerifyTag(ID(), tag);
+    if (tag.size() != 32) return false;
+    if (name_.empty()) return IsDefault(session) && std::all_of(tag.begin(), tag.end(), [](auto c) { return c == 0; });
+    return !OwnedKeys(session).empty() && session.VerifyTag(ID(), tag);
 }
 
 CScript Policy::Script(unsigned branch, uint32_t index) const
@@ -240,12 +240,6 @@ CScript Policy::Script(unsigned branch, uint32_t index) const
     Require(descriptors_[branch]->Expand(index, provider, scripts, provider) && scripts.size() == 1,
         "Address derivation failed");
     return scripts[0];
-}
-
-std::string Policy::DescriptorText(unsigned branch) const
-{
-    Require(branch < 2, "Invalid address branch");
-    return descriptors_[branch]->ToString();
 }
 
 std::vector<Position> Policy::Positions(const KeyOriginInfo& hint) const

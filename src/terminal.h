@@ -30,6 +30,8 @@ class Terminal {
     enum class PageMode { Review, Confirm, Details, Error };
     void At(size_t row, size_t column);
     void Row(const Layout& view, size_t index, std::string_view text, Tone tone = Tone::Plain);
+    void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
+        std::string_view footer, int selected = -1, std::string_view pager = {});
     bool Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
         const ReviewLines& details, PageMode mode);
 public:
@@ -42,8 +44,7 @@ public:
     int Key(int timeout_ms = -1);
     void Flush();
     void SetNetwork(std::string_view network) { network_ = network; }
-    void Screen(std::string_view title, const ReviewLines& lines, std::string_view footer = {},
-        int selected = -1, std::string_view pager = {});
+    void Screen(std::string_view title, const ReviewLines& lines, std::string_view footer);
     int Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction = {},
         bool cancellable = true);
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,

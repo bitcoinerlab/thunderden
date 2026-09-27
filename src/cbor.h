@@ -4,7 +4,8 @@
 #include <cbor-lite.hpp>
 
 namespace td {
-// QR commands use only definite arrays, unsigned integers, bytes and printable text.
+// UR transport and QR commands need only definite arrays, unsigned integers,
+// bytes and printable text. Check lengths before slicing or allocating.
 // No generic object tree, recursion, maps, floats or peer-sized allocations.
 class CborReader {
     std::span<const uint8_t> data_;

@@ -37,7 +37,6 @@ public:
     bool IsDefault(const Keys& session) const;
     bool Authorized(const Keys& session, std::span<const unsigned char> tag) const;
     CScript Script(unsigned branch, uint32_t index) const;
-    std::string DescriptorText(unsigned branch) const;
     std::string DescriptorText() const { return public_text_ + "#" + GetDescriptorChecksum(public_text_); }
     std::vector<Position> Positions(const KeyOriginInfo& hint) const;
     FlatSigningProvider PublicProvider(Position position) const;

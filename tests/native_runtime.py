@@ -9,10 +9,13 @@ import tempfile
 
 binary = Path(sys.argv[1])
 symbols = subprocess.check_output(["nm", "-C", "--defined-only", binary], text=True)
-for expected in ("CExtKey::Derive", "SignPSBTInput", "FinalizePSBT", "PSBTInputSignedAndVerified"):
+for expected in ("CExtKey::SetSeed", "CExtKey::Derive", "secp256k1_ec_pubkey_create",
+                 "SignPSBTInput", "FinalizePSBT", "PSBTInputSignedAndVerified"):
     assert expected in symbols, expected
 for absent in ("CConnman::", "PeerManager", "CRPCTable::", "HTTPServer", "CWallet::", "leveldb::"):
     assert absent not in symbols, absent
+for archive in ("libbitcoin_node.a", "libbitcoin_wallet.a", "libleveldb.a"):
+    assert not list(binary.parent.rglob(archive)), archive + " unexpectedly built"
 print("PASS: Core key/PSBT operations linked; selected node/RPC/wallet/LevelDB symbols absent", flush=True)
 
 libraries = subprocess.check_output(["readelf", "-d", binary], text=True)
