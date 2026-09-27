@@ -4,6 +4,7 @@
 
 #include <chainparams.h>
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -16,14 +17,21 @@ int main(int argc, char** argv)
         std::string magic;
         unsigned width{}, height{}, maximum{};
         stream >> magic >> width >> height >> maximum;
-        td::Require(magic == "P6" && width > 0 && width <= 1920 && height > 0 && height <= 1080 && maximum == 255,
+        td::Require(magic == "P6" && width > 0 && width <= 4096 && height > 0 && height <= 4096 && maximum == 255,
             "Invalid screenshot header");
         td::Require(stream.get() == '\n', "Invalid screenshot separator");
-        std::vector<uint8_t> rgb(width * height * 3), gray(width * height);
+        std::vector<uint8_t> rgb(width * height * 3);
         td::Require(bool(stream.read(reinterpret_cast<char*>(rgb.data()), rgb.size())), "Truncated screenshot");
-        for (size_t i = 0; i < gray.size(); ++i) gray[i] = (77U * rgb[3 * i] + 150U * rgb[3 * i + 1] + 29U * rgb[3 * i + 2]) >> 8;
+        // Large framebuffer screenshots are reduced to the camera decoder's bounds.
+        const unsigned scale = std::max((width + 1919) / 1920, (height + 1079) / 1080);
+        const unsigned scan_width = width / scale, scan_height = height / scale;
+        std::vector<uint8_t> gray(scan_width * scan_height);
+        for (unsigned y = 0; y < scan_height; ++y) for (unsigned x = 0; x < scan_width; ++x) {
+            const auto i = 3 * ((y * scale) * width + x * scale);
+            gray[y * scan_width + x] = (77U * rgb[i] + 150U * rgb[i + 1] + 29U * rgb[i + 2]) >> 8;
+        }
         td::QRScanner scanner;
-        const auto codes = scanner.Scan(gray, width, height);
+        const auto codes = scanner.Scan(gray, scan_width, scan_height);
         td::Require(codes.size() == 1, "Expected exactly one QR in the framebuffer screenshot");
         ECC_Context context;
         SelectParams(ChainType::REGTEST);

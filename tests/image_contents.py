@@ -18,7 +18,8 @@ for symbol in (
     "SUSPEND", "HIBERNATION", "KEXEC", "KEXEC_FILE", "BPF_SYSCALL", "IO_URING", "EFIVAR_FS", "USER_NS",
 ):
     assert not re.search(rf'^CONFIG_{symbol}=[ym]$', config, re.M), symbol + " unexpectedly enabled"
-for symbol in ("X86_64", "USB_VIDEO_CLASS", "USB_HID", "VT", "FRAMEBUFFER_CONSOLE", "DEVTMPFS", "TMPFS", "SECURITY_LANDLOCK"):
+for symbol in ("X86_64", "USB_VIDEO_CLASS", "USB_HID", "VT", "FRAMEBUFFER_CONSOLE", "DEVTMPFS", "TMPFS", "SECURITY_LANDLOCK",
+               "FONT_8x16", "FONT_TER10x18", "FONT_TER16x32"):
     assert f"CONFIG_{symbol}=y" in config, symbol + " missing"
 assert 'CONFIG_LSM="landlock"' in config
 

@@ -3,7 +3,7 @@
 Thunder Den is under development and has not been released. The development image
 builds and passes emulated BIOS/UEFI boot and display checks. Physical-hardware and
 release verification remain.
-Image sizes and hashes refer to the recorded build below.
+Current executable sizes refer to the latest recorded build below.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
@@ -19,7 +19,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,537,616-byte signer and an 88,176-byte scanner, with
+Buildroot executables are a 2,558,224-byte signer and an 88,184-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -182,8 +182,52 @@ It includes the uncommitted protocol simplification after `f3677f0`. The checksu
 installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
 Physical HP validation remains outstanding.
 
-The later network-name and development-label corrections have not been rebuilt
-or tested yet. The recorded checksums and results describe the earlier builds.
+The console refresh built on 2026-09-26 from `feature/console-refresh` after
+`4e2d770` includes the application version `0.0.1`, dark console styling,
+automatic fonts and arrow-key menus. Its 67,108,864-byte image SHA256 is:
+
+```text
+be75162aefabd5300e5c586a60bd5bb3a2bf1e2285044ff2af9661d9a0b49faf
+```
+
+All eleven native suites passed, including additional checks for word wrapping,
+function keys during secret entry, held Escape/Ctrl-C across nested reviews and
+bounded font enlargement. The installed-file checks and repeat image assembly
+passed. QEMU boot/export tests passed for BIOS and UEFI at 1280x800, BIOS at
+640x480 and UEFI at 2560x1600. Each run selected a network with arrow keys,
+decoded the displayed public descriptor, held Escape on the QR screen and
+exported again using the same loaded keys. These runs used public test words.
+The full clean-build comparison was not repeated for this image; physical
+laptop and camera checks remain outstanding.
+
+The input and layout refinement on the same branch has SHA256:
+
+```text
+3d9feb00f5c1dde80420968edb7263b09c78c46a762fe48954d17d1f71911fe1
+```
+
+It adds hidden-by-default recovery entry, Tab visibility controls, cleared invalid
+replacements, blank rows before input and inline Enter instructions. Menus update
+their selection without clearing the whole screen. All eleven native suites,
+installed-file checks, repeat assembly and the same four boot/display runs passed.
+Additional regressions cover exact passphrase bytes through visibility changes,
+held Tab, default-hidden confirmation and resizing on the final approval page.
+
+The navigation and terminology polish built on 2026-09-27 has SHA256:
+
+```text
+605465478f3e26d7355ad6f02714a4a69f4acf619a3c252e415e7f2e95c806f7
+```
+
+Tab now responds to each key event without a cooldown. Up returns to a previous
+recovery word while preserving a draft; empty Enter and Backspace do not navigate.
+Single-page reviews omit the pager, `d` returns from details and session exit is
+the last menu option. Account numbers and master fingerprints use precise labels.
+All eleven native suites and the four boot/display runs passed, including QR
+checks after returning from details and holding Escape. The image's kernel/content
+checks, checksum and repeat assembly passed. Its size remains 67,108,864 bytes.
+The full clean-build comparison and physical-hardware checks have not been
+repeated for this snapshot.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

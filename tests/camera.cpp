@@ -17,6 +17,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <system_error>
+#include <tuple>
 
 namespace {
 constexpr int CAMERA_FD = 100;
@@ -28,6 +29,9 @@ constexpr int FRAMEBUFFER_FD = 101;
 constexpr unsigned WIDTH = 320, HEIGHT = 240;
 std::array<uint8_t, WIDTH * HEIGHT * 4> framebuffer{};
 int display_mode = KD_TEXT;
+unsigned setup_width = WIDTH, setup_height = HEIGHT;
+std::string selected_font;
+bool doubled_font = false;
 
 void Check(bool ok, const char* message)
 {
@@ -109,7 +113,10 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
     }
     void* argument = va_arg(args, void*);
     va_end(args);
-    if (request == FBIOGET_FSCREENINFO) {
+    if (request == PIO_CMAP) {
+        const auto* palette = static_cast<const unsigned char*>(argument);
+        Check(palette[0] == 25 && palette[1] == 26 && palette[2] == 24, "Wrong console background");
+    } else if (request == FBIOGET_FSCREENINFO) {
         Check(fd == FRAMEBUFFER_FD, "Wrong framebuffer descriptor");
         auto& info = *static_cast<fb_fix_screeninfo*>(argument);
         info = {};
@@ -120,8 +127,8 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
     } else if (request == FBIOGET_VSCREENINFO) {
         auto& info = *static_cast<fb_var_screeninfo*>(argument);
         info = {};
-        info.xres = WIDTH;
-        info.yres = HEIGHT;
+        info.xres = setup_width;
+        info.yres = setup_height;
         info.bits_per_pixel = 32;
         info.red = {16, 8, 0};
         info.green = {8, 8, 0};
@@ -129,10 +136,25 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
         info.transp = {24, 8, 0};
     } else if (request == KDFONTOP) {
         auto& font = *static_cast<console_font_op*>(argument);
-        font.width = 8;
-        font.height = 16;
-        font.charcount = 256;
-        std::memset(font.data, 0xff, font.charcount * 32);
+        if (font.op == KD_FONT_OP_SET_DEFAULT) {
+            selected_font = reinterpret_cast<const char*>(font.data);
+        } else if (font.op == KD_FONT_OP_GET) {
+            Check(font.width == 16 && font.height == 32 && font.charcount == 512, "Unbounded font read");
+            font.charcount = 256;
+            std::memset(font.data, 0, font.charcount * 64);
+            font.data['A' * 64] = 0x80; // One source pixel must become exactly four.
+        } else if (font.op == KD_FONT_OP_SET_TALL) {
+            Check(font.width == 32 && font.height == 64 && font.charcount == 256, "Wrong enlarged font dimensions");
+            for (unsigned i = 0; i < font.charcount * 256; ++i)
+                Check(font.data[i] == (i == 'A' * 256 || i == 'A' * 256 + 4 ? 0xc0 : 0), "Font scaling changed its pixels");
+            doubled_font = true;
+        } else {
+            Check(font.op == KD_FONT_OP_GET_TALL && font.width == 32 && font.height == 64, "Wrong display font buffer bounds");
+            font.width = 8;
+            font.height = 16;
+            font.charcount = 256;
+            std::memset(font.data, 0xff, font.charcount * 64);
+        }
     } else {
         Check(request == KDGETMODE, "Unexpected display ioctl");
         *static_cast<int*>(argument) = display_mode;
@@ -197,23 +219,31 @@ int main()
 
         int master, slave;
         Check(openpty(&master, &slave, nullptr, nullptr, nullptr) == 0, "Cannot open test tty");
+        for (const auto& [width, height, name] : {
+            std::tuple{640U, 480U, "VGA8x16"}, {1024U, 768U, "TER10x18"},
+            {1366U, 768U, "TER16x32"}, {2880U, 1800U, "TER16x32"}}) {
+            setup_width = width; setup_height = height; doubled_font = false;
+            td::ConfigureConsole(slave);
+            Check(selected_font == name && doubled_font == (width == 2880), "Automatic font selection failed");
+        }
+        setup_width = WIDTH; setup_height = HEIGHT;
         {
             td::Terminal terminal(slave);
             td::Display display(terminal);
             const std::array<uint8_t, 4> black{}, white{255, 255, 255, 255};
             const size_t marker = (HEIGHT - 1) * WIDTH * 4;
-            const size_t image_pixel = (WIDTH - (HEIGHT - 48)) / 2 * 4;
+            const size_t image_pixel = (HEIGHT / 4 * WIDTH + WIDTH / 2) * 4;
             display.Preview(black, 2, 2, 0);
             framebuffer[marker] = 17;
             display.Preview(white, 2, 2, 0);
             Check(framebuffer[image_pixel] == 255, "Unchanged progress prevented preview updates");
             Check(framebuffer[marker] == 17, "Unchanged preview caption was erased and redrawn");
             display.Preview(black, 2, 2, 0.5);
-            Check(framebuffer[marker] == 255, "Changed progress did not redraw the caption");
+            Check(framebuffer[marker] == 25, "Changed progress did not redraw the caption");
             display.QR(td::QRImage("public test"), "QR code");
             framebuffer[marker] = 17;
             display.Preview(black, 2, 2, 0.5);
-            Check(framebuffer[marker] == 255, "Clearing the display did not invalidate the preview caption");
+            Check(framebuffer[marker] == 25, "Clearing the display did not invalidate the preview caption");
         }
         close(master);
         Check(display_mode == KD_TEXT, "Display did not return to text mode");

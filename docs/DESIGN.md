@@ -31,8 +31,10 @@ are kept separate.
 ## Recovery input
 
 - English BIP39 wordlist; 12, 15, 18, 21 or 24 words with a valid checksum.
-- Choose the word count, then enter one lowercase word at a time. Words are visible
-  and checked against the wordlist immediately. An empty entry goes back one word.
+- Choose the word count, then enter one lowercase word at a time. Words start
+  hidden and are checked on Enter. Empty Enter does nothing. Up returns to the
+  previous word while preserving the current draft; Backspace only edits the
+  current word. Drafts must be validated with Enter before moving forwards.
 - The complete mnemonic's checksum is checked before asking for a passphrase.
   If it fails, the attempt is cleared and entry restarts at word 1 with the same
   word count.
@@ -58,7 +60,7 @@ press Enter to launch a fresh signer at network selection. Each new session
 requires recovery input when first needed. This cleanup clears managed secret
 buffers; it does not guarantee erasure of every trace in physical memory.
 
-Only menu option **3** ends the session. Esc and Ctrl-C cancel operations but do
+Only menu option **4** ends the session. Esc and Ctrl-C cancel operations but do
 nothing at network selection or the main menu, so held cancellation keys cannot
 clear the session after returning from an operation.
 
@@ -83,8 +85,18 @@ Thunder Den limits policies to 32 keys, 512 characters per key-information strin
 64 nesting levels, 64 Miniscript wrappers and 32 origin-path steps.
 Names contain at most 64 printable ASCII characters without leading/trailing
 spaces. Passphrases contain at most 128 characters.
-Default accounts are limited to account indices 0 through 100. The script-derivation
+Standard accounts are limited to account indices 0 through 100. The script-derivation
 primitive permits any unhardened index, including existing inputs above 50,000.
+
+Standard-account reviews show the actual account number. Master fingerprints
+use the standard BIP32 meaning; they label keys but do not prove ownership.
+Address positions are shown as receiving or change addresses with their index.
+The exact descriptor paths remain visible, including custom receive/change paths.
+
+Wallet applications should arrange backups of custom wallet configurations.
+For multisig or custom Miniscript wallets, recovery words alone may not be enough
+to reconstruct the wallet. Routine signer exports do not ask users to copy rules
+from the device's screen.
 
 ## Registration
 
@@ -150,8 +162,36 @@ The local interface wraps full addresses/scripts onto review pages. Every page
 must be traversed before a separate typed `SIGN` confirmation is accepted. Queued
 input is discarded at screen/approval boundaries, and terminal resizing aborts
 the review. Registration uses a separate `REGISTER` confirmation. Public exports
-use a short summary with optional details and Enter to show the QR. Recovery words
-are visible during entry and passphrases are masked. Both use secure buffers.
+use a short summary with optional details and Enter to show the QR. A sentence
+above the controls explains when to press Enter, separated from the review by
+a blank line. Recovery words and passphrases start hidden. Tab shows or hides the
+active entry, with an explanatory sentence near the heading. Word visibility
+persists within recovery entry; passphrase entry and confirmation each start
+hidden. Both use secure buffers, and rejected words are cleared instead of
+restoring an earlier value. A blank line precedes every input field.
+Tab toggles immediately for each key event. Up preserves a recovery-word draft
+without accepting it; only Enter on a valid, non-empty word moves forwards.
+Validation errors use the console's error color as well as a text message.
+Single-page reviews omit the pager; multi-page counters appear at the right of
+the bottom divider, separately from the actions. `d` opens details and returns
+to the same summary page without approving the operation.
+
+The console uses a dark palette, an 80-column reading area and word-wrapped
+explanations. Menus accept arrows and Enter alongside numbered shortcuts. Moving
+the selection repaints only the affected rows, not the whole screen. A
+bounded decoder consumes arrow-key sequences without treating them as Escape or
+input text. Escape and Ctrl-C repeats are suppressed across screen transitions
+until there has been a one-second gap or a different key is pressed. This keeps
+a held cancellation key from also cancelling the parent screen. All styling
+comes from the renderer; wallet-provided text is still printable ASCII only.
+
+GRUB uses the firmware's automatic graphics mode. Before loading keys or dropping
+privileges, the signer selects a built-in Terminus font when the screen is large
+enough, with the compact VGA font as a fallback. High-DPI screens use an exact
+2x enlargement of the larger bitmap. Font and palette setup are optional visual
+enhancements; unsupported ioctls retain the existing console settings. The QR
+and camera renderer reads the chosen font with bounded buffers and reserves room
+for complete instructions. QR modules remain black on white with a quiet border.
 
 ## QR exchange
 

@@ -55,8 +55,9 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
             in.UInt(1); // display flag: this signer always asks before sharing a key.
             in.End();
             const auto xpub = EncodePublic(keys.PublicAt(path), chain == ChainType::MAIN);
-            const ReviewLines lines{"Network: " + network, "Fingerprint: " + HexStr(keys.RootFingerprint()),
-                "Path: " + PathText(path), "This public key can reveal account activity.", "No private keys are shared.", xpub};
+            auto lines = PublicKeyReview(keys, path);
+            lines.insert(lines.begin(), {"Your wallet app is asking for this public key.", ""});
+            lines.insert(lines.end(), {"", "Extended public key:", xpub});
             if (!Approve(approve.export_key, lines)) status = 1;
             body.Array(2); body.Array(path.size());
             for (const auto index : path) body.UInt(index);
@@ -81,9 +82,9 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
                     CTxDestination destination;
                     Require(ExtractDestination(policy.Script(branch, index), destination), "Invalid address");
                     const auto address = EncodeDestination(destination);
-                    if (!Approve(approve.address, {"Network: " + network, "Wallet: " + policy.Name(),
-                        "Wallet ID: " + HexStr(policy.ID()), branch ? "Change address" : "Receive address",
-                        "Index: " + std::to_string(index), address})) status = 1;
+                    if (!Approve(approve.address, {"Your wallet app is asking you to check this address. Compare the complete address with the one shown in your wallet app.", "",
+                        "Network: " + NetworkName(chain), "Wallet: " + policy.Name(),
+                        "Wallet ID: " + HexStr(policy.ID()), AddressPosition({static_cast<unsigned>(branch), static_cast<uint32_t>(index)}), address})) status = 1;
                     body.Array(1); body.Text(address);
                 } else {
                     const auto psbt = in.Bytes(ReviewedTransaction::MAX_PSBT_BYTES);

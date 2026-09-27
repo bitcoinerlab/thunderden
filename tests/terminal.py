@@ -34,10 +34,10 @@ def cleanup():
 
 
 class Probe:
-    def __init__(self, *args, executable=None, controlling=False, rows=12, tty_output=False):
+    def __init__(self, *args, executable=None, controlling=False, rows=24, columns=80, tty_output=False):
         self.master, slave = pty.openpty()
         self.slave = slave
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, 80, 0, 0))
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
         self.saved = termios.tcgetattr(slave)
         self.controlling = controlling
 
@@ -71,6 +71,18 @@ class Probe:
     def send(self, text):
         os.write(self.master, text)
 
+    def rows(self):
+        # Inspect positioned text in the current screen; these tests use ASCII
+        # fixtures only. Ignore color/line-clear sequences, not cursor positions.
+        screen = self.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        return {int(row): text for row, text in re.findall(
+            rb"\x1b\[(\d+);\d+H(?:\x1b\[[0-9;]*[mK])*([^\x1b\r\n]*)", screen)}
+
+    def spaced(self, prefix):
+        rows = self.rows()
+        row, = [row for row, text in rows.items() if text.startswith(prefix)]
+        assert not rows.get(row - 1, b"").strip(), ("Missing blank row above", prefix, rows)
+
     def finish(self, code):
         output, error = self.process.communicate(timeout=5)
         assert self.process.returncode == code, (self.process.returncode, output, error)
@@ -84,42 +96,63 @@ class Probe:
 
 
 for confirmation, code in [(b"SIGN\r", 0), (b"yes\r", 2), (b"\x1b", 2)]:
-    p = Probe()
-    p.wait(b"Page 1/3")
+    p = Probe(rows=13)
+    p.wait(b"Page 1/4")
     p.send(b"SIGN\r")  # Cannot approve on a review page.
     time.sleep(0.05)
     assert p.process.poll() is None
     p.send(b"nSIGN\r")  # Queued approval text must be discarded at the next page.
-    p.wait(b"Page 2/3")
+    p.wait(b"Page 2/4")
     p.send(b"b")
-    p.wait(b"Page 1/3")
+    p.wait(b"Page 1/4")
     p.send(b"n")
-    p.wait(b"Page 2/3")
+    p.wait(b"Page 2/4")
     p.send(b"n")
+    p.wait(b"Page 3/4")
+    p.send(b"\x1b[C")
     p.wait(b"ADDRESS-END")
-    p.wait(b"Page 3/3")
+    p.wait(b"Page 4/4")
     p.send(b"nSIGN\r")
     p.wait(b"then Enter: ")
+    p.spaced(b"Type SIGN")
     time.sleep(0.05)
     assert p.process.poll() is None, "Buffered input approved transaction"
     p.send(confirmation)
     output, _ = p.finish(code)
     assert (b"APPROVED" in output) == (code == 0)
 
-p = Probe()
-p.wait(b"Page 1/3")
+p = Probe(rows=13)
+p.wait(b"Page 1/4")
 p.send(b"q")
 p.finish(2)
 
-p = Probe()
-p.wait(b"Page 1/3")
-fcntl.ioctl(p.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 13, 80, 0, 0))
+p = Probe(rows=13)
+p.wait(b"Page 1/4")
+fcntl.ioctl(p.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 14, 80, 0, 0))
 p.send(b"n")
 _, error = p.finish(3)
 assert b"Display changed during review" in error
 
+p = Probe("details")
+p.wait(b"Press Enter to finish.")
+fcntl.ioctl(p.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 25, 80, 0, 0))
+p.send(b"\r")
+_, error = p.finish(3)
+assert b"Display changed during review" in error, "Resize on the last page allowed approval"
+
 p = Probe("input")
 p.wait(b"Secret: ")
+p.send(b"a")
+fcntl.ioctl(p.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 25, 80, 0, 0))
+p.send(b"\r")
+output, error = p.finish(3)
+assert not output and b"screen changed" in error, "Resized input was accepted"
+
+p = Probe("input")
+p.wait(b"Secret: ")
+p.spaced(b"Secret:")
+assert p.rows()[2] == b"THUNDER DEN", "Missing top margin"
+assert b"Press Enter to continue." not in p.all_text, "Redundant instruction in a text input"
 p.send(b" A Case  X\x7f \r")
 output, _ = p.finish(0)
 assert bytes.fromhex(output.decode().strip()) == b" A Case   "
@@ -127,8 +160,12 @@ assert b"A Case" not in p.all_text
 
 p = Probe("input")
 p.wait(b"Secret: ")
-p.send(b"a" * 33)
-p.finish(3)
+p.send(b"a" * 33 + b"\r")
+p.wait(b"This entry is too long.")
+p.wait(b"Secret: ")
+p.send(b"valid\r")
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == b"valid", "An overlong entry was truncated or retained"
 
 p = Probe("input")
 p.wait(b"Secret: ")
@@ -138,16 +175,127 @@ pipe = subprocess.run([sys.argv[1]], input=b"nSIGN\n", capture_output=True, time
 assert pipe.returncode == 3 and b"Input must be a terminal" in pipe.stderr
 print("PASS: tty-only input, full review traversal, explicit consent, queued-input rejection, cancellation, resize and masked ASCII entry")
 
+for columns in (40, 80, 160):
+    p = Probe("menu", rows=14, columns=columns)
+    p.wait(b"Enter/1-3: Select")
+    p.send(b"\x1b[B")
+    p.wait(b"> 2: Second action")
+    assert p.all_text.count(b"\x1b[2J") == 1, "Menu navigation cleared the screen"
+    p.send(b"\x1bOB")
+    p.wait(b"> 3: Third action")
+    p.send(b"\x1b[A")
+    p.wait(b"> 2: Second action")
+    p.send(b"\r")
+    output, _ = p.finish(0)
+    assert output.strip() == b"1", "Arrows selected the wrong menu item"
+
+p = Probe("menu", rows=12, columns=40)
+p.wait(b"Enter/1-3: Select")
+for option in (2, 3):
+    p.send(b"\x1b[B")
+    p.wait(f"> {option}: ".encode())
+assert p.all_text.count(b"\x1b[2J") == 1, "Scrolling a menu cleared the whole screen"
+p.send(b"\r")
+p.finish(0)
+
+p = Probe("input")
+p.wait(b"Secret: ")
+p.send(b"ab\x1b[D\x1b[15~\x1b[[Acd\r")
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == b"abcd", "A navigation sequence entered the secret"
+
+p = Probe("input", rows=16, columns=40)
+p.wait(b"Secret: ")
+p.send(b" A Case with spaces " + b"x" * 12 + b"\x7f" * 12 + b" \r")
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == b" A Case with spaces  "
+assert b"A Case" not in p.all_text, "A long entry exposed the passphrase"
+
+p = Probe("input")
+p.wait(b"Secret: ")
+p.send(b" A Case ")
+p.wait(b"*" * len(b" A Case "))
+assert b"A Case" not in p.all_text
+p.send(b"\t")
+p.wait(b"Your passphrase is visible as you type.")
+p.wait(b" A Case ")
+for visible in (False, True, False, True):
+    p.send(b"\t")
+    p.wait(b"Your passphrase is visible" if visible else b"Your passphrase is hidden")
+p.send(b"\t\t")  # Both events must work without a cooldown, even in one write.
+p.wait(b"Your passphrase is hidden")
+p.wait(b"Your passphrase is visible")
+p.send(b"X")
+p.wait(b" A Case X")
+p.send(b"\t")
+p.wait(b"Your passphrase is hidden as you type")
+p.wait(b"*" * len(b" A Case X"))
+hidden = len(p.all_text)
+p.send(b" \r")
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == b" A Case X ", "Visibility toggle changed the passphrase"
+assert b"A Case" not in p.all_text[hidden:], "Hidden text remained in the input renderer"
+
+# Introductory text can be paged on a very small display without losing the
+# visibility control or the blank row above the active field.
+p = Probe("input", rows=12, columns=40)
+p.wait(b"Press Enter to continue.")
+p.spaced(b"Press Enter to continue.")
+p.send(b"\r")
+p.wait(b"Secret: ")
+p.spaced(b"Secret:")
+p.send(b"tiny\r")
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == b"tiny"
+
+# Escape closes details once. A held key must not also cancel the parent review,
+# even after the keyboard's initial repeat delay or a queued burst of repeats.
+for cancel in (b"\x1b", b"\x03"):
+    p = Probe("details", rows=12, columns=40)
+    p.wait(b"d: Details")
+    p.send(b"d")
+    p.wait(b"Technical details")
+    p.send(cancel)
+    p.wait(b"Account summary")
+    time.sleep(0.55)
+    for _ in range(8):
+        p.send(cancel)
+        time.sleep(0.04)
+    assert p.process.poll() is None, "Held cancellation escaped the parent screen"
+    p.send(b"d")  # A different key deliberately starts another action.
+    p.wait(b"Technical details")
+    p.send(cancel)
+    p.wait(b"Account summary")
+    time.sleep(1.1)  # Releasing and pressing Escape again can cancel the parent.
+    p.send(cancel)
+    p.finish(2)
+print("PASS: arrow menus at narrow/normal/wide sizes, safe input sequences and held-cancel isolation between screens")
+
+p = Probe("details-paged", rows=13)
+p.wait(b"Page 1/3")
+p.send(b"n")
+p.wait(b"Page 2/3")
+assert re.search(rb"\x1b\[11;([6-9][0-9])H Page 2/3 ", p.all_text), "Pager is not right-aligned above the actions"
+p.send(b"d")
+p.wait(b"d/Esc: Back")
+assert b"Page 1/1" not in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Single-page details have a pager"
+p.send(b"d")
+p.wait(b"Page 2/3")
+assert p.process.poll() is None, "Closing details approved the operation"
+p.send(b"\x1b")
+p.finish(2)
+print("PASS: details toggle returns to the same page and pagination stays separate from actions")
+
 MNEMONIC = ["abandon"] * 11 + ["about"]
 
 
 def word(p, index, count, value):
-    p.wait(f"Word {index}/{count}: ".encode())
+    p.wait(f"Word {index} of {count}: ".encode())
     p.send(value.encode() + b"\r")
 
 
 def mnemonic(p, words, choice=b"\r"):
-    p.wait(b"Enter: 12 words")
+    p.wait(b"1: 12 words")
     p.send(choice)
     for index, value in enumerate(words, 1):
         word(p, index, len(words), value)
@@ -165,53 +313,61 @@ for key in (b"\x1b", b"\x03"):
     assert p.process.poll() is None, "Cancel key ended network selection"
 p.send(b"4")
 for attempt in range(2):
-    p.wait(b"3: End session (clear keys)")
+    p.wait(b"4: End session (clear keys)")
     p.send(b"2")
-    p.wait(b"Esc: Cancel")
+    p.wait(b"Esc: Back")
     p.send(b"1")
     p.wait(b"Account number 0-100 [0]: ")
     p.send(b"\r")
     if attempt == 0:
         mnemonic(p, ["abandon"] * 12)
-        p.wait(b"Invalid recovery phrase. Enter all 12 words again.")
+        p.wait(b"These words do not make a valid recovery phrase.")
         assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
         for index, value in enumerate(MNEMONIC, 1):
             word(p, index, 12, value)
         p.wait(b"Passphrase: ")
         p.send(b"\r")
-    p.wait(b"Enter: Show QR")
+    p.wait(b"Press Enter to show the QR code.")
+    p.spaced(b"Press Enter to show the QR code.")
     assert b"Repeat passphrase: " not in p.all_text, "Empty passphrase required confirmation"
     p.send(b"\r")
     p.wait(b"framebuffer display is required")
     p.send(b"n")
-p.wait(b"3: End session (clear keys)")
+p.wait(b"4: End session (clear keys)")
 for key in (b"\x1b", b"\x03"):
     p.send(b"2")
-    p.wait(b"Esc: Cancel")
+    p.wait(b"Esc: Back")
     p.send(key)
-    p.wait(b"3: End session (clear keys)")
+    p.wait(b"4: End session (clear keys)")
     # Autorepeat continues after the next screen has flushed queued input.
     for _ in range(5):
         p.send(key)
         time.sleep(0.02)
     assert p.process.poll() is None, "Repeated cancellation ended the loaded session"
 p.send(b"2")
-p.wait(b"Esc: Cancel")
+p.wait(b"Esc: Back")
 p.send(b"1")
 p.wait(b"Account number 0-100 [0]: ")
 p.send(b"\r")
-p.wait(b"Enter: Show QR")  # The same keys remain usable without re-entering the phrase.
+p.wait(b"Press Enter to show the QR code.")  # Same keys, without re-entering the phrase.
 p.send(b"q")
-p.wait(b"3: End session (clear keys)")
-p.send(b"3")
+p.wait(b"4: End session (clear keys)")
+p.send(b"3")  # The third shortcut now shares a public key; exit is last.
+p.wait(b"Path: ")
+p.send(b"m/84h/1h/0h\r")
+p.wait(b"Press Enter to show the QR code.")
+assert b"Path: m/84h/1h/0h" in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Public-key path was changed"
+p.send(b"q")
+p.wait(b"4: End session (clear keys)")
+p.send(b"4")
 p.finish(0)
-assert p.all_text.count(b"Recovery word count") == 1
+assert p.all_text.count(b"Your recovery phrase") == 1
 assert b"Word number" not in p.all_text
 assert b"abandon abandon" not in p.all_text
 print("PASS: checksum checked before passphrase, single Enter for empty passphrase and one key session")
 print("PASS: repeated Esc/Ctrl-C cancel operations without ending the session; explicit logout still works")
 
-# All standard lengths, with visible words and the same backend checksum checks.
+# All standard lengths are hidden by default, with the same checksum checks.
 for choice, count, last in [(1, 12, "about"), (2, 15, "address"), (3, 18, "agent"),
                             (4, 21, "admit"), (5, 24, "art")]:
     words = ["abandon"] * (count - 1) + [last]
@@ -219,68 +375,116 @@ for choice, count, last in [(1, 12, "about"), (2, 15, "address"), (3, 18, "agent
     mnemonic(p, words, str(choice).encode())
     output, _ = p.finish(0)
     assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
-    assert b"abandon" in p.all_text, "Recovery words were hidden"
+    assert b"abandon" not in p.all_text, "Recovery words were revealed by default"
 
 # A failed checksum discards all words and retains the chosen length.
 p = Probe("mnemonic")
 mnemonic(p, ["abandon"] * 24, b"5")
-p.wait(b"Invalid recovery phrase. Enter all 24 words again.")
+p.wait(b"These words do not make a valid recovery phrase.")
 words = ["abandon"] * 23 + ["art"]
 for index, value in enumerate(words, 1):
     word(p, index, 24, value)
 output, _ = p.finish(0)
 assert bytes.fromhex(output.decode().strip()) == " ".join(words).encode()
-assert p.all_text.count(b"Recovery word count") == 1
+assert p.all_text.count(b"Your recovery phrase") == 1
 
 p = Probe("mnemonic")
 mnemonic(p, ["abandon"] * 12)
-p.wait(b"Invalid recovery phrase. Enter all 12 words again.")
-p.wait(b"Word 1/12: ")
+p.wait(b"These words do not make a valid recovery phrase.")
+p.wait(b"Word 1 of 12: ")
 p.send(b"\x1b")
 output, _ = p.finish(2)
 assert not output
 print("PASS: invalid phrases restart at word one with the same length and allow cancellation")
 
 p = Probe("mnemonic")
-p.wait(b"Enter: 12 words")
+p.wait(b"1: 12 words")
 p.send(b"\r")
 word(p, 1, 12, "zzzz")
-p.wait(b"Invalid English recovery word")
-word(p, 1, 12, "toolongword")
-p.wait(b"Input is too long")
+p.wait(b"\x1b[0;31;40mInvalid word.")
+word(p, 1, 12, "abstractx")  # A valid eight-letter prefix must not be accepted.
+p.wait(b"Invalid word.")
 word(p, 1, 12, "ability")
-word(p, 2, 12, "")  # Empty entry goes back without losing the earlier word.
-p.wait(b"Word 1/12: ")
+p.wait(b"Word 2 of 12: ")
+p.send(b"\r\x7f\t")  # Empty Enter/Backspace stay here; Tab still responds.
+p.wait(b"You can see the word you are entering.")
+p.wait(b"Word 2 of 12: ")
+p.send(b"\x1b[A")
+p.wait(b"Word 1 of 12: ")
 p.wait(b"ability")
-p.send(b"\x7f" * 7 + b"abandon\r")
+p.send(b"\x7f" * 7 + b"notaword\r")
+p.wait(b"Invalid word.")
+p.wait(b"Word 1 of 12: ")
+p.send(b"abandon\r")  # No backspacing: the rejected replacement must be empty.
+p.wait(b"Word 2 of 12: ")
+assert b"You can see the word you are entering." in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Word visibility did not persist"
+p.send(b"\t")
+p.wait(b"Your words are hidden as you type")
 for index, value in enumerate(MNEMONIC[1:], 2):
     word(p, index, 12, value)
 output, _ = p.finish(0)
 assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode()
 
 p = Probe("mnemonic")
-p.wait(b"Enter: 12 words")
+p.wait(b"1: 12 words")
+p.send(b"\r")
+p.wait(b"Word 1 of 12: ")
+p.send(b"\r\x1b[A\x7f\t")  # Word one cannot go back or accept an empty value.
+p.wait(b"You can see the word you are entering.")
+p.wait(b"Word 1 of 12: ")
+p.send(b"abandon\r")
+p.wait(b"Word 2 of 12: ")
+p.send(b"aban\x1b[A")  # Preserve this partial draft while revisiting word one.
+p.wait(b"Word 1 of 12: ")
+p.send(b"\r")
+p.wait(b"Word 2 of 12: ")
+p.wait(b"aban")
+p.send(b"don\r")
+for index, value in enumerate(MNEMONIC[2:], 3):
+    word(p, index, 12, value)
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode(), "Up lost or accepted a partial draft"
+assert b"Press Enter after typing" not in p.all_text and b"backup in order" not in p.all_text
+
+p = Probe("mnemonic")
+p.wait(b"1: 12 words")
+p.send(b"\r")
+word(p, 1, 12, "abandon")
+p.wait(b"Word 2 of 12: ")
+p.send(b"abstractx\x1b[A")  # Do not save a truncated valid prefix as a draft.
+p.wait(b"Invalid word.")
+p.wait(b"Word 2 of 12: ")
+p.send(b"\x1b[A")
+p.wait(b"Word 1 of 12: ")
+p.send(b"\r")
+for index, value in enumerate(MNEMONIC[1:], 2):
+    word(p, index, 12, value)
+output, _ = p.finish(0)
+assert bytes.fromhex(output.decode().strip()) == " ".join(MNEMONIC).encode()
+
+p = Probe("mnemonic")
+p.wait(b"1: 12 words")
 p.send(b"\x1b")
 output, _ = p.finish(2)
 assert not output
 
 p = Probe("mnemonic")
-p.wait(b"Enter: 12 words")
+p.wait(b"1: 12 words")
 p.send(b"\r")
 word(p, 1, 12, "abandon")
-p.wait(b"Word 2/12: ")
+p.wait(b"Word 2 of 12: ")
 p.send(b"\x1b")
 output, _ = p.finish(2)
 assert not output
-print("PASS: all mnemonic lengths, visible words, immediate validation, correction and cancellation")
+print("PASS: hidden recovery words, opt-in visibility, rejected replacements, overlong words and cancellation")
 
 # A mistyped passphrase can be retried without entering the words again.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
 p.wait(b"5: Legacy testnet3")
 p.send(b"4")
-p.wait(b"3: End session (clear keys)")
+p.wait(b"4: End session (clear keys)")
 p.send(b"2")
-p.wait(b"Esc: Cancel")
+p.wait(b"Esc: Back")
 p.send(b"1")
 p.wait(b"Account number 0-100 [0]: ")
 p.send(b"\r")
@@ -289,20 +493,30 @@ p.wait(b"Passphrase: ")
 p.send(b" A Case  \r")
 p.wait(b"Repeat passphrase: ")
 p.send(b" A Case\r")
-p.wait(b"Page 1/1")
+p.wait(b"Press Enter to continue.")
 assert b"Passphrases did not match" in p.all_text
+assert b"Page 1/1" not in p.all_text, "Single-page notices have a pager"
 p.send(b"n")
 p.wait(b"Passphrase: ")
-p.send(b" A Case  \r")
+p.spaced(b"Passphrase:")
+p.send(b" A Case  ")
+p.send(b"\t")
+p.wait(b"Your passphrase is visible as you type.")
+p.wait(b" A Case  ")
+p.send(b"\r")
+p.wait(b"Repeat your passphrase")
+p.wait(b"Your passphrase is hidden as you type")
 p.wait(b"Repeat passphrase: ")
+p.spaced(b"Repeat passphrase:")
+confirmation_start = len(p.all_text)
 p.send(b" A Case  \r")
-p.wait(b"Enter: Show QR")
+p.wait(b"Press Enter to show the QR code.")
 p.send(b"q")
-p.wait(b"3: End session (clear keys)")
-p.send(b"3")
+p.wait(b"4: End session (clear keys)")
+p.send(b"4")
 p.finish(0)
-assert p.all_text.count(b"Recovery word count") == 1
-assert b" A Case" not in p.all_text, "Passphrase was displayed"
+assert p.all_text.count(b"Your recovery phrase") == 1
+assert b" A Case" not in p.all_text[confirmation_start:], "Confirmation inherited the visible state"
 print("PASS: non-empty passphrase confirmation, exact spaces/case and retry without re-entering words")
 
 # Run the real appliance launcher with fixture mount tables and the native signer.
@@ -327,10 +541,10 @@ with tempfile.TemporaryDirectory() as temporary:
         assert pid not in pids, "Session reused the previous signer process"
         pids.append(pid)
         p.send(network)
-        p.wait(b"Thunder Den - " + (b"regtest" if network == b"4" else b"testnet4"))
-        p.wait(b"3: End session (clear keys)")
+        p.wait(b"Regtest" if network == b"4" else b"Testnet4")
+        p.wait(b"4: End session (clear keys)")
         p.send(b"2")
-        p.wait(b"Esc: Cancel")
+        p.wait(b"Esc: Back")
         p.send(b"1")
         p.wait(b"Account number 0-100 [0]: ")
         p.send(b"\r")
@@ -340,11 +554,11 @@ with tempfile.TemporaryDirectory() as temporary:
         if passphrase:
             p.wait(b"Repeat passphrase: ")
             p.send(passphrase + b"\r")
-        p.wait(b"Enter: Show QR")
-        fingerprints.append(re.findall(rb"Fingerprint: ([0-9a-f]{8})", p.all_text)[-1])
+        p.wait(b"Press Enter to show the QR code.")
+        fingerprints.append(re.findall(rb"Master fingerprint: ([0-9a-f]{8})", p.all_text)[-1])
         p.send(b"q")
-        p.wait(b"3: End session (clear keys)")
-        p.send(b"3")
+        p.wait(b"4: End session (clear keys)")
+        p.send(b"4")
         p.wait(b"Session ended\r\nLoaded keys cleared.")
         p.wait(b"You can now turn off the laptop.")
         p.wait(b"Enter: Start a new session")
@@ -356,7 +570,7 @@ with tempfile.TemporaryDirectory() as temporary:
         if len(pids) == 1:
             p.send(b"\r")
     assert fingerprints[0] != fingerprints[1], "New seed reused the old wallet"
-    assert p.all_text.count(b"Recovery word count") == 2
+    assert p.all_text.count(b"Your recovery phrase") == 2
     assert b"TREZOR" not in p.all_text
     p.send(b"\x15\x04")  # Clear the pending line, then end input at the logout screen.
     p.wait(b"Signer stopped.")

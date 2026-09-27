@@ -90,7 +90,7 @@ test -x "$HWI"
 Each CLI request below, including `device list`, waits for a human-operated
 QR exchange:
 
-1. Run the CLI request first, then choose **1: Scan request or transaction** on
+1. Run the CLI request first, then choose **1: Scan a wallet request** on
    Thunder Den and scan the QR shown in the bridge.
 2. Review and approve on Thunder Den. Start the bridge's **response camera**
    only when Thunder Den displays its reply QR.

@@ -52,6 +52,14 @@ unsigned Status(const td::QRMessage& message)
 
 void Registration(const td::Keys& keys)
 {
+    for (const unsigned account : {0, 7}) {
+        const auto standard = td::DefaultPolicy(keys, 84, account);
+        const auto lines = td::PolicyReview(standard, keys);
+        Check(std::find(lines.begin(), lines.end(), "Account: " + std::to_string(account)) != lines.end(),
+            "Standard account review lost the actual account number");
+        Check(std::find(lines.begin(), lines.end(), "Master fingerprint: " + HexStr(keys.RootFingerprint())) != lines.end(),
+            "Review did not identify the master key");
+    }
     auto base = td::DefaultPolicy(keys, 84, 0);
     td::Policy policy("Savings", base.Template(), {base.KeyInformation()[0].text}, false);
     auto root = Envelope(policy, 2);
@@ -94,6 +102,13 @@ void Registration(const td::Keys& keys)
     Reject([&] { td::HandleQRRequest(Message(Bytes("{\"version\":1}")), keys, never); });
     Reject([&] { td::HandleQRRequest(Message(std::vector<uint8_t>(1024 * 1024 + 65537)), keys, never); });
     Reject([&] { td::Wrap({"Wallet\033[2Jhidden"}, 79); });
+    const std::string address(171, 'x');
+    const auto pieces = td::Wrap({address}, 38);
+    std::string restored;
+    for (const auto& piece : pieces) { Check(piece.size() <= 38, "Wrapped value exceeds width"); restored += piece; }
+    Check(restored == address, "Wrapping lost part of a public value");
+    Check(td::Wrap({"Check the complete address before continuing."}, 20)
+        == td::ReviewLines({"Check the complete", "address before", "continuing."}), "Prose was split mid-word");
     std::puts("PASS: strict request schema, registration consent and immutable approved wallet ID");
 }
 
@@ -125,6 +140,8 @@ void Signing(const td::Keys& keys)
         const auto lines = td::TransactionLines(review);
         Check(std::find(lines.begin(), lines.end(), "Transaction fee: 0.00001 BTC (1000 sats)") != lines.end(), "Fee missing from review");
         Check(std::find(lines.begin(), lines.end(), "VERIFIED CHANGE") != lines.end(), "Change classification missing");
+        Check(std::find(lines.begin(), lines.end(), "Change address (index 1)") != lines.end(), "Change position missing");
+        Check(std::find(lines.begin(), lines.end(), "Receiving address (index 0)") != lines.end(), "Input position missing");
         Check(std::find(lines.begin(), lines.end(), review.outputs[0].address) != lines.end(), "Complete output address missing");
         Check(std::find(lines.begin(), lines.end(), previous->GetHash().ToString() + ":0") != lines.end(), "Input txid was truncated");
         Check(std::find(lines.begin(), lines.end(), "Signing rule: ALL") != lines.end(), "Signing rule missing");

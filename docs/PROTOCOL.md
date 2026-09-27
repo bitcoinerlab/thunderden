@@ -45,9 +45,9 @@ support for importing the public export formats.
 
 ## Public exports
 
-**Export descriptor** produces `ur:output-descriptor` with a complete public
+**Share wallet setup (descriptor)** produces `ur:output-descriptor` with a complete public
 receive/change descriptor and checksum in map field 1 (`source`).
-**Export xpub** produces public-only `ur:hdkey`, including chain code, origin,
+**Share a public key (xpub)** produces public-only `ur:hdkey`, including chain code, origin,
 master fingerprint and network information. Public root keys are supported.
 
 These use the current Blockchain Commons registry: `output-descriptor` (40308),

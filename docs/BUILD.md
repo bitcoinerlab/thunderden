@@ -49,6 +49,16 @@ The development image is unsigned, so Secure Boot must be disabled for UEFI boot
 Thunder Den starts at network selection. Use test networks and test recovery words
 while the project is under development.
 
+Use the arrow keys and Enter to choose an option, or press its number. Text size
+is selected automatically. The console uses a dark background and built-in
+bitmap fonts; the available screen resolution depends on the laptop's firmware.
+Recovery words and passphrases are hidden by default. Press Tab to show or hide
+what you are entering. Leave the passphrase empty and press Enter if your wallet
+does not use one.
+During recovery-word entry, Up returns to the previous word and Backspace edits
+the current one. Empty Enter does nothing. In a details view, press `d` again to
+return to the summary. The final menu option ends the session and clears the keys.
+
 ## Build or test: which command do I need?
 
 | Command | What it does |
@@ -185,8 +195,10 @@ python3 tests/boot.py thunderden.img /tmp/thunderden-uefi --firmware /path/to/OV
 
 The first command tests BIOS boot; the second tests UEFI boot using a combined
 OVMF firmware file. Both enter a public test mnemonic and check the displayed
-account QR. Screenshots and logs are saved in the chosen folders. These checks
-do not test a physical webcam.
+account QR. They also check arrow navigation and holding Escape after a QR
+export without losing the loaded keys. Screenshots and logs are saved in the
+chosen folders. Use `--display-size 640x480` or `--display-size 2560x1600` for
+additional font/layout checks. These checks do not test a physical webcam.
 
 To check scanner isolation under the image's kernel, build a separate test program
 with the image toolchain and boot it in QEMU. This also requires the host `cpio`
