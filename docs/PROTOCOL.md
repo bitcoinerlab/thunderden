@@ -95,7 +95,7 @@ must fit 2 MiB + 64 KiB. Paths contain at most 32 uint32 BIP32 indexes, includin
 the hardened bit. Flags are unsigned 0 or 1, not CBOR booleans.
 
 The leading `3` below is an internal message-format marker, not a Thunder Den
-release number. Thunder Den has not been released.
+release number.
 
 ```text
 request = [3, request_id, network, operation, arguments]
@@ -110,7 +110,7 @@ reply   = [3, request_id, network, fingerprint, app_version, operation, status, 
   This is standard BIP32 origin information and a useful display/selection label.
   It can collide and must not be treated as proof of ownership.
 - `app_version`: the signer's application version as printable ASCII text,
-  currently `0.0.1`. This version labels the development build, not a release.
+  currently `0.0.1`. GitHub release tags may also include a preview suffix.
 
 The client checks the request ID, operation and network before using a reply.
 The request ID catches stale/mismatched QR replies; it is not authentication.

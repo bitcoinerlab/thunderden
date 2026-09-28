@@ -1,4 +1,16 @@
-# Build an image and boot from USB
+# Download or build an image and boot from USB
+
+## Download a preview
+
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.1/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.1/thunderden.img.sha256)
+from [v0.0.1-preview.1](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.1).
+The release also includes `installed-files.json` for reviewing the built system.
+
+The same 64 MiB image can be written from macOS, Linux or Windows. It boots
+x86-64 laptops with BIOS or UEFI, not Apple Silicon Macs. After downloading,
+[verify the image](#verify-the-image), then [write it to USB](#2-write-it-to-a-usb-drive).
+Docker is needed only if you choose to build from source below.
 
 ## TL;DR: build, flash, boot
 
@@ -24,16 +36,22 @@ docker cp thunderden-image-build:/cache/out/images/thunderden.img.sha256 .
 docker rm thunderden-image-build
 ```
 
-Check the copied image against its checksum:
+#### Verify the image
+
+Put `thunderden.img` and `thunderden.img.sha256` in the same folder, then open a
+terminal in that folder:
 
 - **Linux:** `sha256sum -c thunderden.img.sha256`
 - **macOS:** `shasum -a 256 -c thunderden.img.sha256`
-- **Windows PowerShell:** `Get-FileHash .\thunderden.img -Algorithm SHA256`;
-  compare the result with the hash in `thunderden.img.sha256`.
+- **Windows PowerShell:** `Get-FileHash .\thunderden.img -Algorithm SHA256 | Format-List`;
+  compare the `Hash` value with the hash in `thunderden.img.sha256`.
+
+Linux and macOS should report `thunderden.img: OK`. If the hash does not match,
+download the image again before writing it to USB.
 
 ### 2. Write it to a USB drive
 
-Use an image writer such as [balenaEtcher](https://etcher.balena.io/):
+On macOS, Linux or Windows, use [balenaEtcher](https://etcher.balena.io/):
 **Flash from file → `thunderden.img` → Select target → your USB drive → Flash**.
 Wait for writing and verification to finish, then eject the drive.
 

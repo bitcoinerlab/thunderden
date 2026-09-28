@@ -5,10 +5,12 @@ implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitc
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream.
 
-The QR bridge is published on npm as version `0.1.1`. The USB image remains a
-development build, with no published GitHub image release. Recorded builds pass
-emulated BIOS/UEFI boot and display checks. Physical-hardware validation and
-verification of a final release image remain outstanding.
+The QR bridge is published on npm as version `0.1.1`. The first USB image is
+published as the development preview
+[`v0.0.1-preview.1`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.1),
+with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
+write/read-back verification passed. Physical-hardware validation and final
+release verification remain outstanding.
 Current executable sizes refer to the latest recorded build below.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
@@ -43,6 +45,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Record a matching image hash from an Apple Silicon build.
 - [x] Publish the browser QR bridge on npm.
 - [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
+- [x] Publish a development USB image with its checksum and installed-file inventory.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 - [ ] Complete verification of a release image built from the final source revision.
 
@@ -219,7 +222,7 @@ It includes the uncommitted protocol simplification after `f3677f0`. The checksu
 installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
 Physical HP validation remains outstanding.
 
-The latest recorded console image was built on 2026-09-27 from
+A console image was built on 2026-09-27 from
 `feature/console-refresh`. It includes the UX refinements after `3b6f6a4`, later
 committed in `eec50f9`, but predates that commit's network-aware SegWit xpub example.
 Its application version is `0.0.1` and its 67,108,864-byte image SHA256 is:
@@ -242,8 +245,24 @@ The full clean-build comparison and physical-hardware checks have not been
 repeated for this snapshot.
 
 On 2026-09-28, the native development build and terminal suite passed with the
-updated xpub example, including mainnet and Signet checks. The bootable USB image
-has not yet been rebuilt for that change.
+updated xpub example, including mainnet and Signet checks.
+
+The first published preview, `v0.0.1-preview.1`, was then built from source commit
+`b12fdbf549cb2a04e4db50abdc1463d8e6f0a3fa`. This image includes the updated example
+and reports application version `0.0.1`. Its size is 67,108,864 bytes and its
+SHA-256 is:
+
+```text
+baeaacb17bbd349449814fbee9ad1853a74b5d21ea0c46510bc4d586869728ec
+```
+
+Kernel restrictions, installed-file checks, checksum verification and repeat
+assembly passed. QEMU BIOS and UEFI tests passed at 1280x800, including QR export,
+cancellation and logout/restart. The image was written to a USB drive and all
+67,108,864 bytes matched on read-back. The published image, checksum and inventory
+were downloaded from GitHub and matched the original build artifacts byte-for-byte.
+The full clean-build comparison and physical laptop/camera checks have not been
+repeated for this preview.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

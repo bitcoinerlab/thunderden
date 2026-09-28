@@ -19,6 +19,24 @@ derivation, descriptor handling and transaction signing.
 with our Liana fork; see [Use with Liana](#use-with-liana) below and the
 [implementation status](docs/STATUS.md) for completed checks and remaining work.
 
+## Download and boot
+
+**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.1/thunderden.img)**
+· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.1/thunderden.img.sha256)
+· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.1)
+
+This image boots x86-64 (Intel/AMD) laptops with BIOS or UEFI. You can prepare the
+USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot it.
+
+1. Download the image and checksum, then [verify the download](docs/BUILD.md#verify-the-image).
+2. Open [balenaEtcher](https://etcher.balena.io/): **Flash from file →
+   `thunderden.img` → Select target → your USB drive → Flash**.
+3. Wait for verification, eject the drive and boot the laptop from USB. Disable
+   Secure Boot to boot this unsigned image.
+
+**Flashing erases the selected USB drive.** See the
+[build and USB guide](docs/BUILD.md) for more detail or to build your own image.
+
 ## Design claims
 
 - Your seed and private keys stay in RAM.
