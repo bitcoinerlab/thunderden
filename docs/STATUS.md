@@ -1,8 +1,14 @@
 # Implementation status
 
-Thunder Den is under development and has not been released. The development image
-builds and passes emulated BIOS/UEFI boot and display checks. Physical-hardware and
-release verification remain.
+As of 2026-09-28, the signer, QR bridge and regular desktop Liana integration are
+implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
+using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
+upstream.
+
+The QR bridge is published on npm as version `0.1.1`. The USB image remains a
+development build, with no published GitHub image release. Recorded builds pass
+emulated BIOS/UEFI boot and display checks. Physical-hardware validation and
+verification of a final release image remain outstanding.
 Current executable sizes refer to the latest recorded build below.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
@@ -35,10 +41,41 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Isolate the scanner from keys and local approval; verify privilege restrictions.
 - [x] Compare complete clean builds using separate rebuilt builders and volumes.
 - [x] Record a matching image hash from an Apple Silicon build.
+- [x] Publish the browser QR bridge on npm.
+- [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
+- [ ] Complete verification of a release image built from the final source revision.
 
 `platform/` defines the Buildroot application package, runtime launch, kernel
 and bootloader configuration. `build/image.py` assembles the hybrid disk image.
+
+## Liana integration
+
+The [Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana) includes
+Thunder Den support on `master` at commit `85e7681f`. It uses
+[our async-hwi fork](https://github.com/bitcoinerlab/wizardsardine-async-hwi), pinned
+to commit `dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34`. The
+[QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge) is available as
+`@bitcoinerlab/thunderden-qr-bridge@0.1.1`, published from commit `ae1fc46`.
+
+Regular desktop Liana can retrieve public keys, register wallets, verify addresses
+and sign PSBTs through the bridge. Bitcoin Core, including Liana-managed Core,
+and Electrum are supported. The integration has not been submitted upstream and
+is not included in standard Liana releases.
+
+The fork built successfully against the pinned GitHub dependency with Rust 1.88.
+All 35 GUI tests and 148 Connect-library tests passed, along with formatting,
+strict Clippy and translation checks. Local interoperability checks covered
+registration, address verification and both primary and recovery spending paths
+for P2WSH and Taproot Miniscript wallets. Bitcoin Core verified every input in
+those synthetic signing fixtures. Bridge/browser checks covered QR exchange,
+cancellation and client disconnection using a simulated camera.
+
+Liana Connect support for Thunder Den is disabled. Proposed client-side token
+upload and reload handling is present, but needs an agreed and deployed server
+API before it can be enabled. Liana Business end-to-end support is separate work.
+Physical laptop/camera compatibility and a complete physical Liana signing flow
+still need recorded validation.
 
 ## Verified native behavior
 
@@ -182,9 +219,10 @@ It includes the uncommitted protocol simplification after `f3677f0`. The checksu
 installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
 Physical HP validation remains outstanding.
 
-The current console image built on 2026-09-27 from `feature/console-refresh`
-includes uncommitted UX refinements after `3b6f6a4`. Its application version is
-`0.0.1` and its 67,108,864-byte image SHA256 is:
+The latest recorded console image was built on 2026-09-27 from
+`feature/console-refresh`. It includes the UX refinements after `3b6f6a4`, later
+committed in `eec50f9`, but predates that commit's network-aware SegWit xpub example.
+Its application version is `0.0.1` and its 67,108,864-byte image SHA256 is:
 
 ```text
 80103269ba8d951a3250c5fc20e9cbac81c6927069a46afbceba567c5a134fda
@@ -202,6 +240,10 @@ After logout, Enter returned to a pixel-identical fresh network menu.
 Kernel/content checks, checksum verification and repeat assembly passed.
 The full clean-build comparison and physical-hardware checks have not been
 repeated for this snapshot.
+
+On 2026-09-28, the native development build and terminal suite passed with the
+updated xpub example, including mainnet and Signet checks. The bootable USB image
+has not yet been rebuilt for that change.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

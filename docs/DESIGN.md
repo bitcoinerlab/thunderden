@@ -270,5 +270,5 @@ audit of Thunder Den's own code, start with:
 See [Dependencies](DEPENDENCIES.md#trust-boundary) for the upstream software you
 also need to review or trust.
 
-Software-wallet integration clients are a later deliverable using the documented
-protocol and shared vectors.
+The Liana fork and QR bridge implement wallet integration using this protocol.
+See [Liana integration](STATUS.md#liana-integration) for current support.

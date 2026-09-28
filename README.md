@@ -2,9 +2,9 @@
 
 **Turn a spare laptop into an airgapped Bitcoin signer.**
 
-Thunder Den's development image boots from USB and runs in memory. Import your
-existing recovery words, review transactions on the laptop and exchange data
-through QR codes.
+Thunder Den's image boots from USB and runs in memory. Import your existing
+recovery words, review transactions on the laptop and exchange data through QR
+codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
 before you use it. Its own signer and scanner code, build scripts, boot settings
@@ -12,15 +12,14 @@ and image checks total only around 3,800 lines. We keep that code clear, with
 few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
-designs, including Ledger and BitBox02. Bitcoin Core provides the Bitcoin
-functionality at its heart.
+designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key
+derivation, descriptor handling and transaction signing.
 
-**Status: Thunder Den is under development and has not been released.** Docker can
-build a development image; physical-hardware validation and release verification
-are ongoing.
-Use test networks only; this project is not ready to protect mainnet funds.
+**Status: Under active development. Use at your own risk.** The signer is usable
+with our Liana fork; see [Use with Liana](#use-with-liana) below and the
+[implementation status](docs/STATUS.md) for completed checks and remaining work.
 
-## Claims we are building toward
+## Design claims
 
 - Your seed and private keys stay in RAM.
 - Thunder Den saves no wallet state between boots.
@@ -28,14 +27,17 @@ Use test networks only; this project is not ready to protect mainnet funds.
 - The running signer cannot access disk storage, Ethernet, Wi-Fi or Bluetooth.
 - Wallet data and transactions move through QR codes.
 - You review and approve transactions on the laptop before signing.
-- Untrusted input stays within validated data interfaces; code changes, secret
-  export and approval bypass are forbidden.
-- You can rebuild the released USB image and compare its SHA-256.
+- Wallet requests arrive through QR codes; recovery input and approval use the
+  laptop's keyboard. Inputs are treated as untrusted and validated.
+- The scanner runs separately from the keys and approval controls. Linux restricts
+  its file and process access, and the running programs cannot overwrite the
+  installed application files. See [scanner isolation](docs/ISOLATION.md).
+- You can build the USB image from pinned sources. Recorded clean-build comparisons
+  produced matching SHA-256 hashes; see [build verification](docs/STATUS.md#verified-image-behavior).
 
-## Implemented in the development image
+## Features
 
-- Import English BIP39 recovery words and an optional ASCII passphrase once per session.
-- End a session to clear loaded keys, then power off or start a new session.
+- English BIP39 recovery words with an optional printable ASCII passphrase.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.
 - BIP-388 wallet policies with seed-bound registration proofs.
 - BIP44, BIP49, BIP84 and BIP86 defaults without prior registration.
@@ -45,20 +47,48 @@ Use test networks only; this project is not ready to protect mainnet funds.
 - One USB image for x86-64 laptops with legacy BIOS or UEFI.
 - A Docker/Compose build using pinned Linux containers with native build tools.
 
+## Use with Liana
+
+Thunder Den is currently usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana).
+The integration has **not yet been submitted to upstream Liana**.
+
+Build and run the GUI from that fork using its
+[build instructions](https://github.com/bitcoinerlab/wizardsardine-liana/blob/master/doc/BUILD.md#building-the-project).
+The integration has been built and tested with Rust 1.88. Choose **Bitcoin Core
+or Electrum** as the wallet backend. Thunder Den support for Liana Connect is
+disabled until its server supports Thunder Den registration tokens.
+
+On the same computer as Liana, start the [QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge)
+with Node.js 22 or later:
+
+```sh
+npx @bitcoinerlab/thunderden-qr-bridge
+```
+
+Choose the same Bitcoin network in Thunder Den and Liana, then open Liana's
+hardware-wallet selection and follow the instructions on the bridge's browser page.
+
 ## What you trust
 
 Thunder Den relies on your hardware and firmware, your build computer and pinned
 dependencies. We use widely scrutinized projects such as Bitcoin Core and Linux,
-and disable Linux features the signer does not need. Reviewing Thunder Den's
-code still leaves those dependencies and your hardware to review or trust.
+and disable Linux features the signer does not need. Reviewing Thunder Den's code
+still leaves those dependencies and your hardware to review or trust.
 
-Start with the [source-reading map](docs/DESIGN.md#build-and-independent-review),
-the [dependency inventory](docs/DEPENDENCIES.md) and the
-[build and test instructions](docs/BUILD.md).
+You can ask an AI coding assistant to inspect this repository for bugs,
+vulnerabilities or backdoors. Start with the
+[source-reading map](docs/DESIGN.md#build-and-independent-review) and
+[dependency inventory](docs/DEPENDENCIES.md). Check its findings against the code
+and tests; AI review alone is not proof of security. Report findings in an issue
+or submit a focused pull request.
+
+### Limits
 
 Firmware behavior and physical attacks on memory are outside the software's
 guarantees. RAM-only operation means no persistent wallet storage, not a promise
 that every trace in physical memory becomes unrecoverable at power-off.
+
+To build your own USB image, follow the [build and test instructions](docs/BUILD.md).
 
 ## Follow the work
 
