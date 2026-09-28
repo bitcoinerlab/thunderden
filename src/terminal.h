@@ -27,7 +27,7 @@ class Terminal {
     };
     Layout View() const;
     enum class Tone { Plain, Selected, Error };
-    enum class PageMode { Review, Confirm, Details, Error };
+    enum class PageMode { Review, Confirm, Error, Idle };
     void At(size_t row, size_t column);
     void Row(const Layout& view, size_t index, std::string_view text, Tone tone = Tone::Plain);
     void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
@@ -53,6 +53,7 @@ public:
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation);
     bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {});
     void Notice(std::string_view title, const ReviewLines& lines);
+    bool SessionEnded();
 };
 
 ReviewLines Wrap(const ReviewLines& lines, size_t columns);

@@ -58,18 +58,12 @@ std::string AddressPosition(Position position)
         + " (index " + std::to_string(position.index) + ")";
 }
 
-ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
+ReviewLines PolicyDetails(const Policy& policy, const Keys& keys)
 {
     const auto owned = policy.OwnedKeys(keys);
-    const bool standard = policy.IsDefault(keys);
     CTxDestination destination;
     Require(ExtractDestination(policy.Script(0, 0), destination), "Policy has no displayable receive address");
     ReviewLines lines{
-        "Check the spending rules and public keys for this wallet. They must match the wallet you intended to set up.", "",
-        "Network: " + NetworkName(Params().GetChainType()),
-        standard ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name(),
-        standard ? "Address type: " + AccountType(policy.KeyInformation()[0].origin[0] & 0x7fffffff) : "",
-        "Master fingerprint: " + HexStr(keys.RootFingerprint()),
         "Wallet ID: " + HexStr(policy.ID()),
         "", "Spending rules (exact policy):", policy.Template(),
     };
@@ -80,6 +74,21 @@ ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
     }
     lines.push_back("First receiving address (index 0):");
     lines.push_back(EncodeDestination(destination));
+    return lines;
+}
+
+ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
+{
+    const bool standard = policy.IsDefault(keys);
+    ReviewLines lines{
+        "Check the spending rules and public keys for this wallet. They must match the wallet you intended to set up.", "",
+        "Network: " + NetworkName(Params().GetChainType()),
+        standard ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name(),
+        standard ? "Address type: " + AccountType(policy.KeyInformation()[0].origin[0] & 0x7fffffff) : "",
+        "Master fingerprint: " + HexStr(keys.RootFingerprint()),
+    };
+    const auto details = PolicyDetails(policy, keys);
+    lines.insert(lines.end(), details.begin(), details.end());
     return lines;
 }
 

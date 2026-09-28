@@ -48,16 +48,22 @@ Insert the USB before turning the laptop on. Open its boot menu and select the
 The development image is unsigned, so Secure Boot must be disabled for UEFI boot.
 Thunder Den starts at network selection. Use test networks and test recovery words
 while the project is under development.
+The menu order is Bitcoin mainnet, Signet, Testnet4, Regtest and legacy testnet3.
+Mainnet is initially highlighted, so choose the test network explicitly.
 
 Use the arrow keys and Enter to choose an option, or press its number. Text size
 is selected automatically. The console uses a dark background and built-in
 bitmap fonts; the available screen resolution depends on the laptop's firmware.
-Recovery words and passphrases are hidden by default. Press Tab to show or hide
+Recovery words and passphrases are hidden by default. Press TAB to show or hide
 what you are entering. Leave the passphrase empty and press Enter if your wallet
 does not use one.
 During recovery-word entry, Up returns to the previous word and Backspace edits
-the current one. Empty Enter does nothing. In a details view, press `d` again to
-return to the summary. The final menu option ends the session and clears the keys.
+the current one. Empty Enter does nothing. Press `d` to switch between summary
+and details. Enter advances through the selected view and performs its action on
+the final page; Esc cancels the operation from either view.
+The final menu option ends the session and clears the keys. The completion screen
+stays open until Enter starts a fresh session. Turn the laptop off completely when
+finished rather than leaving it asleep.
 
 ## Build or test: which command do I need?
 

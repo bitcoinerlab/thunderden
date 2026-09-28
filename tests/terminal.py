@@ -160,6 +160,8 @@ p = Probe("input")
 p.wait(b"Secret: ")
 p.spaced(b"Secret:")
 assert p.rows()[2] == b"THUNDER DEN", "Missing top margin"
+assert list(p.rows().values()).index(b"Enter public test data") < list(p.rows().values()).index(b"Your passphrase is hidden as you type.")
+assert p.rows()[9] == b"Press TAB if you want to see what you are entering.", "TAB hint must follow the status on its own line"
 assert b"Press Enter to continue." not in p.all_text, "Redundant instruction in a text input"
 p.send(b" A Case  X\x7f \r")
 p.finish_secret(b" A Case   ")
@@ -223,6 +225,7 @@ assert b"A Case" not in p.all_text
 p.send(b"\t")
 p.wait(b"Your passphrase is visible as you type.")
 p.wait(b" A Case ")
+assert p.rows()[6] == b"Enter public test data" and p.rows()[9] == b"Press TAB to hide it.", "Visibility toggle overwrote the introduction"
 for visible in (False, True, False, True):
     p.send(b"\t")
     p.wait(b"Your passphrase is visible" if visible else b"Your passphrase is hidden")
@@ -250,28 +253,24 @@ p.spaced(b"Secret:")
 p.send(b"tiny\r")
 p.finish_secret(b"tiny")
 
-# Escape closes details once. A held key must not also cancel the parent review,
-# even after the keyboard's initial repeat delay or a queued burst of repeats.
+# Details share the primary action and cancel the whole operation with Escape.
 for cancel in (b"\x1b", b"\x03"):
     p = Probe("details", rows=12, columns=40)
     p.wait(b"d: Details")
     p.send(b"d")
     p.wait(b"Technical details")
-    p.send(cancel)
-    p.wait(b"Account summary")
-    time.sleep(0.55)
-    for _ in range(8):
-        p.send(cancel)
-        time.sleep(0.04)
-    assert p.process.poll() is None, "Held cancellation escaped the parent screen"
-    p.send(b"d")  # A different key deliberately starts another action.
-    p.wait(b"Technical details")
-    p.send(cancel)
-    p.wait(b"Account summary")
-    time.sleep(1.1)  # Releasing and pressing Escape again can cancel the parent.
+    p.wait(b"d: Summary")
     p.send(cancel)
     p.finish(2)
-print("PASS: arrow menus at narrow/normal/wide sizes, safe input sequences and held-cancel isolation between screens")
+
+p = Probe("details")
+p.enter(b"d: Details", b"d\r")  # Queued Enter cannot approve while changing views.
+p.wait(b"d: Summary")
+assert p.process.poll() is None, "Opening details consumed queued approval"
+assert b"Page 1/1" not in p.all_text and b"Enter: Back" not in p.all_text
+p.send(b"\r")
+p.finish(0)
+print("PASS: arrow menus, safe input sequences and shared details approval/cancellation")
 
 p = Probe("details-paged", rows=13)
 p.wait(b"Page 1/3")
@@ -279,14 +278,23 @@ p.send(b"n")
 p.wait(b"Page 2/3")
 assert re.search(rb"\x1b\[11;([6-9][0-9])H Page 2/3 ", p.all_text), "Pager is not right-aligned above the actions"
 p.send(b"d")
-p.wait(b"d/Esc: Back")
-assert b"Page 1/1" not in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Single-page details have a pager"
+p.wait(b"Page 1/3")
+p.wait(b"d: Summary")
 p.send(b"d")
 p.wait(b"Page 2/3")
 assert p.process.poll() is None, "Closing details approved the operation"
-p.send(b"\x1b")
-p.finish(2)
-print("PASS: details toggle returns to the same page and pagination stays separate from actions")
+p.send(b"d")
+p.wait(b"Page 1/3")
+for page in (2, 3):
+    p.send(b"\r")
+    p.wait(f"Page {page}/3".encode())
+    assert p.process.poll() is None, "Details bypassed the remaining review"
+p.send(b"n")
+p.wait(b"Page 3/3")
+assert p.process.poll() is None, "Next page approved the export"
+p.send(b"\r")
+p.finish(0)
+print("PASS: details preserve summary position and require full expanded review before approval")
 
 MNEMONIC = ["abandon"] * 11 + ["about"]
 
@@ -310,7 +318,20 @@ def account_export(p):
 # Exercise the actual application with a controlling tty. The test container has
 # no framebuffer; a failed display must return to the menu and preserve the seed
 # session, rather than prompt again or export through an alternate channel.
+for choice, network, coin in [(b"\r", b"Bitcoin mainnet", 0), (b"2", b"Signet", 1)]:
+    p = Probe(executable=sys.argv[2], controlling=True)
+    p.enter(b"5: Legacy testnet3", choice)
+    p.wait(network)
+    p.enter(b"4: End session (clear keys)", b"3")
+    p.wait(f"For example: m/84h/{coin}h/0h".encode())
+    p.enter(b"Path: ", b"\x1b")
+    p.enter(b"4: End session (clear keys)", b"4")
+    p.finish(0)
+
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
+p.wait(b"> 1: Bitcoin mainnet")
+p.wait(b"2: Signet")
+p.wait(b"3: Testnet4")
 p.wait(b"5: Legacy testnet3")
 for key in (b"\x1b", b"\x03"):
     for _ in range(5):
@@ -472,9 +493,14 @@ p.enter(b"Repeat passphrase: ", b" A Case\r")
 p.wait(b"Press Enter to continue.")
 assert b"Passphrases did not match" in p.all_text
 assert b"Page 1/1" not in p.all_text, "Single-page notices have a pager"
-p.send(b"n")
+p.send(b"\x1b")
 p.wait(b"Passphrase: ")
 p.spaced(b"Passphrase:")
+# Holding Escape after dismissing the error must not cancel the renewed entry.
+time.sleep(0.55)
+for _ in range(8):
+    p.send(b"\x1b")
+    time.sleep(0.04)
 p.send(b" A Case  ")
 p.send(b"\t")
 p.wait(b"Your passphrase is visible as you type.")
@@ -511,7 +537,7 @@ with tempfile.TemporaryDirectory() as temporary:
     p = Probe(str(launcher), executable="/bin/sh", controlling=True, rows=24, tty_output=True)
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
     pids, fingerprints = [], []
-    for words, passphrase, network in [(MNEMONIC, b"", b"4"), (["all"] * 12, b"TREZOR", b"1")]:
+    for words, passphrase, network in [(MNEMONIC, b"", b"4"), (["all"] * 12, b"TREZOR", b"3")]:
         p.wait(b"5: Legacy testnet3")
         pid, = children.read_text().split()
         assert pid not in pids, "Session reused the previous signer process"
@@ -529,20 +555,23 @@ with tempfile.TemporaryDirectory() as temporary:
         p.send(b"q")
         p.wait(b"4: End session (clear keys)")
         p.send(b"4")
-        p.wait(b"Session ended\r\nLoaded keys cleared.")
-        p.wait(b"You can now turn off the laptop.")
-        p.wait(b"Enter: Start a new session")
-        assert not children.read_text().strip(), "Completion appeared before the signer exited"
+        p.wait(b"Session ended")
+        p.wait(b"Thunder Den has cleared the recovery words")
+        p.wait(b"Press Enter to start a new session.")
+        p.spaced(b"Press Enter to start a new session.")
+        assert p.rows()[2] == b"THUNDER DEN", "Session-ended layout differs from the app"
         assert not Path(f"/proc/{pid}").exists(), "Old signer is still alive"
-        p.send(b"x")
+        viewer, = children.read_text().split()
+        assert viewer != pid and Path(f"/proc/{viewer}/cmdline").read_bytes().endswith(b"--session-ended\0"), "Completion is not a fresh keyless viewer"
+        p.send(b"x\x1b")
         time.sleep(0.05)
-        assert not children.read_text().strip(), "Session restarted without Enter"
+        assert children.read_text().split() == [viewer], "Session restarted without Enter"
         if len(pids) == 1:
             p.send(b"\r")
     assert fingerprints[0] != fingerprints[1], "New seed reused the old wallet"
     assert p.all_text.count(b"Your recovery phrase") == 2
     assert b"TREZOR" not in p.all_text
-    p.send(b"\x15\x04")  # Clear the pending line, then end input at the logout screen.
+    p.send(b"\x04")  # EOF exits the viewer without restarting the signer.
     p.wait(b"Signer stopped.")
     assert not children.read_text().strip(), "End of input restarted the signer"
     p.process.terminate()
@@ -551,7 +580,7 @@ with tempfile.TemporaryDirectory() as temporary:
     launcher.write_text(script.replace("/usr/bin/thunderden-signer", "/bin/false"))
     p = Probe(str(launcher), executable="/bin/sh", controlling=True, tty_output=True)
     p.wait(b"Signer stopped.")
-    assert b"Loaded keys cleared" not in p.all_text, "Failed signer reported successful cleanup"
+    assert b"Thunder Den has cleared" not in p.all_text, "Failed signer reported successful cleanup"
     p.process.terminate()
     p.finish(-signal.SIGTERM)
 print("PASS: logout waits for process exit, stays idle until Enter and starts fresh keys, passphrase and network")

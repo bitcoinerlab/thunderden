@@ -116,12 +116,25 @@ with (args.output / "qemu.log").open("wb") as log:
         time.sleep(0.5)
         key("ret")  # Account zero. The existing recovery-word session must remain.
         time.sleep(1)
-        key("ret")  # Show the descriptor again without re-entering recovery words.
+        key("d")
+        for _ in range(4):
+            key("right")  # Read the expanded fixture; Next cannot approve its last page.
+        screenshot("details-last.ppm")
+        key("ret")  # Show the descriptor directly from the last details page.
         time.sleep(2)
         screenshot("account-after-escape.ppm")
         subprocess.run(["docker", "compose", "run", "--rm", "-v", f"{args.output.resolve()}:/captures:ro",
                          "test", "/build/qr-image-probe", "/captures/account-after-escape.ppm"], check=True)
-        print(f"PASS: boot, arrow menus, full QR export and held-Escape session preservation; screenshots in {args.output}")
+        key("esc")
+        time.sleep(0.5)
+        key("4")  # End the signer process and show the keyless completion screen.
+        time.sleep(1)
+        screenshot("session-ended.ppm")
+        key("ret")
+        time.sleep(1)
+        screenshot("network-restarted.ppm")
+        assert (args.output / "network.ppm").read_bytes() == (args.output / "network-restarted.ppm").read_bytes(), "New session did not return to fresh network selection"
+        print(f"PASS: boot, QR export, held-Escape session preservation and logout/restart; screenshots in {args.output}")
         qmp("quit")
         process.wait(timeout=10)
         stream.close()

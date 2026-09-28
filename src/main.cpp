@@ -74,9 +74,9 @@ void Show(Terminal& terminal, const QRMessage& message)
 
 ChainType Network(Terminal& terminal)
 {
-    const int choice = terminal.Menu("Choose a Bitcoin network", {"Testnet4", "Bitcoin mainnet", "Signet", "Regtest", "Legacy testnet3"},
+    const int choice = terminal.Menu("Choose a Bitcoin network", {"Bitcoin mainnet", "Signet", "Testnet4", "Regtest", "Legacy testnet3"},
         "Welcome. Choose the same Bitcoin network as your wallet app. Mainnet uses real bitcoin; the others are for testing.", false);
-    constexpr ChainType networks[]{ChainType::TESTNET4, ChainType::MAIN, ChainType::SIGNET, ChainType::REGTEST, ChainType::TESTNET};
+    constexpr ChainType networks[]{ChainType::MAIN, ChainType::SIGNET, ChainType::TESTNET4, ChainType::REGTEST, ChainType::TESTNET};
     return networks[choice];
 }
 }
@@ -87,10 +87,16 @@ int main(int argc, char** argv)
         std::puts("Thunder Den: local keyboard, framebuffer and webcam signer. Run on a Linux console.");
         return 0;
     }
-    if (argc != 1) return 1;
+    const bool session_ended = argc == 2 && std::string_view(argv[1]) == "--session-ended";
+    if (argc != 1 && !session_ended) return 1;
     try {
         td::Terminal terminal;
         td::ConfigureConsole(terminal.FD());
+        if (session_ended) {
+            // The launcher starts this keyless viewer only after the old signer exits.
+            td::PrepareSigner();
+            return terminal.SessionEnded() ? 0 : 1;
+        }
         SelectParams(Network(terminal));
         terminal.SetNetwork(td::NetworkName(Params().GetChainType()));
         td::PrepareSigner(); // Before any recovery input or private key exists.
@@ -128,7 +134,7 @@ int main(int argc, char** argv)
                     const auto [purpose, account] = Account(terminal);
                     auto policy = td::DefaultPolicy(keys(), purpose, account);
                     const auto& info = policy.KeyInformation()[0];
-                    auto details = td::PolicyReview(policy, keys());
+                    auto details = td::PolicyDetails(policy, keys());
                     details.push_back("Full public descriptor:"); details.push_back(policy.DescriptorText());
                     if (terminal.Confirm("Share your wallet setup", {
                         "This shares the public information your wallet app needs to find your addresses and follow this account's activity.",
@@ -139,7 +145,7 @@ int main(int argc, char** argv)
                         Show(terminal, td::PublicDescriptor(policy));
                 } else if (choice == 2) {
                     const auto answer = terminal.Input("Choose a public key to share", {"Enter the derivation path provided by your wallet app.",
-                        "For example: m/48h/1h/0h/2h"}, "Path: ", 384);
+                        Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);
                     std::string path_text(answer.begin(), answer.end());
                     std::replace(path_text.begin(), path_text.end(), 'h', '\'');
                     std::vector<uint32_t> path;

@@ -241,13 +241,14 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     const bool word = secret && secret->word_number;
     if (secret) secret->previous = false;
     const auto hidden_hint = !secret ? ReviewLines{} : Wrap({word
-        ? "Your words are hidden as you type (****). Press Tab if you want to see the word you are entering."
-        : "Your passphrase is hidden as you type (****). Press Tab if you want to see what you are entering."}, view.width);
+        ? "Your words are hidden as you type." : "Your passphrase is hidden as you type.", word
+        ? "Press TAB if you want to see the word you are entering."
+        : "Press TAB if you want to see what you are entering."}, view.width);
     const auto visible_hint = !secret ? ReviewLines{} : Wrap({word
-        ? "You can see the word you are entering. Press Tab to hide it."
-        : "Your passphrase is visible as you type. Press Tab to hide it."}, view.width);
+        ? "You can see the word you are entering." : "Your passphrase is visible as you type.",
+        "Press TAB to hide it."}, view.width);
     const size_t hint_rows = std::max(hidden_hint.size(), visible_hint.size());
-    size_t input_row{}, overflow{};
+    size_t hint_row{}, input_row{}, overflow{};
     const auto erase = [&]() { At(input_row, view.left); Write("\033[2K\033[?25l"); };
     const auto draw = [&]() {
         auto text = Wrap(error.empty() ? introduction : ReviewLines{error}, view.width);
@@ -256,16 +257,17 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
                 error.empty() ? PageMode::Review : PageMode::Error)) throw Cancelled{};
             text.clear();
         }
-        auto lines = secret && secret->visible ? visible_hint : hidden_hint;
-        lines.resize(hint_rows);
+        auto lines = text;
         if (!text.empty() && secret) lines.emplace_back("");
-        const size_t text_row = lines.size();
-        lines.insert(lines.end(), text.begin(), text.end());
+        hint_row = lines.size();
+        const auto& hint = secret && secret->visible ? visible_hint : hidden_hint;
+        lines.insert(lines.end(), hint.begin(), hint.end());
+        lines.resize(hint_row + hint_rows);
         lines.emplace_back(""); // A blank row always separates instructions from input.
         Require(lines.size() < view.height, "Not enough room for the input field");
         Draw(view, title, lines, word ? std::string("Enter: Next   Backspace: Edit")
             + (secret->word_number > 1 ? "   Up: Previous word" : "") + "   Esc: Cancel" : "Enter: Continue   Esc: Cancel");
-        if (!error.empty()) for (size_t i = 0; i < text.size(); ++i) Row(view, text_row + i, text[i], Tone::Error);
+        if (!error.empty()) for (size_t i = 0; i < text.size(); ++i) Row(view, i, text[i], Tone::Error);
         input_row = view.body + lines.size();
         Flush();
     };
@@ -289,7 +291,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
         if (key == 9 && secret) {
             secret->visible = !secret->visible;
             const auto& hint = secret->visible ? visible_hint : hidden_hint;
-            for (size_t i = 0; i < hint_rows; ++i) Row(view, i, i < hint.size() ? hint[i] : "");
+            for (size_t i = 0; i < hint_rows; ++i) Row(view, hint_row + i, i < hint.size() ? hint[i] : "");
         } else {
             const bool previous = word && key == KEY_UP && secret->word_number > 1;
             if (key == '\r' || key == '\n' || previous) {
@@ -360,33 +362,45 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
 {
     const auto view = View();
     const auto wrapped = Wrap(lines, view.width);
+    auto expanded = details;
+    if (!expanded.empty()) {
+        // Details expand the same review, including its required summary context.
+        expanded.insert(expanded.begin(), "");
+        expanded.insert(expanded.begin(), lines.begin(), lines.end());
+        expanded = Wrap(expanded, view.width);
+    }
     const auto next = Wrap({"Press Enter to read the next page."}, view.width);
     const auto finish = Wrap({"Press Enter to " + std::string(action) + "."}, view.width);
     const size_t reserved = std::max(next.size(), finish.size()) + 1;
     Require(view.height > reserved, "Not enough room for this review");
     const size_t height = view.height - reserved;
-    const size_t pages = std::max<size_t>(1, (wrapped.size() + height - 1) / height);
-    size_t page = 0;
+    size_t page_by_view[2]{};
+    bool detailed = false;
     while (true) {
         Require(View() == view, "Display changed during review. Start the review again.");
-        const auto first = std::min(page * height, wrapped.size());
-        const auto end = std::min(first + height, wrapped.size());
-        ReviewLines visible(wrapped.begin() + first, wrapped.begin() + end);
+        const auto& content = detailed ? expanded : wrapped;
+        auto& page = page_by_view[detailed];
+        const size_t pages = std::max<size_t>(1, (content.size() + height - 1) / height);
+        const auto first = std::min(page * height, content.size());
+        const auto end = std::min(first + height, content.size());
+        ReviewLines visible(content.begin() + first, content.begin() + end);
         const bool last = page + 1 == pages;
         visible.emplace_back("");
         const auto& instruction = last ? finish : next;
         visible.insert(visible.end(), instruction.begin(), instruction.end());
         const std::string pager = pages > 1 ? "Page " + std::to_string(page + 1) + "/" + std::to_string(pages) : "";
-        std::string footer = (last ? "Enter: " + (mode == PageMode::Details ? std::string("Back") : std::string(action)) : "Right/n/Enter: Next")
-            + (page ? "  Left/b: Back" : "") + (!details.empty() ? "  d: Details" : "")
-            + (mode == PageMode::Details ? "  d/Esc: Back" : "  Esc: Cancel");
+        std::string footer = (last ? "Enter: " + std::string(action) : "Right/n/Enter: Next")
+            + (page ? "  Left/b: Back" : "") + (details.empty() ? "" : detailed ? "  d: Summary" : "  d: Details")
+            + (mode == PageMode::Idle ? "" : "  Esc: Cancel");
         Flush();
         Draw(view, title, visible, footer, -1, pager);
         if (mode == PageMode::Error) for (size_t i = 0; i < end - first; ++i) Row(view, i, visible[i], Tone::Error);
         const int key = Key();
         Require(View() == view, "Display changed during review. Start the review again.");
-        if (key == 27 || key == 3 || key == 'q' || (key == 'd' && mode == PageMode::Details)) return false;
-        if (key == 'd' && !details.empty()) Pages(title, details, "return to the summary", {}, PageMode::Details);
+        if (mode == PageMode::Idle) {
+            if (key == 4) return false; // EOF stops the launcher rather than starting a session.
+        } else if (key == 27 || key == 3 || key == 'q') return false;
+        if (key == 'd' && !details.empty()) { detailed = !detailed; continue; }
         if ((key == 'b' || key == KEY_LEFT) && page) --page;
         if (key == 'n' || key == KEY_RIGHT || key == '\r' || key == '\n') {
             if (!last) ++page;
@@ -413,5 +427,13 @@ void Terminal::Notice(std::string_view title, const ReviewLines& lines)
 bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details)
 {
     return Pages(title, lines, action, details, PageMode::Confirm);
+}
+
+bool Terminal::SessionEnded()
+{
+    return Pages("Session ended", {
+        "Thunder Den has cleared the recovery words, passphrase and private keys it was holding in memory.", "",
+        "If you have finished, turn off the laptop completely rather than leaving it asleep.", "",
+        "You will need your recovery words again to start a new session."}, "start a new session", {}, PageMode::Idle);
 }
 }

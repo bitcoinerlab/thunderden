@@ -104,8 +104,8 @@ native ARM64 test execution remains unverified.
 - The actual application retains one seed session across operations and recovers
   to its menu when framebuffer display is unavailable.
 - Normal logout displays its key-clear confirmation only after the signer exits.
-  The launcher waits for Enter before starting a fresh process; a new mnemonic,
-  passphrase and network produce a new account. Failed exits remain stopped.
+  A fresh keyless viewer waits for Enter before starting a new signer; a new
+  mnemonic, passphrase and network produce a new account. Failed exits remain stopped.
 - Eight main/test-network public `hdkey` exports decoded/re-encoded by `urtypes`
   with updated registry tags and matching xpubs, origins and fingerprints. Full
   `output-descriptor` CBOR maps carry receive/change descriptors with checksums.
@@ -183,21 +183,23 @@ installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
 Physical HP validation remains outstanding.
 
 The current console image built on 2026-09-27 from `feature/console-refresh`
-includes uncommitted consolidation after `a5f0d0f`. Its application version is
+includes uncommitted UX refinements after `3b6f6a4`. Its application version is
 `0.0.1` and its 67,108,864-byte image SHA256 is:
 
 ```text
-d24a2e4e164665603be2a53aadd702474a07d112f4578a45b3c345771ab48019
+80103269ba8d951a3250c5fc20e9cbac81c6927069a46afbceba567c5a134fda
 ```
 
-All eleven native suites passed. Coverage includes the shared CBOR reader,
-standard-account address labels, full review traversal, secret-input editing,
-immediate Tab toggles, Up draft preservation and final-page resize rejection.
+All eleven native suites passed. Coverage includes hint placement and TAB
+toggles, complete expanded review before approval, details cancellation,
+mainnet-first network selection and process exit before the keyless completion
+screen. Secret-input editing, typed consent and resize rejection remain covered.
 QEMU boot/export tests passed for BIOS and UEFI at 1280x800, BIOS at 640x480 and
 UEFI at 2560x1600. Each run used public test words, corrected an invalid word,
 returned from details with `d`, decoded the descriptor QR and exported again
-after holding Escape without re-entering recovery words. Kernel/content checks,
-checksum verification and repeat assembly passed.
+directly from details after holding Escape without re-entering recovery words.
+After logout, Enter returned to a pixel-identical fresh network menu.
+Kernel/content checks, checksum verification and repeat assembly passed.
 The full clean-build comparison and physical-hardware checks have not been
 repeated for this snapshot.
 

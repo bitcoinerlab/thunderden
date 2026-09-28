@@ -54,15 +54,16 @@ release after key derivation. The master private key, chain code and wallet-poli
 registration key remain available for the session.
 
 **End session (clear keys)** destroys the key session and exits the signer normally.
-Only after that process exits does the launcher display **Session ended / Loaded
-keys cleared**. The laptop stays on at this screen. The user can turn it off or
-press Enter to launch a fresh signer at network selection. Each new session
-requires recovery input when first needed. This cleanup clears managed secret
-buffers; it does not guarantee erasure of every trace in physical memory.
+Only after that process exits does the launcher invoke `--session-ended` in a
+fresh process. This mode drops privileges and reuses the console renderer without
+creating keys. It explains the cleanup and recommends a full shutdown when done.
+Enter launches another fresh signer at network selection; each new session needs
+recovery input when first used. EOF stops the launcher. This cleanup clears managed
+secret buffers; it does not guarantee erasure of every trace in physical memory.
 
 Only menu option **4** ends the session. Esc and Ctrl-C cancel operations but do
-nothing at network selection or the main menu, so held cancellation keys cannot
-clear the session after returning from an operation.
+nothing at network selection, the main menu or the completion screen, so held
+cancellation keys cannot clear a session or start another one.
 
 ## Wallets
 
@@ -164,17 +165,21 @@ input is discarded at screen/approval boundaries, and terminal resizing aborts
 the review. Registration uses a separate `REGISTER` confirmation. Public exports
 use a short summary with optional details and Enter to show the QR. A sentence
 above the controls explains when to press Enter, separated from the review by
-a blank line. Recovery words and passphrases start hidden. Tab shows or hides the
-active entry, with an explanatory sentence near the heading. Word visibility
+a blank line. Recovery words and passphrases start hidden, with one asterisk per
+character in the visible part of the field. The visibility status follows the
+explanation, with its TAB instruction on the next line above the field. Word visibility
 persists within recovery entry; passphrase entry and confirmation each start
 hidden. Both use secure buffers, and rejected words are cleared instead of
 restoring an earlier value. A blank line precedes every input field.
-Tab toggles immediately for each key event. Up preserves a recovery-word draft
+TAB toggles immediately for each key event. Up preserves a recovery-word draft
 without accepting it; only Enter on a valid, non-empty word moves forwards.
 Validation errors use the console's error color as well as a text message.
 Single-page reviews omit the pager; multi-page counters appear at the right of
 the bottom divider, separately from the actions. `d` opens details and returns
-to the same summary page without approving the operation.
+to the same summary page without approving the operation. Details expand the
+summary rather than replace its required context. Enter advances through every
+page of the selected view before its final action; Esc cancels the operation from
+either view. Both views share one navigation loop.
 
 The console uses a dark palette, an 80-column reading area and word-wrapped
 explanations. Menus accept arrows and Enter alongside numbered shortcuts. Moving
