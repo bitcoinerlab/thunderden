@@ -173,6 +173,7 @@ void ScriptFamilies(const td::Keys& alice, const td::Keys& bob, const CScript& d
         Check(signature_calls == calls_before, "Signing occurred during review construction");
         const auto& facts = review.Review();
         Check(facts.policy_template == test.text && facts.signer == alice.RootFingerprint(), "Incorrect wallet identity");
+        Check(facts.policy_descriptor == wallet.Make().DescriptorText(), "Review lost the full public descriptor");
         Check(facts.default_account.has_value() == wallet.name.empty(), "Default account identity missing");
         Check(facts.fee == 1000 && facts.recognized_inputs == COIN && facts.recognized_outputs == 39999000,
             "Incorrect review amounts");

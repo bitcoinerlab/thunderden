@@ -79,6 +79,9 @@ During recovery-word entry, Up returns to the previous word and Backspace edits
 the current one. Empty Enter does nothing. Press `d` to switch between summary
 and details. Enter advances through the selected view and performs its action on
 the final page; Esc cancels the operation from either view.
+Address checks, registration and signing show the wallet ID and full public
+descriptor in Details. Registration requires reviewing the spending rules and
+cosigner keys before typing `REGISTER`; signing requires typing `SIGN` after review.
 The final menu option ends the session and clears the keys. The completion screen
 stays open until Enter starts a fresh session. Turn the laptop off completely when
 finished rather than leaving it asleep.

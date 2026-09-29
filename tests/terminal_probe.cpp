@@ -35,7 +35,10 @@ int main(int argc, char** argv)
         td::ReviewLines lines;
         for (int i = 0; i < 11; ++i) lines.push_back("Review field " + std::to_string(i));
         lines.push_back(std::string(158, 'x') + "ADDRESS-END");
-        const bool approved = terminal.Approve("Approval test", lines, "SIGN");
+        td::ReviewLines details;
+        if (argc == 2 && std::string_view(argv[1]) == "approve-details")
+            details = {"Wallet ID: " + std::string(64, 'a'), "Full public descriptor:", std::string(158, 'y') + "DESCRIPTOR-END"};
+        const bool approved = terminal.Approve("Approval test", lines, "SIGN", details);
         std::puts(approved ? "APPROVED" : "DECLINED");
         return approved ? 0 : 2;
     } catch (const td::Cancelled&) { return 2; }

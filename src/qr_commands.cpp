@@ -23,6 +23,13 @@ bool Approve(const std::function<bool(const ReviewLines&)>& callback, const Revi
     Require(bool(callback), "Missing local approval");
     return callback(lines);
 }
+
+bool Approve(const std::function<bool(const ReviewLines&, const ReviewLines&)>& callback,
+    const ReviewLines& lines, const ReviewLines& details)
+{
+    Require(bool(callback), "Missing local approval");
+    return callback(lines, details);
+}
 }
 
 QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve)
@@ -69,7 +76,8 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
                 in.End();
                 Require(!policy.Name().empty() && !policy.OwnedKeys(keys).empty(), "Wallet is not owned");
                 const auto wallet_id = policy.ID();
-                if (!Approve(approve.register_wallet, PolicyReview(policy, keys))) status = 1;
+                if (!Approve(approve.register_wallet, PolicyReview(policy, keys), {
+                    "Wallet ID: " + HexStr(wallet_id), "", "Full public descriptor:", policy.DescriptorText()})) status = 1;
                 if (!status) {
                     body.Array(2); body.Bytes(wallet_id); body.Bytes(keys.RegistrationTag(wallet_id));
                 }
@@ -85,7 +93,8 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
                     if (!Approve(approve.address, {"Your wallet app is asking you to check this address. Compare the complete address with the one shown in your wallet app.", "",
                         "Network: " + NetworkName(chain),
                         policy.IsDefault(keys) ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name(),
-                        "Wallet ID: " + HexStr(policy.ID()), AddressPosition({static_cast<unsigned>(branch), static_cast<uint32_t>(index)}), address})) status = 1;
+                        AddressPosition({static_cast<unsigned>(branch), static_cast<uint32_t>(index)}), address},
+                        PolicyDetails(policy, keys))) status = 1;
                     body.Array(1); body.Text(address);
                 } else {
                     const auto psbt = in.Bytes(ReviewedTransaction::MAX_PSBT_BYTES);

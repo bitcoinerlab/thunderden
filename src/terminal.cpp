@@ -409,9 +409,9 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
     }
 }
 
-bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation)
+bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details)
 {
-    if (!Pages(title, lines, "continue", {}, PageMode::Review)) return false;
+    if (!Pages(title, lines, "continue", details, PageMode::Review)) return false;
     try {
         const auto answer = Input(title, {"You have reached the end of this review.",
             "Confirm only if the details match what you intended."}, "Type " + std::string(confirmation) + " then Enter: ", 32);

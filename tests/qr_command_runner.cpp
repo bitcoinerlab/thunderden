@@ -104,7 +104,7 @@ unsigned Status(const td::QRMessage& response)
 void Tests(const td::Keys& alice, const td::Keys& bob)
 {
     const auto allow = [](const auto&) { return true; };
-    const auto deny = [](const auto&) { return false; };
+    const auto deny = [](const auto&...) { return false; };
     auto policy = Wallet(alice, bob);
     td::Require(HexStr(policy.ID()) == "d4a3cc4c6b38a893fa0d41c51edfd6503e41354ded8739bfa308ef7e63ca573b", "Wallet ID vector changed");
     td::Require(HexStr(alice.RegistrationTag(policy.ID())) == "7015c6bbdd62f432537186226d3cdc9370248052db92fb02574145a40c7d7f3f", "Alice proof vector changed");
@@ -117,7 +117,7 @@ void Tests(const td::Keys& alice, const td::Keys& bob)
         req.Bytes({reinterpret_cast<const uint8_t*>(raw.data()), raw.size()});
         td::Require(Status(td::HandleQRRequest({"bytes", td::CborBytes(req.data)}, alice, {deny, deny, deny, deny})) == 1,
             "Refusal did not return a refusal");
-        const auto unexpected = [](const auto&) { throw std::runtime_error("Wrong seed reached approval"); return true; };
+        const auto unexpected = [](const auto&...) { throw std::runtime_error("Wrong seed reached approval"); return true; };
         td::Require(Status(td::HandleQRRequest({"bytes", td::CborBytes(req.data)}, bob, {unexpected, unexpected, unexpected, unexpected})) == 2,
             "Another cosigner's proof accepted");
         auto first = td::ReviewedTransaction(Wallet(alice, bob), alice, alice.RegistrationTag(policy.ID()), raw).Sign(alice, allow);
@@ -140,7 +140,7 @@ void Tests(const td::Keys& alice, const td::Keys& bob)
     Verify(Decode(signed_refund->psbt));
     auto req = Request(2); req.Array(1); Policy(req, policy);
     size_t approvals = 0;
-    const auto spy = [&](const auto&) { ++approvals; return true; };
+    const auto spy = [&](const auto&...) { ++approvals; return true; };
     const td::QRApproval callbacks{spy, spy, spy, spy};
     for (size_t length = 0; length < req.data.size(); ++length) {
         auto raw = req.data; raw.resize(length);
@@ -177,7 +177,7 @@ void Fixtures(const td::Keys& alice, const td::Keys& bob)
             request.Bytes(signer->RegistrationTag(policy.ID()));
             request.Bytes({reinterpret_cast<const uint8_t*>(input->data()), input->size()});
             const td::QRMessage message{"bytes", td::CborBytes(request.data)};
-            const auto allow = [](const auto&) { return true; };
+            const auto allow = [](const auto&...) { return true; };
             const auto reply = td::HandleQRRequest(message, *signer, {allow, allow, allow, allow});
             row.pushKV(std::string(name) + "_request_bytes", message.cbor.size());
             row.pushKV(std::string(name) + "_reply_bytes", reply.cbor.size());
@@ -216,7 +216,7 @@ int main(int argc, char** argv)
         const bool qr = mode == "--qr-alice" || mode == "--qr-bob";
         td::Require(qr || mode == "--alice" || mode == "--bob" || mode == "--decline", "Unknown public-fixture mode");
         const auto& keys = mode == "--bob" || mode == "--qr-bob" ? bob : alice;
-        const auto approve = [&](const auto&) { return mode != "--decline"; };
+        const auto approve = [&](const auto&...) { return mode != "--decline"; };
         td::URReceiver receiver;
         std::string line;
         while (std::getline(std::cin, line)) {

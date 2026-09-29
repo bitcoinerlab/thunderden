@@ -134,8 +134,7 @@ int main(int argc, char** argv)
                     const auto [purpose, account] = Account(terminal);
                     auto policy = td::DefaultPolicy(keys(), purpose, account);
                     const auto& info = policy.KeyInformation()[0];
-                    auto details = td::PolicyDetails(policy, keys());
-                    details.push_back("Full public descriptor:"); details.push_back(policy.DescriptorText());
+                    const auto details = td::PolicyDetails(policy, keys());
                     if (terminal.Confirm("Share your wallet setup", {
                         "This shares the public information your wallet app needs to find your addresses and follow this account's activity.",
                         "It contains no private keys. Only share it with a wallet app you trust.", "",
@@ -158,7 +157,7 @@ int main(int argc, char** argv)
                     const auto message = Scan(terminal);
                     std::optional<td::QRMessage> response;
                     const auto approve = [&](const td::TransactionReview& review) {
-                        return terminal.Approve("Review transaction", td::TransactionLines(review), "SIGN");
+                        return terminal.Approve("Review transaction", td::TransactionLines(review), "SIGN", td::TransactionDetails(review));
                     };
                     if (message.type == "crypto-psbt") {
                         const auto bytes = td::UnwrapBytes(message.cbor);
@@ -172,8 +171,8 @@ int main(int argc, char** argv)
                     } else {
                         response = td::HandleQRRequest(message, keys(), {
                             [&](const auto& lines) { return terminal.Confirm("Share a public key (xpub)", lines, "show the QR code"); },
-                            [&](const auto& lines) { return terminal.Approve("Confirm wallet spending rules", lines, "REGISTER"); },
-                            [&](const auto& lines) { return terminal.Confirm("Check your wallet's address", lines, "confirm this address"); }, approve});
+                            [&](const auto& lines, const auto& details) { return terminal.Approve("Confirm wallet spending rules", lines, "REGISTER", details); },
+                            [&](const auto& lines, const auto& details) { return terminal.Confirm("Check your wallet's address", lines, "confirm this address", details); }, approve});
                     }
                     if (response) Show(terminal, *response);
                 }

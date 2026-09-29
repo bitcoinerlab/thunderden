@@ -29,6 +29,7 @@ struct TransactionReview {
     Digest policy_id;
     std::string policy_name;
     std::string policy_template;
+    std::string policy_descriptor;
     Fingerprint signer;
     std::optional<Path> default_account;
     ChainType network;

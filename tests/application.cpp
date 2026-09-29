@@ -7,6 +7,7 @@
 #include <chainparams.h>
 #include <key_io.h>
 #include <linux/videodev2.h>
+#include <script/solver.h>
 #include <streams.h>
 #include <univalue.h>
 #include <util/strencodings.h>
@@ -18,6 +19,10 @@ namespace {
 const std::string MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 auto Bytes(std::string_view s) { return std::span(reinterpret_cast<const uint8_t*>(s.data()), s.size()); }
 void Check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+bool Contains(const td::ReviewLines& lines, std::string_view text)
+{
+    return std::find(lines.begin(), lines.end(), text) != lines.end();
+}
 void Reject(const std::function<void()>& operation)
 {
     try { operation(); }
@@ -62,21 +67,33 @@ void Registration(const td::Keys& keys)
         auto request = Envelope(standard, 3);
         request.Bytes(td::Digest{}); request.UInt(0); request.UInt(7);
         bool displayed = false;
-        Check(Status(td::HandleQRRequest(Message(request.data), keys, {{}, {}, [&](const auto& address) {
+        Check(Status(td::HandleQRRequest(Message(request.data), keys, {{}, {}, [&](const auto& address, const auto& details) {
             displayed = std::find(address.begin(), address.end(), "Account: " + std::to_string(account)) != address.end();
+            Check(!Contains(address, "Wallet ID: " + HexStr(standard.ID())), "Address summary exposes the wallet ID");
+            Check(Contains(details, "Wallet ID: " + HexStr(standard.ID())) && Contains(details, standard.DescriptorText()),
+                "Address details lost the wallet ID or complete descriptor");
             return true;
         }, {}})) == 0 && displayed, "Address review lost the standard account number");
     }
     auto base = td::DefaultPolicy(keys, 84, 0);
-    td::Policy policy("Savings", base.Template(), {base.KeyInformation()[0].text}, false);
+    td::Keys cosigner(Bytes(MNEMONIC), Bytes("cosigner"));
+    const auto cosigner_key = td::DefaultPolicy(cosigner, 84, 0).KeyInformation()[0].text;
+    td::Policy policy("Savings", "wsh(sortedmulti(2,@0/**,@1/**))", {base.KeyInformation()[0].text, cosigner_key}, false);
     auto root = Envelope(policy, 2);
     bool called = false;
-    Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines) { called = !lines.empty(); return false; }, {}, {}})) == 1,
+    Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines, const auto&) { called = !lines.empty(); return false; }, {}, {}})) == 1,
         "Declined registration exported proof");
     Check(called, "Approval was not requested");
     const auto id = policy.ID();
-    auto response = td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines) {
+    auto response = td::HandleQRRequest(Message(root.data), keys, {{}, [&](const auto& lines, const auto& details) {
         Check(std::find(lines.begin(), lines.end(), "Wallet: Savings") != lines.end(), "Wrong displayed policy");
+        Check(!Contains(lines, "Wallet ID: " + HexStr(id)), "Registration summary exposes the wallet ID");
+        Check(Contains(lines, policy.Template()), "Registration rules became optional");
+        for (const auto& key : policy.KeyInformation()) Check(Contains(lines, key.text), "Registration key became optional");
+        Check(Contains(lines, "Key 0 - verified local key:") && Contains(lines, "Key 1 - external key:"),
+            "Registration lost verified key ownership");
+        Check(Contains(details, "Wallet ID: " + HexStr(id)) && Contains(details, policy.DescriptorText()),
+            "Registration details lost the wallet ID or complete descriptor");
         return true;
     }, {}, {}});
     const auto payload = td::UnwrapBytes(response.cbor);
@@ -85,8 +102,29 @@ void Registration(const td::Keys& keys)
     Check(HexStr(reply.Bytes(32)) == HexStr(id) && HexStr(reply.Bytes(32)) == HexStr(keys.RegistrationTag(id)),
         "Proof did not bind to approved policy");
     reply.End();
+    CTxDestination destination;
+    Check(ExtractDestination(policy.Script(1, 7), destination), "Address fixture has no destination");
+    auto address_request = Envelope(policy, 3);
+    address_request.Bytes(keys.RegistrationTag(id)); address_request.UInt(1); address_request.UInt(7);
+    for (const bool accept : {false, true}) {
+        Check(Status(td::HandleQRRequest(Message(address_request.data), keys, {{}, {}, [&](const auto& lines, const auto& details) {
+            Check(Contains(lines, "Wallet: Savings") && Contains(lines, "Network: Regtest")
+                && Contains(lines, "Change address (index 7)") && Contains(lines, EncodeDestination(destination)),
+                "Address summary lost the wallet, network, position or full address");
+            Check(!Contains(lines, "Wallet ID: " + HexStr(id)) && !Contains(lines, policy.DescriptorText()),
+                "Technical wallet identity belongs in address details");
+            Check(Contains(details, "Wallet ID: " + HexStr(id)) && Contains(details, policy.DescriptorText())
+                && Contains(details, policy.Template()), "Incomplete address policy details");
+            for (const auto& key : policy.KeyInformation()) Check(Contains(details, key.text), "Address details lost a policy key");
+            return accept;
+        }, {}})) == (accept ? 0U : 1U), "Address consent was not honored");
+    }
     td::Keys other(Bytes(MNEMONIC), Bytes("another seed"));
-    const td::QRApproval never{{}, [](const auto&) { throw std::runtime_error("Unexpected approval"); return true; }, {}, {}};
+    const auto unexpected = [](const auto&...) { throw std::runtime_error("Unexpected approval"); return true; };
+    const td::QRApproval never{{}, unexpected, unexpected, {}};
+    address_request = Envelope(policy, 3);
+    address_request.Bytes(td::Digest{}); address_request.UInt(1); address_request.UInt(7);
+    Check(Status(td::HandleQRRequest(Message(address_request.data), keys, never)) == 2, "Invalid proof reached address approval");
     Check(Status(td::HandleQRRequest(Message(Envelope(policy, 2).data), other, never)) == 2, "Unowned wallet approved");
     // A claimed matching fingerprint is not ownership: the derived xpub must match.
     auto foreign_key = td::DefaultPolicy(other, 84, 0).KeyInformation()[0].text;
@@ -142,6 +180,12 @@ void Signing(const td::Keys& keys)
     Check(Status(td::HandleQRRequest(message, keys, {{}, {}, {}, [](const auto&) { return false; }})) == 1, "Declined transaction exported signature");
     const auto signed_message = td::HandleQRRequest(message, keys, {{}, {}, {}, [&](const auto& review) {
         const auto lines = td::TransactionLines(review);
+        const auto details = td::TransactionDetails(review);
+        Check(!Contains(lines, "Wallet ID: " + HexStr(policy.ID())) && !Contains(lines, "Policy: " + policy.Template()),
+            "Technical wallet identity belongs in signing details");
+        Check(Contains(lines, "Wallet: Savings") && Contains(lines, "Network: Regtest"), "Signing lost wallet context");
+        Check(Contains(details, "Wallet ID: " + HexStr(policy.ID())) && Contains(details, policy.Template())
+            && Contains(details, policy.DescriptorText()), "Signing details lost the authenticated wallet definition");
         Check(std::find(lines.begin(), lines.end(), "Transaction fee: 0.00001 BTC (1000 sats)") != lines.end(), "Fee missing from review");
         Check(std::find(lines.begin(), lines.end(), "VERIFIED CHANGE") != lines.end(), "Change classification missing");
         Check(std::find(lines.begin(), lines.end(), "Change address (index 1)") != lines.end(), "Change position missing");

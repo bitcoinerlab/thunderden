@@ -12,4 +12,5 @@ ReviewLines PublicKeyReview(const Keys& keys, const Path& path);
 ReviewLines PolicyDetails(const Policy& policy, const Keys& keys);
 ReviewLines PolicyReview(const Policy& policy, const Keys& keys);
 ReviewLines TransactionLines(const TransactionReview& review);
+ReviewLines TransactionDetails(const TransactionReview& review);
 }

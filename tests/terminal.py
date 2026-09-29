@@ -296,6 +296,44 @@ p.send(b"\r")
 p.finish(0)
 print("PASS: details preserve summary position and require full expanded review before approval")
 
+# Signing/registration keep typed approval after either the required review or
+# its expanded details. Switching views must not skip pages or consume consent.
+for expanded in (False, True):
+    p = Probe("approve-details", rows=13)
+    p.enter(b"Page 1/4", b"n")
+    p.enter(b"Page 2/4", b"dSIGN\r")
+    p.wait(b"d: Summary")
+    total = int(re.findall(rb"Page 1/(\d+)", p.all_text)[-1])
+    assert total > 4, "Wallet details did not expand the review"
+    assert p.process.poll() is None, "Opening details consumed queued approval"
+    p.enter(b"Esc: Cancel", b"d")
+    p.wait(b"Page 2/4")
+    if expanded:
+        p.send(b"d")
+        p.wait(f"Page 1/{total}".encode())
+        first = 1
+    else:
+        first, total = 2, 4
+    for page in range(first + 1, total + 1):
+        p.send(b"\r")
+        p.wait(f"Page {page}/{total}".encode())
+        assert p.process.poll() is None, "Details bypassed the remaining approval review"
+    assert b"ADDRESS-END" in p.all_text, "Approval skipped the complete address"
+    if expanded:
+        assert b"DESCRIPTOR-END" in p.all_text, "Details truncated the full descriptor"
+    p.send(b"nSIGN\r")
+    p.wait(b"then Enter: ")
+    time.sleep(0.05)
+    assert p.process.poll() is None, "Leaving details consumed queued approval"
+    p.send(b"SIGN\r")
+    p.finish(0)
+
+p = Probe("approve-details", rows=13)
+p.enter(b"d: Details", b"d")
+p.enter(b"d: Summary", b"\x1b")
+p.finish(2)
+print("PASS: approval details preserve required pages, complete values, typed consent and cancellation")
+
 MNEMONIC = ["abandon"] * 11 + ["about"]
 
 

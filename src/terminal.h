@@ -50,7 +50,7 @@ public:
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
         size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {});
     SecretBytes Mnemonic();
-    bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation);
+    bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {});
     bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {});
     void Notice(std::string_view title, const ReviewLines& lines);
     bool SessionEnded();

@@ -58,15 +58,13 @@ std::string AddressPosition(Position position)
         + " (index " + std::to_string(position.index) + ")";
 }
 
-ReviewLines PolicyDetails(const Policy& policy, const Keys& keys)
+namespace {
+ReviewLines PolicyRules(const Policy& policy, const Keys& keys)
 {
     const auto owned = policy.OwnedKeys(keys);
     CTxDestination destination;
     Require(ExtractDestination(policy.Script(0, 0), destination), "Policy has no displayable receive address");
-    ReviewLines lines{
-        "Wallet ID: " + HexStr(policy.ID()),
-        "", "Spending rules (exact policy):", policy.Template(),
-    };
+    ReviewLines lines{"Spending rules (exact policy):", policy.Template()};
     for (size_t i = 0; i < policy.KeyInformation().size(); ++i) {
         lines.push_back("Key " + std::to_string(i) + (std::find(owned.begin(), owned.end(), i) != owned.end()
             ? " - verified local key:" : " - external key:"));
@@ -74,6 +72,15 @@ ReviewLines PolicyDetails(const Policy& policy, const Keys& keys)
     }
     lines.push_back("First receiving address (index 0):");
     lines.push_back(EncodeDestination(destination));
+    return lines;
+}
+}
+
+ReviewLines PolicyDetails(const Policy& policy, const Keys& keys)
+{
+    auto lines = PolicyRules(policy, keys);
+    lines.insert(lines.begin(), {"Wallet ID: " + HexStr(policy.ID()), ""});
+    lines.insert(lines.end(), {"", "Full public descriptor:", policy.DescriptorText()});
     return lines;
 }
 
@@ -87,8 +94,8 @@ ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
         standard ? "Address type: " + AccountType(policy.KeyInformation()[0].origin[0] & 0x7fffffff) : "",
         "Master fingerprint: " + HexStr(keys.RootFingerprint()),
     };
-    const auto details = PolicyDetails(policy, keys);
-    lines.insert(lines.end(), details.begin(), details.end());
+    const auto rules = PolicyRules(policy, keys);
+    lines.insert(lines.end(), rules.begin(), rules.end());
     return lines;
 }
 
@@ -129,8 +136,6 @@ ReviewLines TransactionLines(const TransactionReview& review)
     lines.push_back("");
     lines.push_back("--- Wallet and transaction details ---");
     lines.push_back("Master fingerprint: " + HexStr(review.signer));
-    lines.push_back("Wallet ID: " + HexStr(review.policy_id));
-    lines.push_back("Policy: " + review.policy_template);
     if (review.default_account) lines.push_back("Account path: " + PathText(*review.default_account));
     lines.push_back("Transaction version: " + std::to_string(review.version));
     lines.push_back("Locktime: " + std::to_string(review.locktime)
@@ -153,5 +158,14 @@ ReviewLines TransactionLines(const TransactionReview& review)
     lines.push_back("");
     lines.push_back("Signing returns your approval to the wallet app. It does not broadcast the transaction or confirm that payment has been made.");
     return lines;
+}
+
+ReviewLines TransactionDetails(const TransactionReview& review)
+{
+    return {
+        "Wallet ID: " + HexStr(review.policy_id),
+        "", "Spending rules (exact policy):", review.policy_template,
+        "", "Full public descriptor:", review.policy_descriptor,
+    };
 }
 }

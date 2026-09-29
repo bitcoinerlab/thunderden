@@ -137,6 +137,7 @@ ReviewedTransaction::ReviewedTransaction(Policy policy, const Keys& session,
     review_.policy_id = policy_.ID();
     review_.policy_name = policy_.Name();
     review_.policy_template = policy_.Template();
+    review_.policy_descriptor = policy_.DescriptorText();
     review_.signer = session.RootFingerprint();
     if (policy_.IsDefault(session)) review_.default_account = policy_.KeyInformation()[0].origin;
     review_.network = Params().GetChainType();
