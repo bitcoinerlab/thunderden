@@ -1,16 +1,16 @@
 # Implementation status
 
-As of 2026-09-28, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-09-29, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream.
 
-The QR bridge is published on npm as version `0.1.1`. The first USB image is
+The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.1`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.1),
-with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
-write/read-back verification passed. Physical-hardware validation and final
-release verification remain outstanding.
+[`v0.0.1-preview.2`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.2),
+with its checksum and installed-file inventory. BIOS/UEFI boot checks passed for
+this image. Physical-hardware validation and final release verification remain
+outstanding.
 Current executable sizes refer to the latest recorded build below.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
@@ -59,7 +59,9 @@ Thunder Den support on `master` at commit `85e7681f`. It uses
 [our async-hwi fork](https://github.com/bitcoinerlab/wizardsardine-async-hwi), pinned
 to commit `dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34`. The
 [QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge) is available as
-`@bitcoinerlab/thunderden-qr-bridge@0.1.1`, published from commit `ae1fc46`.
+`@bitcoinerlab/thunderden-qr-bridge@0.1.2`, published from commit `59a6aa3`.
+The bridge's current Git checkout includes later connection-caching and interface
+improvements through commit `820aed4`; those changes are not yet published on npm.
 
 Regular desktop Liana can retrieve public keys, register wallets, verify addresses
 and sign PSBTs through the bridge. Bitcoin Core, including Liana-managed Core,
@@ -139,6 +141,9 @@ native ARM64 test execution remains unverified.
   delayed preimages and stable wallet-ID/HMAC vectors with Bitcoin Core.
 - Full review traversal and typed consent through a pseudo-terminal, including
   buffered-input rejection, cancellation, resize detection and masked passphrase entry.
+- Address checks, registration and signing expose the wallet ID and full public
+  descriptor in Details. Registration keeps spending rules and cosigner keys in
+  the required review; switching views preserves required pages and typed consent.
 - Repeated Esc/Ctrl-C input at network selection and after cancelling an operation
   does not end the session; loaded keys remain usable until explicit logout.
 - The actual application retains one seed session across operations and recovers
@@ -263,6 +268,23 @@ cancellation and logout/restart. The image was written to a USB drive and all
 were downloaded from GitHub and matched the original build artifacts byte-for-byte.
 The full clean-build comparison and physical laptop/camera checks have not been
 repeated for this preview.
+
+The second published preview, `v0.0.1-preview.2`, was built on 2026-09-29 from
+source commit `975ddeea1899353086c73de7afa5e7c991654431`. It includes the wallet
+review/Details changes and reports application version `0.0.1`. Its size is
+67,108,864 bytes and its SHA-256 is:
+
+```text
+8ccc6ffb7a88c4db3b5571dd415d95a3777aef2f531dcfe67fd5311830082e71
+```
+
+All eleven native suites passed. The source files copied into the image build
+match the tagged source. Kernel restrictions, installed-file checks, checksum
+verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
+1280x800, including public descriptor QR export, cancellation and logout/restart.
+The uploaded image, checksum and inventory were downloaded from GitHub and
+matched the original build artifacts byte-for-byte. The full clean-build comparison
+and physical USB/laptop/camera checks have not been repeated for this preview.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

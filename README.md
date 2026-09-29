@@ -21,9 +21,9 @@ with our Liana fork; see [Use with Liana](#use-with-liana) below and the
 
 ## Download and boot
 
-**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.1/thunderden.img)**
-· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.1/thunderden.img.sha256)
-· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.1)
+**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.2/thunderden.img)**
+· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.2/thunderden.img.sha256)
+· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.2)
 
 This image boots x86-64 (Intel/AMD) laptops with BIOS or UEFI. You can prepare the
 USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot it.
