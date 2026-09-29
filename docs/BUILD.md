@@ -2,9 +2,9 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.3/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.3/thunderden.img.sha256)
-from [v0.0.1-preview.3](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.3).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.4/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.4/thunderden.img.sha256)
+from [v0.0.1-preview.4](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.4).
 The release also includes `installed-files.json` for reviewing the built system.
 
 The same 64 MiB image can be written from macOS, Linux or Windows. It boots

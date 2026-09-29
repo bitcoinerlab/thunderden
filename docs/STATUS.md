@@ -8,7 +8,7 @@ user-tested on a physical computer.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.3`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.3),
+[`v0.0.1-preview.4`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.4),
 with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
 write/read-back verification passed. Broader laptop/camera coverage and final
 release verification remain outstanding.
@@ -330,6 +330,28 @@ matched on read-back. The uploaded image, checksum and inventory were downloaded
 from GitHub and matched the original build artifacts byte-for-byte. Physical
 laptop/camera checks and the full clean-build comparison have not been repeated
 for this preview.
+
+The fourth published preview, `v0.0.1-preview.4`, uses source commit
+`484b73d06e2fc51a2f62084b3b326e16c41212ee`. Its 2026-09-29 image adds the compact
+public descriptor export for Sparrow compatibility, with the strict
+previous-transaction requirements preserved. The release documents the user-tested
+single-signature BIP44/account 0 workflow. It reports application version `0.0.1`.
+Its size is 67,108,864 bytes and its SHA-256 is:
+
+```text
+12c00869202f06d39167e3b97584d2aca0a36725714363e9bdfc76f417ca9e71
+```
+
+All eleven native suites passed. Independent descriptor reconstruction and the
+headless Sparrow 2.3.1/2.5.5 import/address checks passed. The source copied into
+the image build matches the tagged source. Kernel/content checks, checksum
+verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
+1280x800, including compact descriptor QR export and result-review navigation.
+This exact image was written to a USB drive and matched byte-for-byte on read-back
+before the user's physical BIP44 Sparrow test. The uploaded image, checksum and
+inventory were downloaded from GitHub and matched the original artifacts.
+Broader laptop/camera coverage and Sparrow multisig validation remain open; the
+full clean-build comparison has not been repeated for this image.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the
