@@ -7,10 +7,10 @@ upstream.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.2`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.2),
-with its checksum and installed-file inventory. BIOS/UEFI boot checks passed for
-this image. Physical-hardware validation and final release verification remain
-outstanding.
+[`v0.0.1-preview.3`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.3),
+with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
+write/read-back verification passed. Physical laptop/camera validation and final
+release verification remain outstanding.
 Current executable sizes refer to the latest recorded build below.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
@@ -27,7 +27,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,558,192-byte signer and an 88,176-byte scanner, with
+Buildroot executables are a 2,566,384-byte signer and an 88,176-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -61,7 +61,7 @@ to commit `dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34`. The
 [QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge) is available as
 `@bitcoinerlab/thunderden-qr-bridge@0.1.2`, published from commit `59a6aa3`.
 The bridge's current Git checkout includes later connection-caching and interface
-improvements through commit `820aed4`; those changes are not yet published on npm.
+improvements through commit `1ac684c`; those changes are not yet published on npm.
 
 Regular desktop Liana can retrieve public keys, register wallets, verify addresses
 and sign PSBTs through the bridge. Bitcoin Core, including Liana-managed Core,
@@ -144,6 +144,12 @@ native ARM64 test execution remains unverified.
 - Address checks, registration and signing expose the wallet ID and full public
   descriptor in Details. Registration keeps spending rules and cosigner keys in
   the required review; switching views preserves required pages and typed consent.
+- Signing summaries retain full non-change destinations and amounts, fees,
+  verified change totals, qualified mixed-input accounting and active lock conditions.
+  Signing/registration Details show technical fields without repeating the summary.
+- Completed QR results can reopen their text review and redisplay identical reply
+  payloads without repeating approval. Enter leaves the QR visible; Esc finishes
+  viewing the result. Static and animated framebuffer paths are tested.
 - Repeated Esc/Ctrl-C input at network selection and after cancelling an operation
   does not end the session; loaded keys remain usable until explicit logout.
 - The actual application retains one seed session across operations and recovers
@@ -285,6 +291,26 @@ verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
 The uploaded image, checksum and inventory were downloaded from GitHub and
 matched the original build artifacts byte-for-byte. The full clean-build comparison
 and physical USB/laptop/camera checks have not been repeated for this preview.
+
+The third published preview, `v0.0.1-preview.3`, uses source commit
+`121945741ab3b0a5d1bd95a67f86e0d1612eca74`. The 2026-09-29 build includes the shorter
+signing review, separate technical Details, completed-result QR/text navigation
+and removal of QR Pause/Resume. It reports application version `0.0.1`. Its size
+is 67,108,864 bytes and its SHA-256 is:
+
+```text
+03632638fad260507517d52598646dc51648f7bd265a2ead403d38e676f4a334
+```
+
+All eleven native suites passed. The source files copied into the image build
+match the tagged source. Kernel restrictions, installed-file checks, checksum
+verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
+1280x800, including QR/text round trips, extra Enter presses, Finish and
+logout/restart. The image was written to a USB drive and all 67,108,864 bytes
+matched on read-back. The uploaded image, checksum and inventory were downloaded
+from GitHub and matched the original build artifacts byte-for-byte. Physical
+laptop/camera checks and the full clean-build comparison have not been repeated
+for this preview.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the
