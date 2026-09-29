@@ -296,31 +296,31 @@ p.send(b"\r")
 p.finish(0)
 print("PASS: details preserve summary position and require full expanded review before approval")
 
-# Signing/registration keep typed approval after either the required review or
-# its expanded details. Switching views must not skip pages or consume consent.
-for expanded in (False, True):
+# Technical Details do not repeat the summary or authorize signing. Returning
+# by either route restores the required review without skipping any pages.
+for read_details in (False, True):
     p = Probe("approve-details", rows=13)
     p.enter(b"Page 1/4", b"n")
     p.enter(b"Page 2/4", b"dSIGN\r")
     p.wait(b"d: Summary")
-    total = int(re.findall(rb"Page 1/(\d+)", p.all_text)[-1])
-    assert total > 4, "Wallet details did not expand the review"
+    assert b"Review field" not in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Details repeated the summary"
     assert p.process.poll() is None, "Opening details consumed queued approval"
-    p.enter(b"Esc: Cancel", b"d")
-    p.wait(b"Page 2/4")
-    if expanded:
-        p.send(b"d")
-        p.wait(f"Page 1/{total}".encode())
-        first = 1
-    else:
-        first, total = 2, 4
-    for page in range(first + 1, total + 1):
+    if read_details:
         p.send(b"\r")
-        p.wait(f"Page {page}/{total}".encode())
+        p.wait(b"DESCRIPTOR-END")
+        p.wait(b"Press Enter to return to the review.")
+        p.send(b"nSIGN\r")
+        p.wait(b"Press Enter to return to the review.")
+        assert p.process.poll() is None, "Next on the final Details page authorized signing"
+        p.send(b"\r")
+    else:
+        p.send(b"d")
+    p.wait(b"Page 2/4")
+    for page in (3, 4):
+        p.send(b"\r")
+        p.wait(f"Page {page}/4".encode())
         assert p.process.poll() is None, "Details bypassed the remaining approval review"
     assert b"ADDRESS-END" in p.all_text, "Approval skipped the complete address"
-    if expanded:
-        assert b"DESCRIPTOR-END" in p.all_text, "Details truncated the full descriptor"
     p.send(b"nSIGN\r")
     p.wait(b"then Enter: ")
     time.sleep(0.05)
@@ -333,6 +333,26 @@ p.enter(b"d: Details", b"d")
 p.enter(b"d: Summary", b"\x1b")
 p.finish(2)
 print("PASS: approval details preserve required pages, complete values, typed consent and cancellation")
+
+for finish in (False, True):
+    p = Probe("completed-review", rows=13)
+    p.wait(b"Signed transaction - review")
+    p.enter(b"Esc: Finish", b"d")
+    p.wait(b"Wallet ID:")
+    p.wait(b"d: Summary")
+    assert b"Approved payment" not in p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+    if finish:
+        p.send(b"\x1b")
+        output, _ = p.finish(2)
+        assert b"FINISHED" in output
+    else:
+        p.send(b"d")
+        p.wait(b"ADDRESS-END")
+        p.enter(b"Enter: show QR again", b"\r")
+        output, _ = p.finish(0)
+        assert b"SHOW QR AGAIN" in output
+    assert b"Type SIGN" not in p.all_text, "Revisiting a result asked to sign again"
+print("PASS: completed-result inspection uses Show QR again and Finish without another approval")
 
 MNEMONIC = ["abandon"] * 11 + ["about"]
 

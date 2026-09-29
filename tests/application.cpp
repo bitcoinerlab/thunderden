@@ -49,10 +49,13 @@ unsigned Header(td::CborReader& in)
     return in.UInt();
 }
 
-unsigned Status(const td::QRMessage& message)
+unsigned Status(const td::QRReply& reply)
 {
-    const auto raw = td::UnwrapBytes(message.cbor);
-    td::CborReader in(raw); return Header(in);
+    const auto raw = td::UnwrapBytes(reply.message.cbor);
+    td::CborReader in(raw);
+    const auto status = Header(in);
+    Check(reply.status == status, "Local result status differs from the QR reply");
+    return status;
 }
 
 void Registration(const td::Keys& keys)
@@ -96,7 +99,7 @@ void Registration(const td::Keys& keys)
             "Registration details lost the wallet ID or complete descriptor");
         return true;
     }, {}, {}});
-    const auto payload = td::UnwrapBytes(response.cbor);
+    const auto payload = td::UnwrapBytes(response.message.cbor);
     td::CborReader reply(payload);
     Check(Header(reply) == 0, "Registration failed"); reply.Tuple(2);
     Check(HexStr(reply.Bytes(32)) == HexStr(id) && HexStr(reply.Bytes(32)) == HexStr(keys.RegistrationTag(id)),
@@ -186,17 +189,18 @@ void Signing(const td::Keys& keys)
         Check(Contains(lines, "Wallet: Savings") && Contains(lines, "Network: Regtest"), "Signing lost wallet context");
         Check(Contains(details, "Wallet ID: " + HexStr(policy.ID())) && Contains(details, policy.Template())
             && Contains(details, policy.DescriptorText()), "Signing details lost the authenticated wallet definition");
-        Check(std::find(lines.begin(), lines.end(), "Transaction fee: 0.00001 BTC (1000 sats)") != lines.end(), "Fee missing from review");
-        Check(std::find(lines.begin(), lines.end(), "VERIFIED CHANGE") != lines.end(), "Change classification missing");
-        Check(std::find(lines.begin(), lines.end(), "Change address (index 1)") != lines.end(), "Change position missing");
-        Check(std::find(lines.begin(), lines.end(), "Receiving address (index 0)") != lines.end(), "Input position missing");
-        Check(std::find(lines.begin(), lines.end(), review.outputs[0].address) != lines.end(), "Complete output address missing");
-        Check(std::find(lines.begin(), lines.end(), previous->GetHash().ToString() + ":0") != lines.end(), "Input txid was truncated");
-        Check(std::find(lines.begin(), lines.end(), "Signing rule: ALL") != lines.end(), "Signing rule missing");
+        Check(Contains(lines, "Fee: 0.00001 BTC (1000 sats)"), "Fee missing from review");
+        Check(Contains(lines, "Verified change: 0.00099 BTC (99000 sats) (1 output)"), "Change total missing");
+        Check(Contains(lines, "Wallet decrease: 0.00001 BTC (1000 sats)"), "Internal transfer hid its fee");
+        Check(Contains(lines, "All outputs belong to this wallet."), "Internal transfer was not identified");
+        Check(!Contains(lines, review.outputs[0].address) && Contains(details, review.outputs[0].address), "Change address was not moved to Details");
+        Check(Contains(details, "Change address (index 1)") && Contains(details, "Receiving address (index 0)"), "Detailed positions missing");
+        Check(!Contains(lines, previous->GetHash().ToString() + ":0") && Contains(details, previous->GetHash().ToString() + ":0"), "Input outpoint misplaced or truncated");
+        Check(Contains(details, "Signing rule: ALL"), "Signing rule missing from Details");
         return true;
     }});
-    Check(signed_message.type == "bytes", "Wrong signed response type");
-    const auto payload = td::UnwrapBytes(signed_message.cbor);
+    Check(signed_message.message.type == "bytes" && signed_message.status == 0, "Wrong signed response type or status");
+    const auto payload = td::UnwrapBytes(signed_message.message.cbor);
     td::CborReader reply(payload);
     Check(Header(reply) == 0, "Signing failed"); reply.Tuple(3);
     const auto raw = reply.Bytes(2 * 1024 * 1024);

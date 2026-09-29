@@ -11,6 +11,34 @@
 #include <stdexcept>
 
 namespace td {
+void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* review)
+{
+    URSender sender(message);
+    auto frame = sender.Next();
+    const bool animated = sender.Parts() > 1;
+    // Reserve sequence-number growth so every frame keeps the same geometry.
+    const QRImage probe(std::string(std::min(MAX_QR_TEXT, frame.size() + 64), 'A'));
+    const int version = (probe.width - 17) / 4;
+    const auto caption = review ? "Left/b: Review   Esc: Finish" : "Esc: Finish";
+    while (true) {
+        {
+            Display display(terminal);
+            terminal.Flush();
+            display.QR(QRImage(frame, version), caption);
+            while (true) {
+                const int key = terminal.Key(animated ? 250 : -1);
+                if (key == 27 || key == 3 || key == 'q') return;
+                if (review && (key == 'b' || key == KEY_LEFT)) break;
+                if (animated) {
+                    frame = sender.Next();
+                    display.QR(QRImage(frame, version), caption);
+                }
+            }
+        } // Return the framebuffer to text mode before reopening the review.
+        if (!terminal.Revisit(*review)) return;
+    }
+}
+
 void ConfigureConsole(int tty)
 {
     // Linux console palette: charcoal, paper and a restrained orange accent.

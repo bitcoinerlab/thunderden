@@ -12,5 +12,10 @@ struct QRApproval {
     std::function<bool(const TransactionReview&)> transaction;
 };
 
-QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve);
+struct QRReply {
+    QRMessage message;
+    unsigned status;
+};
+
+QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve);
 }

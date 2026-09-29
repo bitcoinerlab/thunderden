@@ -3,6 +3,11 @@
 
 namespace td {
 using ReviewLines = std::vector<std::string>;
+struct ReviewScreen {
+    std::string title;
+    ReviewLines summary;
+    ReviewLines details;
+};
 std::string Amount(CAmount value);
 std::string PathText(const Path& path);
 std::string NetworkName(ChainType network);

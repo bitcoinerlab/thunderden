@@ -36,8 +36,13 @@ int main(int argc, char** argv)
         for (int i = 0; i < 11; ++i) lines.push_back("Review field " + std::to_string(i));
         lines.push_back(std::string(158, 'x') + "ADDRESS-END");
         td::ReviewLines details;
-        if (argc == 2 && std::string_view(argv[1]) == "approve-details")
+        if (argc == 2 && (std::string_view(argv[1]) == "approve-details" || std::string_view(argv[1]) == "completed-review"))
             details = {"Wallet ID: " + std::string(64, 'a'), "Full public descriptor:", std::string(158, 'y') + "DESCRIPTOR-END"};
+        if (argc == 2 && std::string_view(argv[1]) == "completed-review") {
+            const bool again = terminal.Revisit({"Signed transaction - review", {"Approved payment", lines.back()}, details});
+            std::puts(again ? "SHOW QR AGAIN" : "FINISHED");
+            return again ? 0 : 2;
+        }
         const bool approved = terminal.Approve("Approval test", lines, "SIGN", details);
         std::puts(approved ? "APPROVED" : "DECLINED");
         return approved ? 0 : 2;

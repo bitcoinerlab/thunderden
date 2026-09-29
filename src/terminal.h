@@ -27,7 +27,7 @@ class Terminal {
     };
     Layout View() const;
     enum class Tone { Plain, Selected, Error };
-    enum class PageMode { Review, Confirm, Error, Idle };
+    enum class PageMode { Review, Confirm, Completed, Error, Idle };
     void At(size_t row, size_t column);
     void Row(const Layout& view, size_t index, std::string_view text, Tone tone = Tone::Plain);
     void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
@@ -52,6 +52,7 @@ public:
     SecretBytes Mnemonic();
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {});
     bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {});
+    bool Revisit(const ReviewScreen& review);
     void Notice(std::string_view title, const ReviewLines& lines);
     bool SessionEnded();
 };

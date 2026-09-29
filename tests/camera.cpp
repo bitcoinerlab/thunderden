@@ -15,6 +15,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 #include <system_error>
 #include <tuple>
@@ -32,6 +33,7 @@ int display_mode = KD_TEXT;
 unsigned setup_width = WIDTH, setup_height = HEIGHT;
 std::string selected_font;
 bool doubled_font = false;
+std::function<int(pollfd*, int)> display_input;
 
 void Check(bool ok, const char* message)
 {
@@ -71,9 +73,13 @@ extern "C" int __wrap_v4l2_ioctl(int fd, unsigned long request, ...)
     return 0;
 }
 
-extern "C" int __wrap_poll(pollfd* descriptors, nfds_t count, int)
+extern "C" int __wrap_poll(pollfd* descriptors, nfds_t count, int timeout)
 {
-    Check(count == 1 && descriptors[0].fd == CAMERA_FD, "Unexpected poll");
+    Check(count == 1, "Unexpected poll");
+    if (descriptors[0].fd != CAMERA_FD) {
+        Check(bool(display_input), "Unexpected terminal input");
+        return display_input(descriptors, timeout);
+    }
     // A streaming camera reports POLLERR until buffers are queued and streaming
     // starts. libv4l performs that setup lazily on its first read.
     descriptors[0].revents = streaming ? POLLIN : POLLERR;
@@ -102,6 +108,7 @@ extern "C" int __wrap_open(const char* path, int, ...)
     return FRAMEBUFFER_FD;
 }
 
+extern "C" int __real_ioctl(int, unsigned long, ...);
 extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
 {
     va_list args;
@@ -113,6 +120,7 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
     }
     void* argument = va_arg(args, void*);
     va_end(args);
+    if (request == TIOCGWINSZ) return __real_ioctl(fd, request, argument);
     if (request == PIO_CMAP) {
         const auto* palette = static_cast<const unsigned char*>(argument);
         Check(palette[0] == 25 && palette[1] == 26 && palette[2] == 24, "Wrong console background");
@@ -176,6 +184,7 @@ extern "C" int __wrap_munmap(void* address, size_t length)
 
 extern "C" int __real_close(int);
 extern "C" int __wrap_close(int fd) { return fd == FRAMEBUFFER_FD ? 0 : __real_close(fd); }
+extern "C" int __real_poll(pollfd*, nfds_t, int);
 
 int main()
 {
@@ -248,6 +257,67 @@ int main()
         close(master);
         Check(display_mode == KD_TEXT, "Display did not return to text mode");
         std::puts("PASS: live preview updates without erasing an unchanged controls banner");
+
+        for (const size_t bytes : {8, 1200}) for (const bool revisitable : {false, true}) {
+            winsize size{24, 80, 0, 0};
+            Check(openpty(&master, &slave, nullptr, nullptr, &size) == 0, "Cannot open QR test tty");
+            Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain QR test tty");
+            const td::QRMessage message{"bytes", td::CborBytes(std::vector<uint8_t>(bytes, 0x42))};
+            const auto original = message.cbor;
+            const td::ReviewScreen review{"Signed transaction - review", {"Approved payment"}, {"Technical facts"}};
+            td::URReceiver receivers[2];
+            td::QRScanner scanner;
+            unsigned step = 0, frames = 0;
+            display_input = [&](pollfd* descriptors, int timeout) {
+                if (timeout == 30) return __real_poll(descriptors, 1, 0); // Escape/arrow sequence bytes.
+                std::string text;
+                char buffer[4096];
+                for (ssize_t count; (count = read(master, buffer, sizeof(buffer))) > 0;) text.append(buffer, count);
+                if (display_mode == KD_GRAPHICS) {
+                    Check(timeout == (bytes > 200 ? 250 : -1), "QR animation was paused");
+                    if (bytes <= 200 && (step == 1 || step == 2)) Check(framebuffer[0] == 17, "An ignored key redrew the static QR");
+                    Check(++frames < 128, "QR display did not complete the scripted navigation");
+                    std::vector<uint8_t> gray(WIDTH * HEIGHT);
+                    for (size_t i = 0; i < gray.size(); ++i) gray[i] = framebuffer[i * 4];
+                    const auto codes = scanner.Scan(gray, WIDTH, HEIGHT);
+                    Check(codes.size() == 1, "Displayed QR was not readable");
+                    auto& receiver = receivers[step == 6 ? 1 : 0];
+                    if (!receiver.Result()) receiver.Receive(codes[0]);
+                    if (!receiver.Result()) return 0;
+                    Check(receiver.Result()->type == message.type && receiver.Result()->cbor == original,
+                        "Revisited QR changed the completed reply");
+                    if (step == 0) framebuffer[0] = 17;
+                }
+                std::string key;
+                if (!revisitable) {
+                    Check(display_mode == KD_GRAPHICS, "Reply without review entered text navigation");
+                    const std::string keys[]{"\r", " ", "b", "\033[D", "\033"};
+                    Check(step < 5, "Finish failed");
+                    key = keys[step++];
+                } else {
+                    Check((display_mode == KD_GRAPHICS) == (step < 3 || step == 6), "Wrong QR/review navigation state");
+                    if (step == 3 || step == 5 || step == 7)
+                        Check(text.find("Approved payment") != text.npos && text.find("Type SIGN") == text.npos,
+                            "Completed review was lost or asked to sign again");
+                    if (step == 4) Check(text.find("Technical facts") != text.npos && text.find("Approved payment") == text.npos,
+                        "Details repeated the summary");
+                    const std::string keys[]{"\r", " ", "b", "d", "\r", "\r", "\033[D", "\033"};
+                    Check(step < 8, "Finish failed");
+                    key = keys[step++];
+                }
+                Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send QR test key");
+                return __real_poll(descriptors, 1, 1000);
+            };
+            {
+                td::Terminal terminal(slave);
+                td::ShowQR(terminal, message, revisitable ? &review : nullptr);
+            }
+            Check(step == (revisitable ? 8U : 5U) && message.cbor == original && display_mode == KD_TEXT,
+                "QR result navigation did not finish cleanly");
+            close(master);
+            display_input = {};
+        }
+        std::puts("PASS: static/animated QR pixels, Enter/Space handling, repeated review, identical replies and Finish");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Camera test failed: %s\n", error.what());

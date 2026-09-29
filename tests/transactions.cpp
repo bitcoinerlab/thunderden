@@ -1,4 +1,4 @@
-#include "transaction.h"
+#include "review.h"
 
 #include <chainparams.h>
 #include <crypto/sha256.h>
@@ -42,6 +42,11 @@ auto Bytes(std::string_view text)
 void Check(bool value, const char* message)
 {
     if (!value) throw std::runtime_error(message);
+}
+
+bool Contains(const td::ReviewLines& lines, std::string_view text)
+{
+    return std::find(lines.begin(), lines.end(), text) != lines.end();
 }
 
 void Reject(const std::function<void()>& operation)
@@ -155,6 +160,7 @@ void ScriptFamilies(const td::Keys& alice, const td::Keys& bob, const CScript& d
         {"native multisig", "wsh(sortedmulti(2,@0/**,@1/**))", 48, 2, true, false},
         {"Miniscript alternative", "wsh(and_v(v:pk(@0/**),or_i(pk(@1/**),older(2))))", 48, 2, true, false},
         {"relative timelock", "wsh(and_v(v:pk(@0/**),older(2)))", 48, 1, false, false, 2},
+        {"relative time", "wsh(and_v(v:pk(@0/**),older(4194306)))", 48, 1, false, false, 4194306},
         {"absolute timelock", "wsh(and_v(v:pk(@0/**),after(150)))", 48, 1, false, false, 0xfffffffe, 150},
         {"Taproot script path", "tr(@0/**,pk(@1/**))", 48, 2, false, true},
         {"Taproot tree", "tr(@0/**,{pk(@1/**),pk(@2/**)})", 48, 3, false, true},
@@ -183,6 +189,16 @@ void ScriptFamilies(const td::Keys& alice, const td::Keys& bob, const CScript& d
         Check(facts.inputs[0].signing_rule == (test.text.starts_with("tr(") ? SIGHASH_DEFAULT : SIGHASH_ALL),
             "Missing or incorrect review signing rule");
         Check(facts.estimated_vsize.has_value(), "Expected size estimate");
+        const auto summary = td::TransactionLines(facts);
+        Check(Contains(summary, facts.outputs[0].address) && Contains(summary, "Amount: " + td::Amount(facts.outputs[0].amount)),
+            "Mandatory review lost a full destination or amount");
+        Check(Contains(summary, "Fee: " + td::Amount(facts.fee))
+            && Contains(summary, "Wallet decrease: " + td::Amount(60001000)), "Mandatory review lost the fee or wallet decrease");
+        Check(!Contains(summary, facts.outputs[1].address) && Contains(td::TransactionDetails(facts), facts.outputs[1].address),
+            "Verified change was not separated from mandatory destinations");
+        if (test.sequence == 2) Check(Contains(summary, "Input 1 relative delay: 2 blocks"), "Relative lock was hidden");
+        if (test.sequence == 4194306) Check(Contains(summary, "Input 1 relative delay: 1024 seconds"), "Relative time was hidden");
+        if (test.locktime) Check(Contains(summary, "Transaction locktime: after block 150"), "Absolute lock was hidden");
         Check(!review.Sign(alice, [](const auto&) { return false; }), "Rejected transaction returned a signature");
         Check(signature_calls == calls_before, "Signing occurred without approval");
         auto result = review.Sign(alice, [](const auto&) { return true; });
@@ -290,6 +306,7 @@ void Adversarial(const td::Keys& alice, const td::Keys& bob, const CScript& dest
     false_change.outputs[0] = psbt.outputs[1];
     auto honest = prepare(false_change);
     Check(!honest.Review().outputs[0].position, "False change was hidden");
+    Check(Contains(td::TransactionLines(honest.Review()), honest.Review().outputs[0].address), "Forged change disappeared from mandatory review");
     auto signed_false_change = honest.Sign(alice, [](const auto& facts) {
         return !facts.outputs[0].position && !facts.outputs[0].address.empty();
     });
@@ -311,6 +328,9 @@ void Adversarial(const td::Keys& alice, const td::Keys& bob, const CScript& dest
     UpdatePSBTOutput(receive_provider, self_payment, 0);
     auto self_review = prepare(self_payment);
     Check(self_review.Review().outputs[0].position == td::Position{0, 9}, "Receive output mislabeled as change");
+    const auto self_summary = td::TransactionLines(self_review.Review());
+    Check(Contains(self_summary, "Destination 1 of 1 (this wallet's receiving address)")
+        && Contains(self_summary, self_review.Review().outputs[0].address), "Self-payment was hidden as change");
     Verify(*self_review.Sign(alice, [](const auto&) { return true; }));
 
     auto data_output = psbt;
@@ -320,7 +340,34 @@ void Adversarial(const td::Keys& alice, const td::Keys& bob, const CScript& dest
     Check(data_review.Review().outputs[0].address.empty()
         && data_review.Review().outputs[0].script == data_output.tx->vout[0].scriptPubKey,
         "Raw output script missing from review");
+    Check(Contains(td::TransactionLines(data_review.Review()), HexStr(data_review.Review().outputs[0].script)), "Mandatory review hid the full raw script");
     Verify(*data_review.Sign(alice, [](const auto&) { return true; }));
+
+    auto multiple = psbt;
+    multiple.tx->vout[0].nValue = 30000000;
+    multiple.tx->vout.emplace_back(30000000, destination); multiple.outputs.emplace_back();
+    multiple.tx->vout[1].nValue = 19999000;
+    multiple.tx->vout.emplace_back(20000000, wallet.Make().Script(1, 7)); multiple.outputs.emplace_back();
+    UpdatePSBTOutput(wallet.Make().PublicProvider({1, 7}), multiple, 3);
+    const auto multiple_review = prepare(multiple);
+    const auto multiple_summary = td::TransactionLines(multiple_review.Review());
+    Check(Contains(multiple_summary, "Destination 1 of 2") && Contains(multiple_summary, "Destination 2 of 2")
+        && std::count(multiple_summary.begin(), multiple_summary.end(), multiple_review.Review().outputs[0].address) == 2,
+        "Multiple payments to the same address were merged or omitted");
+    Check(Contains(multiple_summary, "Verified change: " + td::Amount(39999000) + " (2 outputs)"), "Change aggregation lost an output");
+
+    auto timing = psbt;
+    timing.tx->nLockTime = 1700000000;
+    timing.tx->vin[0].nSequence = 0xfffffffe;
+    Check(Contains(td::TransactionLines(prepare(timing).Review()), "Transaction locktime: after 2023-11-14T22:13:20Z"), "Time lock was hidden");
+    timing.tx->vin[0].nSequence = 0xffffffff;
+    auto timing_summary = td::TransactionLines(prepare(timing).Review());
+    Check(std::none_of(timing_summary.begin(), timing_summary.end(), [](const auto& line) { return line.starts_with("Transaction locktime:"); }),
+        "Inactive locktime was presented as active");
+    timing.tx->nLockTime = 0; timing.tx->version = 1; timing.tx->vin[0].nSequence = 2;
+    timing_summary = td::TransactionLines(prepare(timing).Review());
+    Check(std::none_of(timing_summary.begin(), timing_summary.end(), [](const auto& line) { return line.find("relative delay:") != line.npos; }),
+        "Version-one sequence was presented as a relative lock");
 
     // The caller's request buffer can change after construction without changing
     // either the reviewed fields or the transaction subsequently signed.
@@ -385,6 +432,13 @@ void ExternalInputs(const td::Keys& alice, const td::Keys& bob, const CScript& d
         "External input was claimed as owned");
     Check(reviewed.Review().fee == 1000, "External input fee mismatch");
     Check(!reviewed.Review().estimated_vsize, "Estimated an unfinished external input");
+    const auto summary = td::TransactionLines(reviewed.Review());
+    Check(Contains(summary, "Inputs not verified as this wallet: 1")
+        && Contains(summary, "Verified wallet inputs: " + td::Amount(COIN))
+        && Contains(summary, "Verified wallet outputs: " + td::Amount(39999000))
+        && Contains(summary, "Fee: " + td::Amount(1000)), "Mixed-input review lost qualified wallet accounting");
+    Check(std::none_of(summary.begin(), summary.end(), [](const auto& line) { return line.starts_with("Wallet decrease:"); }),
+        "Mixed-input transaction claimed an exact wallet decrease");
     auto partial = reviewed.Sign(alice, [](const auto&) { return true; });
     Check(partial && !partial->complete, "External input unexpectedly signed");
     Check(Decode(partial->psbt).inputs[1].partial_sigs.empty(), "External signature added");

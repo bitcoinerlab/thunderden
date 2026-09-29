@@ -107,6 +107,22 @@ with (args.output / "qemu.log").open("wb") as log:
         screenshot("account.ppm")
         subprocess.run(["docker", "compose", "run", "--rm", "-v", f"{args.output.resolve()}:/captures:ro",
                          "test", "/build/qr-image-probe", "/captures/account.ppm"], check=True)
+        key("ret")  # An extra Enter must leave the completed QR visible.
+        screenshot("account-after-enter.ppm")
+        assert (args.output / "account.ppm").read_bytes() == (args.output / "account-after-enter.ppm").read_bytes(), "Enter dismissed the QR"
+        key("left")
+        time.sleep(0.3)
+        screenshot("completed-review.ppm")
+        key("d")
+        time.sleep(0.3)
+        screenshot("completed-details.ppm")
+        key("d")
+        for _ in range(4):
+            key("right")
+        key("ret")  # Show the same completed result, without re-entering the workflow.
+        time.sleep(1)
+        screenshot("account-reviewed-again.ppm")
+        assert (args.output / "account.ppm").read_bytes() == (args.output / "account-reviewed-again.ppm").read_bytes(), "Revisiting changed the QR reply"
         key("esc", 1500)  # A held key must only leave the QR screen, not end the session.
         time.sleep(2)
         screenshot("menu-after-escape.ppm")
@@ -125,7 +141,10 @@ with (args.output / "qemu.log").open("wb") as log:
         screenshot("account-after-escape.ppm")
         subprocess.run(["docker", "compose", "run", "--rm", "-v", f"{args.output.resolve()}:/captures:ro",
                          "test", "/build/qr-image-probe", "/captures/account-after-escape.ppm"], check=True)
-        key("esc")
+        key("b")
+        time.sleep(0.3)
+        screenshot("completed-review-before-finish.ppm")
+        key("esc")  # Finish from the revisited text, without cancelling a new request.
         time.sleep(0.5)
         key("4")  # End the signer process and show the keyless completion screen.
         time.sleep(1)
@@ -134,7 +153,7 @@ with (args.output / "qemu.log").open("wb") as log:
         time.sleep(1)
         screenshot("network-restarted.ppm")
         assert (args.output / "network.ppm").read_bytes() == (args.output / "network-restarted.ppm").read_bytes(), "New session did not return to fresh network selection"
-        print(f"PASS: boot, QR export, held-Escape session preservation and logout/restart; screenshots in {args.output}")
+        print(f"PASS: boot, QR/review round trip, extra Enter, Finish, held-Escape session preservation and logout/restart; screenshots in {args.output}")
         qmp("quit")
         process.wait(timeout=10)
         stream.close()

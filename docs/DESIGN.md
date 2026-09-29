@@ -148,6 +148,15 @@ per-input signing rules. A weight-based size estimate uses Core's dummy signatur
 unverified request signatures cannot shrink it. The estimate is unavailable when
 an unfinished external input or unsatisfied script prevents dummy finalization.
 
+The mandatory signing review shows wallet/network, every non-change destination's
+full address or script and amount, the exact fee, an estimated fee rate when
+available, and verified change totals/counts. Receive/self-payments remain visible.
+Only independently verified change addresses move to Details. With unrecognized
+inputs, wallet accounting is explicitly limited to verified inputs/outputs rather
+than claiming an exact wallet decrease. Active absolute and relative lock conditions
+are disclosed without claiming chain maturity. Input records, individual change
+addresses, raw transaction fields and wallet-policy identity remain in Details.
+
 `Sign` invokes a local approval callback with these facts. Rejection returns no
 result. Private signing providers are created only after approval, and the seed
 and network must match the review. Owned non-Taproot inputs use SIGHASH_ALL;
@@ -159,11 +168,11 @@ Core finalizes a separate copy to determine completeness and verifies its input
 scripts when complete. The result reports new signature count and completeness;
 it does not establish current-chain validity or timelock maturity.
 
-The local interface wraps full addresses/scripts onto review pages. Every page
-must be traversed before a separate typed `SIGN` confirmation is accepted. Queued
-input is discarded at screen/approval boundaries, and terminal resizing aborts
-the review. Registration uses a separate `REGISTER` confirmation. Public exports
-use a short summary with optional details and Enter to show the QR. A sentence
+The local interface wraps full addresses/scripts onto review pages. Every required
+review page must be traversed before a separate typed `SIGN` confirmation is
+accepted. Queued input is discarded at screen/approval boundaries, and terminal
+resizing aborts the review. Registration uses a separate `REGISTER` confirmation.
+Public exports use a short summary with optional details and Enter to show the QR. A sentence
 above the controls explains when to press Enter, separated from the review by
 a blank line. Recovery words and passphrases start hidden, with one asterisk per
 character in the visible part of the field. The visibility status follows the
@@ -176,10 +185,19 @@ without accepting it; only Enter on a valid, non-empty word moves forwards.
 Validation errors use the console's error color as well as a text message.
 Single-page reviews omit the pager; multi-page counters appear at the right of
 the bottom divider, separately from the actions. `d` opens details and returns
-to the same summary page without approving the operation. Details expand the
-summary rather than replace its required context. Enter advances through every
-page of the selected view before its final action; Esc cancels the operation from
-either view. Both views share one navigation loop.
+to the same summary page without approving the operation. For signing and
+registration, Details contain only technical information; their final Enter
+returns to the required review and cannot authorize the operation. Public export
+and address-confirmation Details include the short summary context. Esc cancels
+an unapproved operation from either view. Both views share one navigation loop.
+
+Completed results retain their public review and exact QR reply in memory until
+the user finishes viewing them. `b` or Left on the QR opens the completed text
+review; its final Enter shows the same reply again. This display loop has no
+signing/registration callback. Completed signing reviews are labelled as signed,
+and Esc means Finish, not undo. Connection/error replies without a matching
+successful review offer only Finish. Enter does not dismiss a QR, and animated
+QRs advance automatically without a pause control.
 
 The console uses a dark palette, an 80-column reading area and word-wrapped
 explanations. Menus accept arrows and Enter alongside numbered shortcuts. Moving

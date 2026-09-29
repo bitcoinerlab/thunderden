@@ -1,12 +1,16 @@
 #pragma once
 #include "qr.h"
 #include "terminal.h"
+#include "transport.h"
 
 #include <linux/fb.h>
 
 namespace td {
 // Configure the local console before dropping privileges or loading recovery words.
 void ConfigureConsole(int tty);
+// Displays an already completed result; revisiting its public review cannot
+// repeat signing/registration or change the reply being shown.
+void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* review = nullptr);
 
 class Display {
     int fd_{-1}, tty_;

@@ -362,16 +362,19 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
 {
     const auto view = View();
     const auto wrapped = Wrap(lines, view.width);
+    const bool separate = mode == PageMode::Review || mode == PageMode::Completed;
     auto expanded = details;
     if (!expanded.empty()) {
-        // Details expand the same review, including its required summary context.
-        expanded.insert(expanded.begin(), "");
-        expanded.insert(expanded.begin(), lines.begin(), lines.end());
+        if (!separate) {
+            expanded.insert(expanded.begin(), "");
+            expanded.insert(expanded.begin(), lines.begin(), lines.end());
+        }
         expanded = Wrap(expanded, view.width);
     }
     const auto next = Wrap({"Press Enter to read the next page."}, view.width);
     const auto finish = Wrap({"Press Enter to " + std::string(action) + "."}, view.width);
-    const size_t reserved = std::max(next.size(), finish.size()) + 1;
+    const auto return_to_review = Wrap({"Press Enter to return to the review."}, view.width);
+    const size_t reserved = std::max({next.size(), finish.size(), separate ? return_to_review.size() : size_t{0}}) + 1;
     Require(view.height > reserved, "Not enough room for this review");
     const size_t height = view.height - reserved;
     size_t page_by_view[2]{};
@@ -385,13 +388,14 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
         const auto end = std::min(first + height, content.size());
         ReviewLines visible(content.begin() + first, content.begin() + end);
         const bool last = page + 1 == pages;
+        const bool inspecting = detailed && separate;
         visible.emplace_back("");
-        const auto& instruction = last ? finish : next;
+        const auto& instruction = last ? (inspecting ? return_to_review : finish) : next;
         visible.insert(visible.end(), instruction.begin(), instruction.end());
         const std::string pager = pages > 1 ? "Page " + std::to_string(page + 1) + "/" + std::to_string(pages) : "";
-        std::string footer = (last ? "Enter: " + std::string(action) : "Right/n/Enter: Next")
+        std::string footer = (last ? "Enter: " + (inspecting ? std::string("Return to review") : std::string(action)) : "Right/n/Enter: Next")
             + (page ? "  Left/b: Back" : "") + (details.empty() ? "" : detailed ? "  d: Summary" : "  d: Details")
-            + (mode == PageMode::Idle ? "" : "  Esc: Cancel");
+            + (mode == PageMode::Idle ? "" : mode == PageMode::Completed ? "  Esc: Finish" : "  Esc: Cancel");
         Flush();
         Draw(view, title, visible, footer, -1, pager);
         if (mode == PageMode::Error) for (size_t i = 0; i < end - first; ++i) Row(view, i, visible[i], Tone::Error);
@@ -404,6 +408,9 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
         if ((key == 'b' || key == KEY_LEFT) && page) --page;
         if (key == 'n' || key == KEY_RIGHT || key == '\r' || key == '\n') {
             if (!last) ++page;
+            else if (inspecting) {
+                if (key == '\r' || key == '\n') detailed = false;
+            }
             else if (mode == PageMode::Review || mode == PageMode::Error || key == '\r' || key == '\n') return true;
         }
     }
@@ -427,6 +434,11 @@ void Terminal::Notice(std::string_view title, const ReviewLines& lines)
 bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details)
 {
     return Pages(title, lines, action, details, PageMode::Confirm);
+}
+
+bool Terminal::Revisit(const ReviewScreen& review)
+{
+    return Pages(review.title, review.summary, "show QR again", review.details, PageMode::Completed);
 }
 
 bool Terminal::SessionEnded()

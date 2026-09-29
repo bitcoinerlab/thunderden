@@ -94,12 +94,14 @@ void Policy(td::CborWriter& out, const td::Policy& policy)
     out.Array(policy.KeyInformation().size());
     for (const auto& key : policy.KeyInformation()) out.Text(key.text);
 }
-unsigned Status(const td::QRMessage& response)
+unsigned Status(const td::QRReply& response)
 {
-    const auto bytes = td::UnwrapBytes(response.cbor);
+    const auto bytes = td::UnwrapBytes(response.message.cbor);
     td::CborReader in(bytes);
     in.Tuple(8); in.UInt(); in.Bytes(16); in.Text(16); in.Bytes(4); in.Text(32); in.UInt();
-    return in.UInt();
+    const auto status = in.UInt();
+    td::Require(status == response.status, "Local reply status disagrees with the protocol");
+    return status;
 }
 void Tests(const td::Keys& alice, const td::Keys& bob)
 {
@@ -122,6 +124,13 @@ void Tests(const td::Keys& alice, const td::Keys& bob)
             "Another cosigner's proof accepted");
         auto first = td::ReviewedTransaction(Wallet(alice, bob), alice, alice.RegistrationTag(policy.ID()), raw).Sign(alice, allow);
         td::Require(first && !first->complete && first->added_signatures > 0, "Expected partial signature");
+        auto repeated = Request(4); repeated.Array(3); Policy(repeated, policy);
+        repeated.Bytes(alice.RegistrationTag(policy.ID()));
+        repeated.Bytes({reinterpret_cast<const uint8_t*>(first->psbt.data()), first->psbt.size()});
+        unsigned approved = 0;
+        const auto no_progress = td::HandleQRRequest({"bytes", td::CborBytes(repeated.data)}, alice,
+            {{}, {}, {}, [&](const auto&) { ++approved; return true; }});
+        td::Require(approved == 1 && Status(no_progress) == 2, "Post-approval failure was reported as a signed result");
         auto second = td::ReviewedTransaction(Wallet(alice, bob), bob, bob.RegistrationTag(policy.ID()), first->psbt).Sign(bob, allow);
         td::Require(second && second->complete, "Expected complete claim");
         Verify(Decode(second->psbt));
@@ -180,9 +189,9 @@ void Fixtures(const td::Keys& alice, const td::Keys& bob)
             const auto allow = [](const auto&...) { return true; };
             const auto reply = td::HandleQRRequest(message, *signer, {allow, allow, allow, allow});
             row.pushKV(std::string(name) + "_request_bytes", message.cbor.size());
-            row.pushKV(std::string(name) + "_reply_bytes", reply.cbor.size());
+            row.pushKV(std::string(name) + "_reply_bytes", reply.message.cbor.size());
             row.pushKV(std::string(name) + "_request_frames", td::URSender(message).Parts());
-            row.pushKV(std::string(name) + "_reply_frames", td::URSender(reply).Parts());
+            row.pushKV(std::string(name) + "_reply_frames", td::URSender(reply.message).Parts());
         }
         rows.push_back(row);
     }
@@ -224,13 +233,13 @@ int main(int argc, char** argv)
                 receiver.Receive(line);
                 if (!receiver.Result()) continue;
                 const auto reply = td::HandleQRRequest(*receiver.Result(), keys, {approve, approve, approve, approve});
-                td::URSender sender(reply);
+                td::URSender sender(reply.message);
                 for (size_t i = 0; i < sender.Parts(); ++i) std::cout << sender.Next() << '\n';
                 std::cout << std::endl; return 0;
             }
             td::Require(line.size() <= 2 * (1024 * 1024 + 65536) && IsHex(line), "Invalid test request");
             const auto reply = td::HandleQRRequest({"bytes", td::CborBytes(ParseHex(line))}, keys, {approve, approve, approve, approve});
-            std::cout << HexStr(td::UnwrapBytes(reply.cbor)) << std::endl;
+            std::cout << HexStr(td::UnwrapBytes(reply.message.cbor)) << std::endl;
         }
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

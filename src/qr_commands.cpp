@@ -32,7 +32,7 @@ bool Approve(const std::function<bool(const ReviewLines&, const ReviewLines&)>& 
 }
 }
 
-QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve)
+QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve)
 {
     Require(message.type == "bytes", "Expected a Thunder Den QR command");
     const auto raw = UnwrapBytes(message.cbor);
@@ -117,6 +117,6 @@ QRMessage HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAp
     out.Bytes(keys.RootFingerprint()); out.Text("0.0.1"); out.UInt(operation); out.UInt(status);
     if (status) out.Array(0);
     else out.data.insert(out.data.end(), body.data.begin(), body.data.end());
-    return {"bytes", CborBytes(out.data)};
+    return {{"bytes", CborBytes(out.data)}, status};
 }
 }

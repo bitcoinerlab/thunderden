@@ -76,12 +76,19 @@ Recovery words and passphrases are hidden by default. Press TAB to show or hide
 what you are entering. Leave the passphrase empty and press Enter if your wallet
 does not use one.
 During recovery-word entry, Up returns to the previous word and Backspace edits
-the current one. Empty Enter does nothing. Press `d` to switch between summary
-and details. Enter advances through the selected view and performs its action on
-the final page; Esc cancels the operation from either view.
+the current one. Empty Enter does nothing. Press `d` to inspect details and return
+to the same review page. Signing and registration Details show technical fields
+separately; return to the required review to finish approval. Enter advances
+through review pages; Esc cancels an operation before approval.
 Address checks, registration and signing show the wallet ID and full public
 descriptor in Details. Registration requires reviewing the spending rules and
 cosigner keys before typing `REGISTER`; signing requires typing `SIGN` after review.
+The signing review shows every non-change destination and amount, the fee, and
+verified change totals. Individual change addresses and input records are in Details.
+On a result QR, `b` or Left returns to its text review without rescanning or
+repeating approval. The final review action shows the same QR again. Esc finishes
+viewing the result and returns to the menu; it cannot undo an exported signature.
+Enter does not dismiss a QR. Animated codes advance automatically.
 The final menu option ends the session and clears the keys. The completion screen
 stays open until Enter starts a fresh session. Turn the laptop off completely when
 finished rather than leaving it asleep.
@@ -222,10 +229,11 @@ python3 tests/boot.py thunderden.img /tmp/thunderden-uefi --firmware /path/to/OV
 
 The first command tests BIOS boot; the second tests UEFI boot using a combined
 OVMF firmware file. Both enter a public test mnemonic and check the displayed
-account QR. They also check arrow navigation and holding Escape after a QR
-export without losing the loaded keys. Screenshots and logs are saved in the
-chosen folders. Use `--display-size 640x480` or `--display-size 2560x1600` for
-additional font/layout checks. These checks do not test a physical webcam.
+account QR. They also check QR/text review round trips, extra Enter presses,
+and holding Escape after a QR export without losing the loaded keys. Screenshots
+and logs are saved in the chosen folders. Use `--display-size 640x480` or
+`--display-size 2560x1600` for additional font/layout checks. These checks do not
+test a physical webcam.
 
 To check scanner isolation under the image's kernel, build a separate test program
 with the image toolchain and boot it in QEMU. This also requires the host `cpio`

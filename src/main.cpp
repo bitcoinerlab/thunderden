@@ -49,29 +49,6 @@ QRMessage Scan(Terminal& terminal)
     }
 }
 
-void Show(Terminal& terminal, const QRMessage& message)
-{
-    URSender sender(message);
-    auto frame = sender.Next();
-    const bool animated = sender.Parts() > 1;
-    // Allow the full sequence-number growth while keeping every frame's geometry
-    // fixed. The initial fragment is at least as large as subsequent fragments.
-    const QRImage probe(std::string(std::min(MAX_QR_TEXT, frame.size() + 64), 'A'));
-    const int version = (probe.width - 17) / 4;
-    Display display(terminal);
-    terminal.Flush();
-    bool paused = false;
-    while (true) {
-        display.QR(QRImage(frame, version), animated
-            ? std::string("Space: ") + (paused ? "Resume QR codes" : "Pause QR codes") + "   Esc: Back"
-            : "Keep this code visible until scanning finishes. Esc: Back");
-        const int key = terminal.Key(animated && !paused ? 250 : -1);
-        if (key == 27 || key == 3 || key == 'q' || key == '\r' || key == '\n') return;
-        if (animated && key == ' ') paused = !paused;
-        if (animated && !paused) frame = sender.Next();
-    }
-}
-
 ChainType Network(Terminal& terminal)
 {
     const int choice = terminal.Menu("Choose a Bitcoin network", {"Bitcoin mainnet", "Signet", "Testnet4", "Regtest", "Legacy testnet3"},
@@ -134,14 +111,14 @@ int main(int argc, char** argv)
                     const auto [purpose, account] = Account(terminal);
                     auto policy = td::DefaultPolicy(keys(), purpose, account);
                     const auto& info = policy.KeyInformation()[0];
-                    const auto details = td::PolicyDetails(policy, keys());
-                    if (terminal.Confirm("Share your wallet setup", {
+                    const td::ReviewScreen review{"Public wallet setup", {
                         "This shares the public information your wallet app needs to find your addresses and follow this account's activity.",
                         "It contains no private keys. Only share it with a wallet app you trust.", "",
                         "Network: " + td::NetworkName(Params().GetChainType()),
                         "Account: " + std::to_string(account), "Address type: " + td::AccountType(purpose),
-                        "Path: " + td::PathText(info.origin), "Master fingerprint: " + HexStr(info.fingerprint)}, "show the QR code", details))
-                        Show(terminal, td::PublicDescriptor(policy));
+                        "Path: " + td::PathText(info.origin), "Master fingerprint: " + HexStr(info.fingerprint)}, td::PolicyDetails(policy, keys())};
+                    if (terminal.Confirm("Share your wallet setup", review.summary, "show the QR code", review.details))
+                        td::ShowQR(terminal, td::PublicDescriptor(policy), &review);
                 } else if (choice == 2) {
                     const auto answer = terminal.Input("Choose a public key to share", {"Enter the derivation path provided by your wallet app.",
                         Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);
@@ -150,14 +127,18 @@ int main(int argc, char** argv)
                     std::vector<uint32_t> path;
                     td::Require(ParseHDKeypath(path_text, path) && path.size() <= 32, "Invalid BIP32 path");
                     const auto message = td::PublicHDKey(keys(), path);
-                    if (terminal.Confirm("Share a public key (xpub)", td::PublicKeyReview(keys(), path), "show the QR code",
-                        {td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)})) Show(terminal, message);
+                    const td::ReviewScreen review{"Public key (xpub)", td::PublicKeyReview(keys(), path),
+                        {td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)}};
+                    if (terminal.Confirm("Share a public key (xpub)", review.summary, "show the QR code", review.details))
+                        td::ShowQR(terminal, message, &review);
                 } else if (choice == 0) {
                     keys(); // Recovery words must be entered before the online webcam faces this screen.
                     const auto message = Scan(terminal);
                     std::optional<td::QRMessage> response;
+                    std::optional<td::ReviewScreen> completed;
                     const auto approve = [&](const td::TransactionReview& review) {
-                        return terminal.Approve("Review transaction", td::TransactionLines(review), "SIGN", td::TransactionDetails(review));
+                        completed = td::ReviewScreen{"Signed transaction - review", td::TransactionLines(review), td::TransactionDetails(review)};
+                        return terminal.Approve("Review transaction", completed->summary, "SIGN", completed->details);
                     };
                     if (message.type == "crypto-psbt") {
                         const auto bytes = td::UnwrapBytes(message.cbor);
@@ -169,12 +150,23 @@ int main(int argc, char** argv)
                         if (result) response = td::QRMessage{"crypto-psbt", td::CborBytes({
                             reinterpret_cast<const uint8_t*>(result->psbt.data()), result->psbt.size()})};
                     } else {
-                        response = td::HandleQRRequest(message, keys(), {
-                            [&](const auto& lines) { return terminal.Confirm("Share a public key (xpub)", lines, "show the QR code"); },
-                            [&](const auto& lines, const auto& details) { return terminal.Approve("Confirm wallet spending rules", lines, "REGISTER", details); },
-                            [&](const auto& lines, const auto& details) { return terminal.Confirm("Check your wallet's address", lines, "confirm this address", details); }, approve});
+                        auto result = td::HandleQRRequest(message, keys(), {
+                            [&](const auto& lines) {
+                                completed = td::ReviewScreen{"Public key (xpub)", lines, {}};
+                                return terminal.Confirm("Share a public key (xpub)", lines, "show the QR code");
+                            },
+                            [&](const auto& lines, const auto& details) {
+                                completed = td::ReviewScreen{"Registered wallet - review", lines, details};
+                                return terminal.Approve("Confirm wallet spending rules", lines, "REGISTER", details);
+                            },
+                            [&](const auto& lines, const auto& details) {
+                                completed = td::ReviewScreen{"Confirmed address - review", lines, details};
+                                return terminal.Confirm("Check your wallet's address", lines, "confirm this address", details);
+                            }, approve});
+                        if (result.status) completed.reset();
+                        response = std::move(result.message);
                     }
-                    if (response) Show(terminal, *response);
+                    if (response) td::ShowQR(terminal, *response, completed ? &*completed : nullptr);
                 }
             } catch (const td::Cancelled&) {
                 // All scoped camera/display/input buffers are released before the menu.
