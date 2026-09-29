@@ -124,6 +124,11 @@ new optical exchange. Saved proofs should be associated with full cosigner key
 information rather than a fingerprint alone. No identity handshake is required
 before a wallet operation carrying its complete policy and proof.
 
+The QR bridge may answer `GET_INFO` from a successful reply saved for its current
+session and the requested network, using the new request's ID. This is remembered
+public information, not a fresh reply from the signer. The bridge never reuses
+replies for public-key sharing, registration, address confirmation or signing.
+
 ### Operations
 
 `wallet` is `[name, template, [key_info, ...]]`. Keep its exact text and key order
