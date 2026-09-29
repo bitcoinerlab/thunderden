@@ -39,14 +39,24 @@ positions; exact policy-script matches establish ownership and change. See
 [Signing](DESIGN.md#signing) for the validation rules.
 
 This route preserves standard PSBT QR exchange for wallets such as Sparrow using
-UR mode. It does not require the command format below. A real Sparrow round trip
-still needs verification, including its previous-transaction data and separate
-support for importing the public export formats.
+UR mode. It does not require the command format below. The user-tested
+[single-signature BIP44/account 0 workflow](SPARROW.md) uses Sparrow's QR export
+that preserves full previous transactions. Sparrow's BIP84/SegWit QR export
+normally omits them and is rejected by Thunder Den's strict fee checks.
+Public descriptor import checks and the scope of physical testing are recorded
+in [implementation status](STATUS.md#sparrow-integration).
 
 ## Public exports
 
-**Share wallet setup (descriptor)** produces `ur:output-descriptor` with a complete public
-receive/change descriptor and checksum in map field 1 (`source`).
+**Share wallet setup (descriptor)** produces `ur:output-descriptor` for a standard
+BIP44/49/84/86 account. Map field 1 (`source`) contains a placeholder descriptor,
+such as `tr(@0/<0;1>/*)`, and field 2 (`keys`) contains its tagged public `hdkey`.
+The receive/change suffix stays in `source`, which has no textual checksum.
+The complete checksummed descriptor remains available in the device's Details.
+This is the compact form of
+[BCR-2023-010](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2023-010-output-descriptor.md).
+The standard also permits full text without `keys`, but Sparrow's importer assumes
+that the key list is present. The compact form avoids that compatibility bug.
 **Share a public key (xpub)** produces public-only `ur:hdkey`, including chain code, origin,
 master fingerprint and network information. Public root keys are supported.
 

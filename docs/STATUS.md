@@ -3,13 +3,14 @@
 As of 2026-09-29, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
-upstream.
+upstream. The [Sparrow single-signature BIP44 workflow](SPARROW.md) has also been
+user-tested on a physical computer.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
 [`v0.0.1-preview.3`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.3),
 with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
-write/read-back verification passed. Physical laptop/camera validation and final
+write/read-back verification passed. Broader laptop/camera coverage and final
 release verification remain outstanding.
 Current executable sizes refer to the latest recorded build below.
 
@@ -45,6 +46,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Record a matching image hash from an Apple Silicon build.
 - [x] Publish the browser QR bridge on npm.
 - [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
+- [x] Record a user-tested Sparrow single-signature BIP44 QR workflow.
 - [x] Publish a development USB image with its checksum and installed-file inventory.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 - [ ] Complete verification of a release image built from the final source revision.
@@ -81,6 +83,18 @@ upload and reload handling is present, but needs an agreed and deployed server
 API before it can be enabled. Liana Business end-to-end support is separate work.
 Physical laptop/camera compatibility and a complete physical Liana signing flow
 still need recorded validation.
+
+## Sparrow integration
+
+On 2026-09-29, the user reported a successful physical single-signature
+**Legacy (BIP44), account 0** workflow: public descriptor import, receiving and
+the Sparrow/Thunder Den QR signing round trip. See the [walkthrough](SPARROW.md).
+A Sparrow multisig walkthrough is planned separately.
+
+Sparrow's BIP84/SegWit QR export omits full previous transactions and was rejected
+by Thunder Den. The BIP44 route retains that data; the signer's strict fee checks
+remain in place. Automated descriptor-import checks below separately cover all
+four standard account types in Sparrow 2.3.1 and 2.5.5.
 
 ## Verified native behavior
 
@@ -158,8 +172,13 @@ native ARM64 test execution remains unverified.
   A fresh keyless viewer waits for Enter before starting a new signer; a new
   mnemonic, passphrase and network produce a new account. Failed exits remain stopped.
 - Eight main/test-network public `hdkey` exports decoded/re-encoded by `urtypes`
-  with updated registry tags and matching xpubs, origins and fingerprints. Full
-  `output-descriptor` CBOR maps carry receive/change descriptors with checksums.
+  with updated registry tags and matching xpubs, origins and fingerprints. Compact
+  `output-descriptor` maps reconstruct the complete reviewed receive/change descriptors.
+- Headless checks against the actual Sparrow 2.3.1 and 2.5.5 descriptor import code
+  reproduce the null-key-list failure for the old, valid full-text encoding. The
+  compact BIP44/49/84/86 exports import on mainnet and regtest; receiving/change
+  addresses at indices 0, 1 and 7 match Bitcoin Core for every fixture. These checks
+  exercise UR decoding, descriptor import and wallet derivation, not a physical camera.
 - Fresh scanner execution with no inherited parent environment/extra descriptors;
   bounded preview/result pipes, stalled-worker cancellation and reaping.
 - Healthy preview streams outlive the no-frame deadline; silent workers, partial
@@ -319,7 +338,7 @@ and guest checks above verify the built kernel configuration and scanner
 confinement; physical hardware behavior requires separate validation.
 
 The application implements seed entry, policy registration, transaction rendering,
-account export, webcam capture/preview and animated QR output. Physical webcam
-tests and release-candidate verification remain outstanding.
+account export, webcam capture/preview and animated QR output. Broader physical
+webcam coverage and release-candidate verification remain outstanding.
 Synthetic-image, pseudo-terminal and emulated-display checks do not establish
 physical laptop/camera compatibility.

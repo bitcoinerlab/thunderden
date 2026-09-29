@@ -118,7 +118,7 @@ int main(int argc, char** argv)
                         "Account: " + std::to_string(account), "Address type: " + td::AccountType(purpose),
                         "Path: " + td::PathText(info.origin), "Master fingerprint: " + HexStr(info.fingerprint)}, td::PolicyDetails(policy, keys())};
                     if (terminal.Confirm("Share your wallet setup", review.summary, "show the QR code", review.details))
-                        td::ShowQR(terminal, td::PublicDescriptor(policy), &review);
+                        td::ShowQR(terminal, td::PublicDescriptor(policy, keys()), &review);
                 } else if (choice == 2) {
                     const auto answer = terminal.Input("Choose a public key to share", {"Enter the derivation path provided by your wallet app.",
                         Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);

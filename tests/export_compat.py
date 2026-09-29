@@ -1,4 +1,4 @@
-"""Independent HD-key schema check with the standard's updated registry tags."""
+"""Independent public HD-key and compact output-descriptor schema checks."""
 import io
 import json
 import subprocess
@@ -29,6 +29,14 @@ for vector in vectors:
         assert key.use_info.type == 0 and key.use_info.network == 1
     assert key.to_cbor() == cbor
     descriptor = decoder.Decoder(io.BytesIO(bytes.fromhex(vector["descriptor_cbor"]))).decode()
-    assert descriptor == {1: vector["descriptor"]}
-    assert "/<0;1>/*" in descriptor[1] and len(descriptor[1].split("#")[1]) == 8
-print("PASS: eight public hdkey and full output-descriptor exports with modern registry tags")
+    assert set(descriptor) == {1, 2} and len(descriptor[2]) == 1
+    assert descriptor[2][0].tag == 40303
+    nested = HDKey.from_data_item(descriptor[2][0])
+    assert nested.to_cbor() == cbor, "Descriptor key differs from the standalone public export"
+    source = descriptor[1]
+    assert source.count("@0") == 1 and "/<0;1>/*" in source and "#" not in source
+    origin = nested.origin.source_fingerprint.hex() + "/" + nested.origin.path().replace("'", "h")
+    expanded = source.replace("@0", f"[{origin}]{nested.bip32_key()}")
+    assert expanded == vector["descriptor"].split("#")[0], "Compact export changed the reviewed descriptor"
+    assert len(vector["descriptor"].split("#")[1]) == 8
+print("PASS: eight public hdkey and compact output-descriptor exports reconstruct the reviewed descriptors")

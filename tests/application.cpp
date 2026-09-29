@@ -80,6 +80,7 @@ void Registration(const td::Keys& keys)
     }
     auto base = td::DefaultPolicy(keys, 84, 0);
     td::Keys cosigner(Bytes(MNEMONIC), Bytes("cosigner"));
+    Reject([&] { td::PublicDescriptor(base, cosigner); });
     const auto cosigner_key = td::DefaultPolicy(cosigner, 84, 0).KeyInformation()[0].text;
     td::Policy policy("Savings", "wsh(sortedmulti(2,@0/**,@1/**))", {base.KeyInformation()[0].text, cosigner_key}, false);
     auto root = Envelope(policy, 2);
@@ -247,8 +248,19 @@ void ExportVectors(const td::Keys& keys)
             row.pushKV("fingerprint", HexStr(info.fingerprint));
             row.pushKV("path", td::PathText(info.origin));
             row.pushKV("cbor", HexStr(td::PublicHDKey(keys, info.origin).cbor));
-            row.pushKV("descriptor_cbor", HexStr(td::PublicDescriptor(policy).cbor));
+            const auto exported = td::PublicDescriptor(policy, keys);
+            row.pushKV("descriptor_cbor", HexStr(exported.cbor));
             row.pushKV("descriptor", policy.DescriptorText());
+            td::URSender sender(exported);
+            Check(sender.Parts() == 1, "Standard account export no longer fits one QR");
+            row.pushKV("descriptor_ur", sender.Next());
+            UniValue addresses(UniValue::VARR);
+            for (unsigned branch : {0, 1}) for (unsigned index : {0, 1, 7}) {
+                CTxDestination destination;
+                Check(ExtractDestination(policy.Script(branch, index), destination), "Export fixture has no address");
+                addresses.push_back(EncodeDestination(destination));
+            }
+            row.pushKV("addresses", addresses);
             vectors.push_back(row);
         }
     }

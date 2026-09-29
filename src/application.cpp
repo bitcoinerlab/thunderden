@@ -23,12 +23,22 @@ Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account)
     return Policy("", text, {key_text}, mainnet);
 }
 
-QRMessage PublicDescriptor(const Policy& policy)
+QRMessage PublicDescriptor(const Policy& policy, const Keys& keys)
 {
+    Require(policy.IsDefault(keys), "Descriptor export requires a standard local account");
+    // BCR-2023-010 permits full text too, but Sparrow assumes keys is present.
+    // Keep the receive/change suffix in source for its key substitution.
+    auto source = policy.Template();
+    source.replace(source.find("/**"), 3, "/<0;1>/*");
+    const auto hdkey = PublicHDKey(keys, policy.KeyInformation()[0].origin);
     std::vector<uint8_t> cbor;
-    CborLite::encodeMapSize(cbor, size_t{1});
+    CborLite::encodeMapSize(cbor, size_t{2});
     CborLite::encodeUnsigned(cbor, uint64_t{1});
-    CborLite::encodeText(cbor, policy.DescriptorText());
+    CborLite::encodeText(cbor, source);
+    CborLite::encodeUnsigned(cbor, uint64_t{2});
+    CborLite::encodeArraySize(cbor, size_t{1});
+    CborLite::encodeTagAndValue(cbor, CborLite::Major::semantic, uint64_t{40303});
+    cbor.insert(cbor.end(), hdkey.cbor.begin(), hdkey.cbor.end());
     return {"output-descriptor", std::move(cbor)};
 }
 
