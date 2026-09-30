@@ -15,13 +15,6 @@ std::string Amount(CAmount value)
     return FormatMoney(value) + " BTC (" + std::to_string(value) + " sats)";
 }
 
-std::string PathText(const Path& path)
-{
-    std::string text = "m";
-    for (const auto index : path) text += "/" + std::to_string(index & 0x7fffffffU) + (index & 0x80000000U ? "h" : "");
-    return text;
-}
-
 std::string NetworkName(ChainType network)
 {
     if (network == ChainType::MAIN) return "Bitcoin mainnet";

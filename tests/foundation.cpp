@@ -142,6 +142,13 @@ void Policies()
             Check(parsed[branch]->Expand(7, provider, scripts, provider), "Descriptor expansion");
             Check(scripts.size() == 1 && scripts[0] == policy.Script(branch, 7), "Policy script mismatch");
         }
+        const auto retained = policy;
+        const auto id = retained.ID();
+        const auto receive = retained.Script(0, 7), change = retained.Script(1, 7);
+        policy = renamed;
+        Check(retained.ID() == id && retained.Authorized(session, proof)
+            && retained.Script(0, 7) == receive && retained.Script(1, 7) == change,
+            "Replacing a policy changed an existing immutable copy");
     }
     td::Policy real("Policy", "wsh(sortedmulti(2,@0/**,@1/**))", {a, b}, false);
     td::Policy replaced("Policy", "wsh(sortedmulti(2,@0/**,@1/**))", {a, c}, false);

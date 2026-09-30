@@ -52,11 +52,20 @@ struct SigningResult {
     bool complete; // Core can finalize and verify scripts; not chain/maturity proof.
 };
 
+struct PSBTData;
+struct SigningChoices;
+SigningChoices FindSigningWallets(std::span<const std::byte> raw, const Keys& keys, const ApprovedWallet* loaded);
+
 class ReviewedTransaction {
     Policy policy_;
     Digest tag_{};
-    PartiallySignedTransaction psbt_;
+    std::shared_ptr<const PSBTData> request_;
     TransactionReview review_;
+    ReviewedTransaction(std::shared_ptr<const PSBTData> request, Policy policy, const Keys& session,
+        std::span<const unsigned char> tag);
+    // Public-only completion checks used by automatic policy discovery.
+    size_t PendingInputCount(const Keys& session) const;
+    friend SigningChoices FindSigningWallets(std::span<const std::byte>, const Keys&, const ApprovedWallet*);
 public:
     static constexpr size_t MAX_PSBT_BYTES = 1024 * 1024;
     ReviewedTransaction(Policy policy, const Keys& session,
@@ -66,11 +75,18 @@ public:
     ReviewedTransaction(ReviewedTransaction&&) = delete;
     ReviewedTransaction& operator=(ReviewedTransaction&&) = delete;
     const TransactionReview& Review() const { return review_; }
-    // Public-only completion checks for automatic standard-account/multisig selection.
-    size_t PendingInputs(const Keys& session) const;
     // The callback must render the supplied review and obtain local user consent.
     // A declined review returns no result. Invalid requests throw before consent.
     std::optional<SigningResult> Sign(const Keys& session,
         const std::function<bool(const TransactionReview&)>& approve) const;
+};
+
+struct SigningChoice {
+    std::unique_ptr<ReviewedTransaction> transaction;
+    size_t inputs;
+};
+struct SigningChoices {
+    std::vector<SigningChoice> wallets;
+    bool needs_wallet{true};
 };
 }

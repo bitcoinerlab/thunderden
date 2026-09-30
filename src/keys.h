@@ -15,6 +15,7 @@ using SecretBytes = std::vector<unsigned char, secure_allocator<unsigned char>>;
 using Digest = std::array<unsigned char, 32>;
 using Fingerprint = std::array<unsigned char, 4>;
 using Path = std::vector<uint32_t>;
+std::string PathText(const Path& path);
 
 inline void Require(bool condition, const char* message)
 {

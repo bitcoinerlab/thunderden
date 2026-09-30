@@ -10,7 +10,6 @@ struct ReviewScreen {
     bool warning{false};
 };
 std::string Amount(CAmount value);
-std::string PathText(const Path& path);
 std::string NetworkName(ChainType network);
 std::string AccountType(unsigned purpose);
 std::string AddressPosition(Position position);

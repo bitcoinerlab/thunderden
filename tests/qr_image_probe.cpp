@@ -1,6 +1,6 @@
 #include "qr.h"
 #include "camera.h"
-#include "application.h"
+#include "wallet_qr.h"
 
 #include <chainparams.h>
 

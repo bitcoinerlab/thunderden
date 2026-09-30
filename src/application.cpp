@@ -1,21 +1,9 @@
 #include "application.h"
-#include "review.h"
-
-#include <chainparams.h>
-#include <cbor-lite.hpp>
-#include <crypto/common.h>
+#include "terminal.h"
+#include "wallet_qr.h"
 #include <util/strencodings.h>
 
 namespace td {
-std::string PublicKeyText(const Keys& keys, const Path& path)
-{
-    Require(path.size() <= 32, "Export path is too deep");
-    // Advanced, script-independent export. The [origin] prefix retains the
-    // fingerprint/path in Sparrow's text scanner, unlike a bare xpub.
-    return "[" + HexStr(keys.RootFingerprint()) + PathText(path).substr(1) + "]"
-        + EncodePublic(keys.PublicAt(path), Params().GetChainType() == ChainType::MAIN);
-}
-
 std::optional<Digest> ApproveWallet(const Policy& policy, const Keys& keys, const WalletApproval& approve)
 {
     Require(!policy.Name().empty() && !policy.OwnedKeys(keys).empty(), "This wallet does not contain a key from your recovery words");
@@ -25,102 +13,69 @@ std::optional<Digest> ApproveWallet(const Policy& policy, const Keys& keys, cons
     return keys.RegistrationTag(id);
 }
 
-Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account)
+bool LoadWallet(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded, const QRMessage& message)
 {
-    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
-    Require(account <= 100, "Default account exceeds 100");
-    std::string text;
-    if (purpose == 44) text = "pkh(@0/**)";
-    else if (purpose == 49) text = "sh(wpkh(@0/**))";
-    else if (purpose == 84) text = "wpkh(@0/**)";
-    else if (purpose == 86) text = "tr(@0/**)";
-    else throw std::invalid_argument("Unsupported default account type");
-    const Path path{purpose | 0x80000000U, mainnet ? 0x80000000U : 0x80000001U, account | 0x80000000U};
-    const auto pub = keys.PublicAt(path);
-    const auto key_text = "[" + HexStr(keys.RootFingerprint()) + PathText(path).substr(1) + "]" + EncodePublic(pub, mainnet);
-    return Policy("", text, {key_text}, mainnet);
+    auto policy = ImportMultisig(message);
+    const auto proof = ApproveWallet(policy, keys, [&](auto lines, const auto& details) {
+        lines.insert(lines.begin(), {loaded ? "This will replace the loaded multisig wallet." : "Load this wallet for the current session.",
+            "Compare the cosigner keys with their devices or your trusted wallet backup.",
+            "Receiving addresses use /0/*; change uses /1/*.", ""});
+        return terminal.Approve("Check this multisig wallet", lines, "REGISTER", details);
+    });
+    if (!proof) return false;
+    loaded.emplace(ApprovedWallet{std::move(policy), *proof});
+    return true;
 }
 
-QRMessage PublicDescriptor(const Policy& policy, const Keys& keys)
+bool ApproveTransaction(Terminal& terminal, const TransactionReview& review, std::optional<ReviewScreen>& completed)
 {
-    Require(policy.IsDefault(keys), "Descriptor export requires a standard local account");
-    // BCR-2023-010 permits full text too, but Sparrow assumes keys is present.
-    // Keep the receive/change suffix in source for its key substitution.
-    auto source = policy.Template();
-    source.replace(source.find("/**"), 3, "/<0;1>/*");
-    const auto hdkey = PublicHDKey(keys, policy.KeyInformation()[0].origin);
-    std::vector<uint8_t> cbor;
-    CborLite::encodeMapSize(cbor, size_t{2});
-    CborLite::encodeUnsigned(cbor, uint64_t{1});
-    CborLite::encodeText(cbor, source);
-    CborLite::encodeUnsigned(cbor, uint64_t{2});
-    CborLite::encodeArraySize(cbor, size_t{1});
-    CborLite::encodeTagAndValue(cbor, CborLite::Major::semantic, uint64_t{40303});
-    cbor.insert(cbor.end(), hdkey.cbor.begin(), hdkey.cbor.end());
-    return {"output-descriptor", std::move(cbor)};
+    if (review.fee_unverified && !terminal.Confirm("Fee not fully verified", FeeWarning(), "continue to review", {}, true)) return false;
+    completed = ReviewScreen{review.fee_unverified ? "Signed - fee not fully verified" : "Signed transaction - review",
+        TransactionLines(review), TransactionDetails(review), review.fee_unverified};
+    return terminal.Approve(review.fee_unverified ? "Review - fee not fully verified" : "Review transaction",
+        completed->summary, "SIGN", completed->details, review.fee_unverified);
 }
 
-namespace {
-std::vector<uint8_t> HDKeyCBOR(const Keys& keys, const Path& path, bool legacy)
+std::optional<QRMessage> SignRequest(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded,
+    const QRMessage& message, const std::function<QRMessage()>& scan,
+    const std::function<bool(const TransactionReview&)>& approve)
 {
-    Require(path.size() <= 32, "Export path is too deep");
-    const auto pub = keys.PublicAt(path);
-    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
-    std::vector<uint8_t> cbor;
-    const auto number = [&](uint64_t n) { CborLite::encodeUnsigned(cbor, n); };
-    const auto tag = [&](uint64_t n) { CborLite::encodeTagAndValue(cbor, CborLite::Major::semantic, n); };
-    const auto parent = ReadBE32(pub.vchFingerprint);
-    CborLite::encodeMapSize(cbor, size_t{3U + !mainnet + bool(parent)});
-    number(3); CborLite::encodeBytes(cbor, pub.pubkey);
-    number(4); CborLite::encodeBytes(cbor, pub.chaincode);
-    if (!mainnet) {
-        number(5); tag(legacy ? 305 : 40305); // coin-info
-        CborLite::encodeMapSize(cbor, size_t{2});
-        number(1); number(0); number(2); number(1); // Bitcoin, test network
+    // Own this PSBT throughout any nested setup scan; never keep a span into a
+    // scanner buffer which the second scan could replace.
+    const auto bytes = UnwrapBytes(message.cbor);
+    while (true) {
+        auto options = FindSigningWallets(std::as_bytes(std::span(bytes)), keys, loaded ? &*loaded : nullptr);
+        if (options.wallets.empty()) {
+            if (!options.needs_wallet) {
+                terminal.Notice("Nothing more to sign", {"This request is already finalized, or your signatures are already present for the matched wallets."});
+                return {};
+            }
+            if (!terminal.Confirm("Load a multisig wallet?", {"No matching wallet was found.",
+                "For multisig, show the wallet setup QR in your wallet app's settings and scan it here.",
+                "For a single-signature wallet, check the network, recovery words and the key paths supplied by your wallet app."},
+                "scan wallet setup")) return {};
+            if (!LoadWallet(terminal, keys, loaded, scan())) return {};
+            continue;
+        }
+        ReviewLines labels;
+        for (const auto& option : options.wallets) {
+            const auto& review = option.transaction->Review();
+            auto name = std::string("Loaded multisig");
+            if (review.default_account) {
+                name = AccountType(review.default_account->at(0) & 0x7fffffff);
+                name = name.substr(0, name.find(" (")) + " account " + std::to_string(review.default_account->at(2) & 0x7fffffff);
+            }
+            // Fit the 40-column console too; the full identity is in the review.
+            labels.push_back(name + " (" + std::to_string(option.inputs) + ")");
+        }
+        while (true) {
+            const auto selected = options.wallets.size() == 1 ? 0 : terminal.Menu("Choose a wallet to sign with", labels,
+                "Input counts are in parentheses. This pass signs for one wallet; existing signatures are kept.");
+            const auto result = options.wallets[selected].transaction->Sign(keys, approve);
+            if (result) return QRMessage{"crypto-psbt", CborBytes({
+                reinterpret_cast<const uint8_t*>(result->psbt.data()), result->psbt.size()})};
+            if (options.wallets.size() == 1) return {};
+        }
     }
-    number(6); tag(legacy ? 304 : 40304); // keypath
-    CborLite::encodeMapSize(cbor, size_t{3});
-    number(1); CborLite::encodeArraySize(cbor, path.size() * 2);
-    for (const auto index : path) {
-        number(index & 0x7fffffffU);
-        CborLite::encodeBool(cbor, bool(index & 0x80000000U));
-    }
-    number(2); number(ReadBE32(keys.RootFingerprint().data()));
-    number(3); number(path.size());
-    if (parent) { number(8); number(parent); }
-    return cbor;
 }
-}
-
-QRMessage PublicHDKey(const Keys& keys, const Path& path)
-{
-    return {"hdkey", HDKeyCBOR(keys, path, false)};
-}
-
-QRMessage PublicAccount(const Keys& keys, const Path& path)
-{
-    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
-    const bool legacy = path == Path{0x8000002dU};
-    Require(legacy || (path.size() == 4 && path[0] == 0x80000030U
-        && path[1] == (mainnet ? 0x80000000U : 0x80000001U) && path[2] >= 0x80000000U
-        && (path[3] == 0x80000001U || path[3] == 0x80000002U)), "Account export requires a standard multisig path");
-    // Match SeedSigner's account-key export, including its legacy registry tags.
-    // Sparrow's airgapped and watch-only importers preserve the origin through
-    // crypto-account. A standalone hdkey takes a different, lossy UI path there.
-    // This shares one cosigner key; it does not define/approve a multisig quorum.
-    std::vector<uint8_t> cbor;
-    CborLite::encodeMapSize(cbor, size_t{2});
-    CborLite::encodeUnsigned(cbor, uint64_t{1});
-    CborLite::encodeUnsigned(cbor, uint64_t{ReadBE32(keys.RootFingerprint().data())});
-    CborLite::encodeUnsigned(cbor, uint64_t{2});
-    CborLite::encodeArraySize(cbor, size_t{1});
-    const auto tag = [&](uint64_t n) { CborLite::encodeTagAndValue(cbor, CborLite::Major::semantic, n); };
-    if (legacy || path.back() == 0x80000001U) tag(400); // sh
-    if (!legacy) tag(401); // wsh
-    tag(303); // crypto-hdkey
-    const auto key = HDKeyCBOR(keys, path, true);
-    cbor.insert(cbor.end(), key.begin(), key.end());
-    return {"crypto-account", std::move(cbor)};
-}
-
 }

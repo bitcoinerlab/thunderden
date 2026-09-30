@@ -101,8 +101,8 @@ account types in Sparrow 2.3.1 and 2.5.5.
 
 ### Direct multisig source changes
 
-Source changes after `31c541f` add three multisig key shortcuts, a session-only approved wallet and automatic
-selection of verified signing accounts. The direct importer accepts Sparrow's
+Source changes after `31c541f` add three multisig key shortcuts, a session-only
+approved wallet and automatic selection of verified signing accounts. The direct importer accepts Sparrow's
 standard legacy P2SH, nested SegWit and native SegWit sorted-multisig setup QRs.
 Wallet CBOR is validated in the signer; the scanner and its pipe enforce size/type bounds.
 Legacy/unclassified inputs still require full previous transactions. Fee warnings
@@ -113,6 +113,15 @@ or modern `hdkey`. Full wallet descriptor and command formats retain their meani
 The independent `urtypes` codec verifies the account wrapper, script tags, network
 and full key origin. Headless Sparrow 2.5.5 checks decoded 30 account-key exports
 across the three types and both networks without changing any xpub or origin.
+
+The branch's architectural cleanup groups public wallet codecs in `wallet_qr`
+and user workflows in `application`. The transaction layer depends on policies
+and keys, not the application/UI. Candidate reviews share one immutable PSBT
+snapshot, resolved outputs and signing precomputation. Policy value copies share
+immutable parsed descriptors. Regression checks cover source-buffer mutation and
+policy replacement while older reviews/copies remain valid.
+The eleven native suites and Sparrow checks passed again after cleanup. Public
+export and wallet-fixture vectors matched the pre-cleanup build exactly.
 
 Headless checks using the official Sparrow 2.5.5 runtime covered twelve wallet
 setups: 2-of-2 and 2-of-3, all three script types, mainnet and regtest. Its actual

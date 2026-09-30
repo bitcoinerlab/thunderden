@@ -14,6 +14,13 @@
 #include <string_view>
 
 namespace td {
+std::string PathText(const Path& path)
+{
+    std::string text = "m";
+    for (const auto index : path) text += "/" + std::to_string(index & 0x7fffffffU) + (index & 0x80000000U ? "h" : "");
+    return text;
+}
+
 unsigned MnemonicWordIndex(std::string_view word)
 {
     const auto found = std::lower_bound(ENGLISH.begin(), ENGLISH.end(), word);

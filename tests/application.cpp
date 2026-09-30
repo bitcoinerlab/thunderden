@@ -1,4 +1,5 @@
 #include "application.h"
+#include "wallet_qr.h"
 #include "camera.h"
 #include "hardware.h"
 #include "qr_commands.h"
@@ -413,7 +414,7 @@ int main(int argc, char** argv)
             Check(std::string_view(argv[5]) == "alice" || std::string_view(argv[5]) == "bob", "Unknown public fixture signer");
             td::Keys signer(Bytes(MNEMONIC), Bytes(std::string_view(argv[5]) == "bob" ? "cosigner" : ""));
             auto policy = td::ImportMultisig({"crypto-output", ParseHex(argv[3])});
-            td::ApprovedWallet loaded{policy.Copy(), *td::ApproveWallet(policy, signer, [](const auto&, const auto&) { return true; })};
+            td::ApprovedWallet loaded{policy, *td::ApproveWallet(policy, signer, [](const auto&, const auto&) { return true; })};
             const auto psbt = ParseHex(argv[4]);
             auto options = td::FindSigningWallets(std::as_bytes(std::span(psbt)), signer, &loaded);
             Check(options.wallets.size() == 1, "Sparrow PSBT did not match exactly one approved wallet");

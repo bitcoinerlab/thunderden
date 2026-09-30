@@ -1,4 +1,5 @@
 #include "application.h"
+#include "wallet_qr.h"
 #include "hardware.h"
 #include "isolation.h"
 #include "scan.h"

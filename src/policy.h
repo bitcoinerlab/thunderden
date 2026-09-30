@@ -2,6 +2,7 @@
 
 #include "keys.h"
 #include <script/descriptor.h>
+#include <memory>
 
 namespace td {
 struct Position {
@@ -25,11 +26,10 @@ class Policy {
     std::string name_, text_, public_text_;
     std::vector<KeyInfo> keys_;
     std::vector<Reference> references_;
-    std::vector<std::unique_ptr<Descriptor>> descriptors_;
+    std::vector<std::shared_ptr<const Descriptor>> descriptors_;
     bool mainnet_;
 public:
     Policy(std::string name, std::string text, std::vector<std::string> keys, bool mainnet);
-    Policy Copy() const;
     const std::string& Name() const { return name_; }
     const std::string& Template() const { return text_; }
     const std::vector<KeyInfo>& KeyInformation() const { return keys_; }
@@ -42,5 +42,11 @@ public:
     std::vector<Position> Positions(const KeyOriginInfo& hint) const;
     FlatSigningProvider PublicProvider(Position position) const;
     FlatSigningProvider PrivateProvider(Position position, const Keys& session) const;
+};
+
+Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account);
+struct ApprovedWallet {
+    Policy policy;
+    Digest proof;
 };
 }

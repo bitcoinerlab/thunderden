@@ -1,6 +1,7 @@
 #include "policy.h"
 
 #include <base58.h>
+#include <chainparams.h>
 #include <crypto/common.h>
 #include <crypto/sha256.h>
 #include <streams.h>
@@ -171,7 +172,9 @@ Policy::Policy(std::string name, std::string text, std::vector<std::string> keys
     Require(expanded.size() <= 65536, "Expanded policy is too large");
     FlatSigningProvider provider;
     std::string error;
-    descriptors_ = Parse(expanded, provider, error);
+    // Policies are value objects. Copies share only immutable parsed descriptors,
+    // rather than reparsing an already validated policy for each signing request.
+    for (auto& descriptor : Parse(expanded, provider, error)) descriptors_.emplace_back(std::move(descriptor));
     Require(descriptors_.size() == 2 && provider.keys.empty(), "Invalid public receive/change policy");
     for (const auto& descriptor : descriptors_) {
         Require(descriptor->IsRange() && descriptor->IsSolvable() && descriptor->IsSingleType(), "Invalid account descriptor");
@@ -185,11 +188,20 @@ Policy::Policy(std::string name, std::string text, std::vector<std::string> keys
     public_text_ = std::move(expanded);
 }
 
-Policy Policy::Copy() const
+Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account)
 {
-    std::vector<std::string> keys;
-    for (const auto& key : keys_) keys.push_back(key.text);
-    return Policy(name_, text_, std::move(keys), mainnet_);
+    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
+    Require(account <= 100, "Default account exceeds 100");
+    std::string text;
+    if (purpose == 44) text = "pkh(@0/**)";
+    else if (purpose == 49) text = "sh(wpkh(@0/**))";
+    else if (purpose == 84) text = "wpkh(@0/**)";
+    else if (purpose == 86) text = "tr(@0/**)";
+    else throw std::invalid_argument("Unsupported default account type");
+    const Path path{purpose | 0x80000000U, mainnet ? 0x80000000U : 0x80000001U, account | 0x80000000U};
+    const auto pub = keys.PublicAt(path);
+    const auto key_text = "[" + HexStr(keys.RootFingerprint()) + PathText(path).substr(1) + "]" + EncodePublic(pub, mainnet);
+    return Policy("", text, {key_text}, mainnet);
 }
 
 Digest Policy::ID() const

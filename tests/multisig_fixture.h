@@ -1,5 +1,6 @@
 #pragma once
 #include "application.h"
+#include "wallet_qr.h"
 #include "cbor.h"
 #include <chainparams.h>
 #include <crypto/common.h>

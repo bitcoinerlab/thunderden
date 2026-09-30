@@ -123,7 +123,7 @@ every transaction still requires its own review and approval.
 ### Direct multisig setup
 
 The console can also load one public wallet setup from Sparrow's `crypto-output`
-QR. `wallet_import.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
+QR. `wallet_qr.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
 or native SegWit. It is a small, bounded account importer, not a general descriptor
 language parser. Core remains the script engine.
 
@@ -149,8 +149,12 @@ fresh approval of a substituted setup is not proof that it is the old wallet.
 
 ## Signing
 
-`ReviewedTransaction` owns a decoded PSBTv0, its authorized policy and the review
-facts. It accepts at most 1 MiB of PSBT data and 128 inputs/outputs each. Core checks
+`ReviewedTransaction` retains an immutable decoded PSBTv0, its authorized policy
+and the review facts. Candidate reviews share one validated request snapshot and
+its precomputed signing data; they do not repeatedly decode or retain separate
+copies of the entire PSBT. Copies of a policy share immutable parsed descriptors,
+with independent policy names/key vectors, rather than reparsing the descriptor.
+The request accepts at most 1 MiB of PSBT data and 128 inputs/outputs each. Core checks
 the unsigned transaction; Thunder Den rejects conflicting previous-output data,
 out-of-range amounts, unsupported signing rules and invalid finalized inputs.
 
@@ -345,6 +349,20 @@ threat model, enforced boundary and practical limits.
 
 ## Build and independent review
 
+The main code boundaries are deliberately small:
+
+- `keys` owns secret derivation and public-key/path encoding.
+- `policy` owns wallet definitions, standard defaults and authorization.
+- `transaction` validates one immutable request, finds matching policies and
+  produces policy-specific reviews and signatures. It does not depend on the UI.
+- `wallet_qr` translates public wallet formats into and out of those models.
+- `application` coordinates setup and signing with local approval; `main` owns
+  the session and routes user actions. `review` supplies text, and `terminal` /
+  `hardware` render it. QR commands reuse the same approval and signing paths.
+
+No format importer or scanner can create approval. The important boundary is the
+local confirmation of a validated wallet or immutable transaction review.
+
 One pinned Docker environment supplies the build and test tools. Source archives
 are hash-checked. The release build must normalize final disk metadata and produce
 byte-identical images from clean outputs.
@@ -352,9 +370,9 @@ byte-identical images from clean outputs.
 Tests and development tools stay outside the signer image. For an AI-assisted
 audit of Thunder Den's own code, start with:
 
-- `src/main.cpp`, `src/application_ui.cpp`, `src/terminal.cpp`, `src/review.cpp` and `src/hardware.cpp`:
+- `src/main.cpp`, `src/application.cpp`, `src/terminal.cpp`, `src/review.cpp` and `src/hardware.cpp`:
   recovery input, session lifetime, what is displayed and how consent is obtained.
-- `src/application.cpp`, `src/wallet_import.cpp`, `src/policy.cpp`, `src/transaction.cpp` and `src/keys.cpp`:
+- `src/wallet_qr.cpp`, `src/policy.cpp`, `src/transaction.cpp` and `src/keys.cpp`:
   request validation, wallet authorization, immutable review and key use.
 - `src/scanner_main.cpp`, `src/camera.cpp`, `src/transport.cpp`, `src/scan.cpp` and
   `src/isolation.cpp`: image/QR decoding, input bounds and the process boundary.

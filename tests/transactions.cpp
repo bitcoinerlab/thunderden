@@ -469,7 +469,9 @@ void Detection(const td::Keys& alice, const td::Keys& bob)
         auto first = td::DefaultPolicy(alice, purpose, 0), second = td::DefaultPolicy(alice, purpose, 1);
         auto psbt = fixture::Spend({&first, &first, &second}, purpose != 44);
         const auto calls = signature_calls;
-        auto options = td::FindSigningWallets(Serialize(psbt), alice, nullptr);
+        auto request_bytes = Serialize(psbt);
+        auto options = td::FindSigningWallets(request_bytes, alice, nullptr);
+        std::fill(request_bytes.begin(), request_bytes.end(), std::byte{0});
         Check(signature_calls == calls, "Wallet detection produced signatures");
         Check(options.wallets.size() == 2 && options.wallets[0].inputs == 2 && options.wallets[1].inputs == 1,
             "Multiple inputs were confused with multiple accounts");
@@ -487,11 +489,11 @@ void Detection(const td::Keys& alice, const td::Keys& bob)
         Check(before.inputs[0].partial_sigs == after.inputs[0].partial_sigs
             && before.inputs[0].m_tap_key_sig == after.inputs[0].m_tap_key_sig, "Second pass changed existing signatures");
         const auto finished = td::FindSigningWallets(complete->psbt, alice, nullptr);
-        Check(finished.matched_wallet && finished.wallets.empty(), "Completed wallet still offered signing");
+        Check(!finished.needs_wallet && finished.wallets.empty(), "Completed wallet still offered signing");
         auto finalized = Decode(complete->psbt);
         Check(FinalizePSBT(finalized), "Fixture failed to finalize");
         const auto final_options = td::FindSigningWallets(Serialize(finalized), alice, nullptr);
-        Check(final_options.matched_wallet && final_options.wallets.empty(), "Finalized transaction requested a wallet setup");
+        Check(!final_options.needs_wallet && final_options.wallets.empty(), "Finalized transaction requested a wallet setup");
         auto foreign = fixture::Spend({&first});
         foreign.inputs[0].hd_keypaths.clear(); foreign.inputs[0].m_tap_bip32_paths.clear();
         Check(td::FindSigningWallets(Serialize(foreign), alice, nullptr).wallets.empty(), "Missing paths chose a private account");
@@ -501,13 +503,13 @@ void Detection(const td::Keys& alice, const td::Keys& bob)
         auto policy = td::ImportMultisig(fixture::Setup(kind, 2, {&alice, &bob}, {fixture::Path(kind), fixture::Path(kind, 7)}));
         auto psbt = fixture::Spend({&policy, &policy}, kind != 0);
         Check(td::FindSigningWallets(Serialize(psbt), alice, nullptr).wallets.empty(), "Unapproved multisig was inferred from PSBT");
-        td::ApprovedWallet loaded{policy.Copy(), *td::ApproveWallet(policy, alice, [](const auto&, const auto&) { return true; })};
+        td::ApprovedWallet loaded{policy, *td::ApproveWallet(policy, alice, [](const auto&, const auto&) { return true; })};
         auto options = td::FindSigningWallets(Serialize(psbt), alice, &loaded);
         Check(options.wallets.size() == 1 && options.wallets[0].inputs == 2, "Loaded multisig did not match both branches");
         auto partial = options.wallets[0].transaction->Sign(alice, [](const auto&) { return true; });
         Check(partial && !partial->complete, "Multisig completed without cosigner");
         Check(td::FindSigningWallets(partial->psbt, alice, &loaded).wallets.empty(), "Our multisig signature was requested again");
-        td::ApprovedWallet other{policy.Copy(), *td::ApproveWallet(policy, bob, [](const auto&, const auto&) { return true; })};
+        td::ApprovedWallet other{policy, *td::ApproveWallet(policy, bob, [](const auto&, const auto&) { return true; })};
         auto remaining = td::FindSigningWallets(partial->psbt, bob, &other);
         Check(remaining.wallets.size() == 1, "Missing cosigner was not detected");
         auto complete = remaining.wallets[0].transaction->Sign(bob, [](const auto&) { return true; });
@@ -515,6 +517,10 @@ void Detection(const td::Keys& alice, const td::Keys& bob)
         loaded.proof[0] ^= 1;
         Reject([&] { td::FindSigningWallets(Serialize(psbt), alice, &loaded); });
     }
+    auto unrelated = td::DefaultPolicy(bob, 84, 0);
+    auto malformed = fixture::Spend({&unrelated});
+    malformed.inputs[0].witness_utxo.nValue += 1;
+    Reject([&] { td::FindSigningWallets(Serialize(malformed), alice, nullptr); });
     std::puts("PASS: verified auto-selection, one-policy passes, signature preservation and all three loaded multisig types");
 }
 
@@ -525,11 +531,11 @@ void CompactFees(const td::Keys& alice, const td::Keys& bob)
         auto original = fixture::Spend({&policy});
         auto compact = original;
         compact.inputs[0].non_witness_utxo.reset();
-        td::ReviewedTransaction safe(policy.Copy(), alice, td::Digest{}, Serialize(compact));
+        td::ReviewedTransaction safe(policy, alice, td::Digest{}, Serialize(compact));
         Check(!safe.Review().fee_unverified, "Single input received multi-input attack warning");
         Verify(*safe.Sign(alice, [](const auto&) { return true; }));
         compact.inputs[0].witness_utxo.nValue += 500;
-        td::ReviewedTransaction false_amount(policy.Copy(), alice, td::Digest{}, Serialize(compact));
+        td::ReviewedTransaction false_amount(policy, alice, td::Digest{}, Serialize(compact));
         auto signed_wrong = Decode(false_amount.Sign(alice, [](const auto&) { return true; })->psbt);
         signed_wrong.inputs[0].non_witness_utxo = original.inputs[0].non_witness_utxo;
         signed_wrong.inputs[0].witness_utxo = original.inputs[0].witness_utxo;
@@ -539,7 +545,7 @@ void CompactFees(const td::Keys& alice, const td::Keys& bob)
     auto unsafe_legacy = fixture::Spend({&legacy});
     unsafe_legacy.inputs[0].witness_utxo = unsafe_legacy.inputs[0].non_witness_utxo->vout[0];
     unsafe_legacy.inputs[0].non_witness_utxo.reset();
-    Reject([&] { td::ReviewedTransaction invalid(legacy.Copy(), alice, td::Digest{}, Serialize(unsafe_legacy)); });
+    Reject([&] { td::ReviewedTransaction invalid(legacy, alice, td::Digest{}, Serialize(unsafe_legacy)); });
 
     auto policy = td::DefaultPolicy(alice, 84, 0);
     auto truth = fixture::Spend({&policy, &policy});
@@ -550,7 +556,7 @@ void CompactFees(const td::Keys& alice, const td::Keys& bob)
         for (auto& input : request.inputs) input.non_witness_utxo.reset();
         request.inputs[1 - correct].witness_utxo.nValue = 100;
         const auto calls = signature_calls;
-        td::ReviewedTransaction review(policy.Copy(), alice, td::Digest{}, Serialize(request));
+        td::ReviewedTransaction review(policy, alice, td::Digest{}, Serialize(request));
         Check(review.Review().fee == 100 && review.Review().fee_unverified, "Manipulated amounts reached an exact-fee review");
         Check(Contains(td::TransactionLines(review.Review()), "Unverified fee: " + td::Amount(100)), "Missing persistent fee qualification");
         Check(!review.Sign(alice, [](const auto&) { return false; }) && signature_calls == calls, "Refusal produced signatures");
@@ -563,14 +569,14 @@ void CompactFees(const td::Keys& alice, const td::Keys& bob)
     auto other = td::DefaultPolicy(bob, 84, 0);
     auto mixed = fixture::Spend({&policy, &other});
     mixed.inputs[0].non_witness_utxo.reset();
-    td::ReviewedTransaction bound(policy.Copy(), alice, td::Digest{}, Serialize(mixed));
+    td::ReviewedTransaction bound(policy, alice, td::Digest{}, Serialize(mixed));
     Check(!bound.Review().fee_unverified, "Own amount commitment plus authenticated other amounts was ignored");
     mixed.inputs[1].non_witness_utxo.reset();
-    td::ReviewedTransaction unbound(policy.Copy(), alice, td::Digest{}, Serialize(mixed));
+    td::ReviewedTransaction unbound(policy, alice, td::Digest{}, Serialize(mixed));
     Check(unbound.Review().fee_unverified, "External unverified amount lost warning");
     auto tap = td::DefaultPolicy(alice, 86, 0);
     auto tap_mixed = fixture::Spend({&tap, &other}, true);
-    td::ReviewedTransaction tap_bound(tap.Copy(), alice, td::Digest{}, Serialize(tap_mixed));
+    td::ReviewedTransaction tap_bound(tap, alice, td::Digest{}, Serialize(tap_mixed));
     Check(!tap_bound.Review().fee_unverified, "Taproot DEFAULT all-amount commitment was ignored");
     std::puts("PASS: compact single-input protection, legacy rejection and multi-input fee attack remains disclosed after consent");
 }

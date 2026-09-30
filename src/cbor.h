@@ -59,6 +59,9 @@ struct CborWriter {
     std::vector<uint8_t> data;
     void UInt(uint64_t n) { CborLite::encodeUnsigned(data, n); }
     void Array(size_t n) { CborLite::encodeArraySize(data, n); }
+    void Map(size_t n) { CborLite::encodeMapSize(data, n); }
+    void Tag(uint64_t n) { CborLite::encodeTagAndValue(data, CborLite::Major::semantic, n); }
+    void Bool(bool value) { CborLite::encodeBool(data, value); }
     void Bytes(std::span<const uint8_t> bytes) { CborLite::encodeBytes(data, bytes); }
     void Text(const std::string& text) { CborLite::encodeText(data, text); }
 };
