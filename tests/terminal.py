@@ -507,9 +507,29 @@ p.wait(b"4: End session (clear keys)")
 p.send(b"3")  # The third shortcut now shares a public key; exit is last.
 p.enter(b"Enter a custom path (advanced)", b"4")
 p.enter(b"Path: ", b"m/84h/1h/0h\r")
+p.enter(b"HD key QR (hdkey)", b"1")
 p.wait(b"Press Enter to show the QR code.")
 assert b"Path: m/84h/1h/0h" in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Public-key path was changed"
 p.send(b"q")
+p.wait(b"4: End session (clear keys)")
+for choice, path, account_type in [(b"1", b"m/48h/1h/7h/2h", b"Native SegWit multisig"),
+                                   (b"2", b"m/48h/1h/7h/1h", b"Nested SegWit multisig"),
+                                   (b"3", b"m/45h", b"Legacy multisig")]:
+    p.send(b"3")
+    p.enter(b"Enter a custom path (advanced)", choice)
+    if choice != b"3":
+        p.enter(b"Account number 0-100 [0]: ", b"7\r")
+    p.wait(b"QR format: Account (crypto-account)")
+    p.wait(b"Account type: " + account_type)
+    p.enter(b"Press Enter to show the QR code.", b"q")
+    assert b"Path: " + path in p.all_text
+    p.wait(b"4: End session (clear keys)")
+p.send(b"3")
+p.enter(b"Enter a custom path (advanced)", b"4")
+p.enter(b"Path: ", b"m/7h/3/9\r")
+p.enter(b"HD key QR (hdkey)", b"2")
+p.wait(b"QR format: HD key (hdkey)")
+p.enter(b"Press Enter to show the QR code.", b"q")
 p.wait(b"4: End session (clear keys)")
 p.send(b"4")
 p.finish(0)

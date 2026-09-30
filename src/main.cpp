@@ -37,21 +37,25 @@ std::pair<unsigned, unsigned> Account(Terminal& terminal)
     return {purposes[choice], AccountNumber(terminal)};
 }
 
-Path PublicKeyPath(Terminal& terminal)
+enum class PublicKeyFormat { Account, Text, HDKey };
+
+std::pair<Path, PublicKeyFormat> PublicKeyChoice(Terminal& terminal)
 {
     const int choice = terminal.Menu("Choose a public key", {"Native SegWit multisig * (BIP48)",
         "Nested SegWit multisig (BIP48)", "Legacy multisig (P2SH)", "Enter a custom path (advanced)"},
         "* Recommended for a new multisig wallet.");
-    if (choice == 2) return {0x8000002dU};
-    if (choice < 2) return {0x80000030U, Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U,
-        0x80000000U | AccountNumber(terminal), choice == 0 ? 0x80000002U : 0x80000001U};
+    if (choice == 2) return {{0x8000002dU}, PublicKeyFormat::Account};
+    if (choice < 2) return {{0x80000030U, Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U,
+        0x80000000U | AccountNumber(terminal), choice == 0 ? 0x80000002U : 0x80000001U}, PublicKeyFormat::Account};
     const auto answer = terminal.Input("Enter a custom path", {"Enter the derivation path provided by your wallet app.",
         Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);
     std::string text(answer.begin(), answer.end());
     std::replace(text.begin(), text.end(), 'h', '\'');
     Path path;
     Require(ParseHDKeypath(text, path) && path.size() <= 32, "Invalid BIP32 path");
-    return path;
+    const auto format = terminal.Menu("Choose a QR format", {"Public-key text", "HD key QR (hdkey)"},
+        "Choose the format requested by your wallet app. Neither format specifies an address type.");
+    return {std::move(path), format == 0 ? PublicKeyFormat::Text : PublicKeyFormat::HDKey};
 }
 
 QRMessage Scan(Terminal& terminal)
@@ -144,12 +148,19 @@ int main(int argc, char** argv)
                     if (terminal.Confirm("Share your wallet setup", review.summary, "show the QR code", review.details))
                         td::ShowQR(terminal, td::PublicDescriptor(policy, keys()), &review);
                 } else if (choice == 2) {
-                    const auto path = PublicKeyPath(terminal);
-                    const auto message = td::PublicKeyText(keys(), path);
-                    const td::ReviewScreen review{"Public key (xpub)", td::PublicKeyReview(keys(), path),
+                    const auto [path, format] = PublicKeyChoice(terminal);
+                    auto lines = td::PublicKeyReview(keys(), path);
+                    lines.push_back(format == PublicKeyFormat::Account ? "QR format: Account (crypto-account)"
+                        : format == PublicKeyFormat::Text ? "QR format: Public-key text" : "QR format: HD key (hdkey)");
+                    if (format == PublicKeyFormat::Account) lines.push_back(std::string("Account type: ")
+                        + (path.size() == 1 ? "Legacy multisig" : path.back() == 0x80000001U ? "Nested SegWit multisig" : "Native SegWit multisig"));
+                    const td::ReviewScreen review{"Public key (xpub)", std::move(lines),
                         {td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)}};
-                    if (terminal.Confirm("Share a public key (xpub)", review.summary, "show the QR code", review.details))
-                        td::ShowQR(terminal, message, &review);
+                    if (terminal.Confirm("Share a public key (xpub)", review.summary, "show the QR code", review.details)) {
+                        if (format == PublicKeyFormat::Text) td::ShowQR(terminal, td::PublicKeyText(keys(), path), &review);
+                        else td::ShowQR(terminal, format == PublicKeyFormat::Account ? td::PublicAccount(keys(), path)
+                            : td::PublicHDKey(keys(), path), &review);
+                    }
                 } else if (choice == 0) {
                     keys(); // Recovery words must be entered before the online webcam faces this screen.
                     const auto message = Scan(terminal);

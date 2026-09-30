@@ -281,17 +281,24 @@ for complete instructions. QR modules remain black on white with a quiet border.
 
 The [protocol](PROTOCOL.md) uses UR v2, including animated fountain-coded messages.
 Standard PSBT exchange uses `crypto-psbt`; single-signature wallet exports use
-`output-descriptor`. Public keys use one static, case-sensitive text QR containing
-`[master fingerprint/origin path]xpub` (or `tpub`). This is SeedSigner's static
-public-key format. Sparrow's SeedSigner/Specter importers and its watch-only camera
-preserve all three fields through this route. Sparrow 2.3.1/2.5.5 can decode our
-former standalone `ur:hdkey`, but the watch-only handler copies only its key and
-the airgapped import screen does not handle that result. The format choice is for
-end-to-end interoperability, not a different key derivation or security rule.
+`output-descriptor`. Standard public-key shortcuts use SeedSigner's
+`crypto-account` format: a master fingerprint and one script-typed public account
+key. This is a cosigner export, not a complete multisig configuration. It uses
+the deployed legacy registry tags and shares the HD-key encoder with modern
+`hdkey` and compact `output-descriptor` exports.
 
-There is no user-facing format switch. The public HD-key CBOR encoder remains
-internal to compact `output-descriptor` export. Liana obtains xpubs through
-`GET_XPUB` command replies, independently of manual public-key QRs.
+Sparrow's airgapped and watch-only importers preserve the key and its origin
+through `crypto-account`. Sparrow 2.3.1/2.5.5 can decode standalone `ur:hdkey`, but
+the watch-only handler copies only its key and the airgapped import screen does
+not handle that result. Static `[origin]xpub` works in Sparrow too, but some other
+wallets strip its origin. The account format therefore carries the intent explicitly.
+This is an interoperability choice, not a different derivation or signing rule.
+
+Standard shortcuts have no format prompt. Custom paths cannot reliably identify
+an account type, so the advanced flow asks for a path and offers only public-key
+text or modern `ur:hdkey`. It never invents a script type for an arbitrary path.
+The review shows the chosen encoding and complete path. Liana obtains xpubs through
+`GET_XPUB` command replies, independently of these manual exports.
 
 Incoming `crypto-output` carries the bounded multisig setup described above.
 Plain PSBT input uses verified automatic matching. Named policy commands use

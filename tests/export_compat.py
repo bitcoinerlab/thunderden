@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, "/opt/urtypes/src")
 from urtypes import RegistryType
-from urtypes.crypto import HDKey, hd_key, keypath, coin_info
+from urtypes.crypto import Account, HDKey, hd_key, keypath, coin_info
 from urtypes.cbor import decoder
 
 # HD-key v2 changes only these registry tags, not the key schema.
@@ -41,3 +41,28 @@ for vector in vectors:
     assert expanded == vector["descriptor"].split("#")[0], "Compact export changed the reviewed descriptor"
     assert len(vector["descriptor"].split("#")[1]) == 8
 print("PASS: eight static public-key and compact descriptor exports retain the reviewed keys and origins")
+
+# crypto-account deliberately uses the deployed legacy registry used by
+# SeedSigner. Check the complete account wrapper with an independent codec.
+hd_key.CRYPTO_HDKEY = RegistryType("crypto-hdkey", 303)
+keypath.CRYPTO_KEYPATH = RegistryType("crypto-keypath", 304)
+coin_info.CRYPTO_COIN_INFO = RegistryType("crypto-coin-info", 305)
+wallets = json.loads(subprocess.check_output([sys.argv[1], "--wallet-vectors"], text=True))
+for wallet in wallets:
+    for expected, exported in zip(wallet["keys"], wallet["accounts"], strict=True):
+        cbor = bytes.fromhex(exported["cbor"])
+        account = Account.from_cbor(cbor)
+        assert account.master_fingerprint.hex() == expected[1:9]
+        assert len(account.output_descriptors) == 1
+        output = account.output_descriptors[0]
+        assert [expr.tag for expr in output.script_expressions] == [[400], [400, 401], [401]][wallet["kind"]]
+        key = output.crypto_key
+        assert not key.private_key and not key.master and key.children is None
+        origin = key.origin.source_fingerprint.hex() + "/" + key.origin.path().replace("'", "h")
+        assert f"[{origin}]{key.bip32_key()}" == expected
+        assert (key.use_info is None) == (wallet["network"] == "main")
+        if key.use_info is not None:
+            assert key.use_info.type == 0 and key.use_info.network == 1
+        assert account.to_cbor() == cbor
+        assert exported["ur"].startswith("UR:CRYPTO-ACCOUNT/")
+print("PASS: standard multisig account QRs retain script type, network, xpub and full origin")

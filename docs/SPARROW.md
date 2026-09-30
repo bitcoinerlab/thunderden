@@ -50,9 +50,15 @@ broadcast them; Thunder Den supplies the signatures.
    can be a Sparrow software wallet using a different test seed.
 
 The same public-key QR also works with Sparrow's **xpub / Watch Only → camera**
-route. It contains `[fingerprint/path]xpub`, so no separate format choice is needed.
-**Enter a custom path (advanced)** remains available for other public-key requests;
-the direct multisig importer supports the standard layouts above.
+route. Standard shortcuts use `crypto-account`, carrying one public account key,
+its fingerprint/path and its intended script type. There is no format prompt for
+these shortcuts. The complete multisig wallet is still assembled in Sparrow.
+
+**Enter a custom path (advanced)** asks for the path, then offers **Public-key text**
+(`[fingerprint/path]xpub`) or **HD key QR (hdkey)**. These formats do not specify a
+script type. Use the format your wallet app requests; Sparrow's text import keeps
+the origin, while its standalone `hdkey` route does not populate all origin fields.
+The direct multisig importer supports the standard layouts above.
 
 ### Load and check the completed wallet
 

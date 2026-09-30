@@ -7,14 +7,15 @@ the signer. There is no network server on the offline laptop.
 The application uses UR v2 with Bytewords-minimal encoding and fountain-coded
 multipart messages. PSBTs remain version 0. BBQR and legacy multipart formats are
 not supported. Outgoing UR text is uppercase for QR alphanumeric encoding.
-The manual public-key export is a separate, case-sensitive static text QR.
+Custom public-key exports may also use a case-sensitive static text QR.
 
 | Message | UR type | Purpose |
 | --- | --- | --- |
 | Plain PSBT | `crypto-psbt` | Standard transaction exchange with a verified matching account or approved wallet |
 | Thunder Den command | `bytes` | Information, xpub retrieval, registration, address checks and policy-based signing |
 | Public descriptor | `output-descriptor` | One-way export of a complete public wallet descriptor |
-| Public extended key | Plain text QR | One-way `[fingerprint/path]xpub` or `tpub` export |
+| Standard account key | `crypto-account` | One-way, script-typed public cosigner key and origin |
+| Custom public key | Plain text QR or `hdkey` | Public extended key and origin, without script-type assumptions |
 | Multisig setup | `crypto-output` | Import and locally approve a supported public multisig account |
 
 ## Human-operated exchange
@@ -64,17 +65,26 @@ This is the compact form of
 [BCR-2023-010](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2023-010-output-descriptor.md).
 The standard also permits full text without `keys`, but Sparrow's importer assumes
 that the key list is present. The compact form avoids that compatibility bug.
-**Share a public key** produces one static text QR, for example
-`[a1b2c3d4/48h/1h/0h/2h]tpub...`. The extended key includes its chain code and
-BIP32 metadata; the prefix adds its master fingerprint and origin. Base58 case
-is preserved. Public root keys use `[fingerprint]xpub...`. No private keys are
-exported. See the [format rationale](DESIGN.md#qr-exchange).
+**Share a public key** uses `ur:crypto-account` for the three standard multisig
+shortcuts. Field 1 is the master fingerprint (uint32); field 2 is a one-element
+array containing the script-typed public HD key. Legacy uses tag 400 (`sh`), nested
+uses 400 then 401 (`sh`/`wsh`), and native uses 401 (`wsh`). The nested key uses
+legacy tag 303, with origin tag 304 and optional coin-info tag 305. It contains
+the public key, chain code, complete origin/depth and parent fingerprint. These
+are SeedSigner-compatible account-key exports, without a threshold or other
+cosigners. The UR type replaces the outer account tag.
+
+The custom-path flow offers either modern `ur:hdkey` or static text such as
+`[a1b2c3d4/7h/3/9]tpub...`. Both carry the origin and extended public key, without
+an address type. Text preserves Base58 case; public root keys use
+`[fingerprint]xpub...`. Neither path exports private keys. See the
+[format rationale](DESIGN.md#qr-exchange).
 
 The single-signature descriptor uses the current Blockchain Commons registry: `output-descriptor` (40308),
 `hdkey` (40303), nested `keypath` (40304) and `coin-info` (40305). The outer UR type
 already identifies its CBOR object, so the top-level tag is omitted. Private-key
 fields are never emitted. The nested HD-key encoding is independent of the
-manual static public-key QR.
+standard account-key and advanced public-key QRs.
 
 The user sees a short summary with optional details and presses Enter to show the
 QR. Public-key exports are not registration instructions.

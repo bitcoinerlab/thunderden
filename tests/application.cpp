@@ -319,9 +319,18 @@ void Multisig(const td::Keys& alice, bool vectors = false)
             SelectParams(network == ChainType::MAIN ? ChainType::REGTEST : ChainType::MAIN);
             Reject([&] { td::ImportMultisig(qr); });
             SelectParams(network);
-            UniValue row(UniValue::VOBJ), public_keys(UniValue::VARR);
+            UniValue row(UniValue::VOBJ), public_keys(UniValue::VARR), accounts(UniValue::VARR);
             for (const auto& info : policy.KeyInformation()) public_keys.push_back(info.text);
+            for (size_t i = 0; i < count; ++i) {
+                const auto exported = td::PublicAccount(*signers[i], paths[i]);
+                td::URSender sender(exported);
+                Check(sender.Parts() == 1, "Standard account export no longer fits one QR");
+                UniValue account(UniValue::VOBJ);
+                account.pushKV("cbor", HexStr(exported.cbor)); account.pushKV("ur", sender.Next());
+                accounts.push_back(account);
+            }
             row.pushKV("network", ChainTypeToString(network)); row.pushKV("kind", kind);
+            row.pushKV("accounts", accounts);
             row.pushKV("keys", public_keys); row.pushKV("descriptor", policy.DescriptorText());
             row.pushKV("cbor", HexStr(qr.cbor)); row.pushKV("addresses", Addresses(policy));
             row.pushKV("psbt", HexStr(fixture::Serialize(fixture::Spend({&policy, &policy}))));
@@ -341,6 +350,9 @@ void Multisig(const td::Keys& alice, bool vectors = false)
     Reject([&] { td::ApproveWallet(foreign, alice, [](const auto&, const auto&) -> bool {
         throw std::runtime_error("Unowned QR setup reached approval");
     }); });
+    for (const auto& path : std::vector<td::Path>{{}, {0x80000054U, 0x80000001U, 0x80000000U},
+            {0x80000030U, 0x80000000U, 0x80000000U, 0x80000002U}, {0x80000030U, 0x80000001U, 0, 0x80000002U}})
+        Reject([&] { td::PublicAccount(alice, path); });
     if (vectors) std::puts(rows.write().c_str());
     else std::puts("PASS: multisig setup origins, three script types, both branches, approval and malformed setup rejection");
 }

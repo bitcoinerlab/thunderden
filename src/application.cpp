@@ -10,10 +10,8 @@ namespace td {
 std::string PublicKeyText(const Keys& keys, const Path& path)
 {
     Require(path.size() <= 32, "Export path is too deep");
-    // SeedSigner's static [origin]xpub format fills fingerprint/path in both
-    // Sparrow's watch-only scanner and its SeedSigner/Specter importers. The
-    // standalone ur:hdkey route drops that metadata in Sparrow 2.3.1/2.5.5.
-    // Keep PublicHDKey's CBOR for the compact descriptor, not a second UI format.
+    // Advanced, script-independent export. The [origin] prefix retains the
+    // fingerprint/path in Sparrow's text scanner, unlike a bare xpub.
     return "[" + HexStr(keys.RootFingerprint()) + PathText(path).substr(1) + "]"
         + EncodePublic(keys.PublicAt(path), Params().GetChainType() == ChainType::MAIN);
 }
@@ -62,7 +60,8 @@ QRMessage PublicDescriptor(const Policy& policy, const Keys& keys)
     return {"output-descriptor", std::move(cbor)};
 }
 
-QRMessage PublicHDKey(const Keys& keys, const Path& path)
+namespace {
+std::vector<uint8_t> HDKeyCBOR(const Keys& keys, const Path& path, bool legacy)
 {
     Require(path.size() <= 32, "Export path is too deep");
     const auto pub = keys.PublicAt(path);
@@ -75,11 +74,11 @@ QRMessage PublicHDKey(const Keys& keys, const Path& path)
     number(3); CborLite::encodeBytes(cbor, pub.pubkey);
     number(4); CborLite::encodeBytes(cbor, pub.chaincode);
     if (!mainnet) {
-        number(5); tag(40305); // coin-info
+        number(5); tag(legacy ? 305 : 40305); // coin-info
         CborLite::encodeMapSize(cbor, size_t{2});
         number(1); number(0); number(2); number(1); // Bitcoin, test network
     }
-    number(6); tag(40304); // keypath
+    number(6); tag(legacy ? 304 : 40304); // keypath
     CborLite::encodeMapSize(cbor, size_t{3});
     number(1); CborLite::encodeArraySize(cbor, path.size() * 2);
     for (const auto index : path) {
@@ -89,7 +88,39 @@ QRMessage PublicHDKey(const Keys& keys, const Path& path)
     number(2); number(ReadBE32(keys.RootFingerprint().data()));
     number(3); number(path.size());
     if (parent) { number(8); number(parent); }
-    return {"hdkey", std::move(cbor)};
+    return cbor;
+}
+}
+
+QRMessage PublicHDKey(const Keys& keys, const Path& path)
+{
+    return {"hdkey", HDKeyCBOR(keys, path, false)};
+}
+
+QRMessage PublicAccount(const Keys& keys, const Path& path)
+{
+    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
+    const bool legacy = path == Path{0x8000002dU};
+    Require(legacy || (path.size() == 4 && path[0] == 0x80000030U
+        && path[1] == (mainnet ? 0x80000000U : 0x80000001U) && path[2] >= 0x80000000U
+        && (path[3] == 0x80000001U || path[3] == 0x80000002U)), "Account export requires a standard multisig path");
+    // Match SeedSigner's account-key export, including its legacy registry tags.
+    // Sparrow's airgapped and watch-only importers preserve the origin through
+    // crypto-account. A standalone hdkey takes a different, lossy UI path there.
+    // This shares one cosigner key; it does not define/approve a multisig quorum.
+    std::vector<uint8_t> cbor;
+    CborLite::encodeMapSize(cbor, size_t{2});
+    CborLite::encodeUnsigned(cbor, uint64_t{1});
+    CborLite::encodeUnsigned(cbor, uint64_t{ReadBE32(keys.RootFingerprint().data())});
+    CborLite::encodeUnsigned(cbor, uint64_t{2});
+    CborLite::encodeArraySize(cbor, size_t{1});
+    const auto tag = [&](uint64_t n) { CborLite::encodeTagAndValue(cbor, CborLite::Major::semantic, n); };
+    if (legacy || path.back() == 0x80000001U) tag(400); // sh
+    if (!legacy) tag(401); // wsh
+    tag(303); // crypto-hdkey
+    const auto key = HDKeyCBOR(keys, path, true);
+    cbor.insert(cbor.end(), key.begin(), key.end());
+    return {"crypto-account", std::move(cbor)};
 }
 
 }

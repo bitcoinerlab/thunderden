@@ -101,13 +101,18 @@ account types in Sparrow 2.3.1 and 2.5.5.
 
 ### Direct multisig source changes
 
-Source changes after `31c541f` add one static `[fingerprint/path]xpub` public-key
-QR, three multisig key shortcuts, a session-only approved wallet and automatic
+Source changes after `31c541f` add three multisig key shortcuts, a session-only approved wallet and automatic
 selection of verified signing accounts. The direct importer accepts Sparrow's
 standard legacy P2SH, nested SegWit and native SegWit sorted-multisig setup QRs.
 Wallet CBOR is validated in the signer; the scanner and its pipe enforce size/type bounds.
 Legacy/unclassified inputs still require full previous transactions. Fee warnings
 for compact inputs remain visible through approval and result review.
+The first implementation used static `[fingerprint/path]xpub` exports. Standard
+shortcuts now use SeedSigner-compatible `crypto-account`; custom paths offer text
+or modern `hdkey`. Full wallet descriptor and command formats retain their meanings.
+The independent `urtypes` codec verifies the account wrapper, script tags, network
+and full key origin. Headless Sparrow 2.5.5 checks decoded 30 account-key exports
+across the three types and both networks without changing any xpub or origin.
 
 Headless checks using the official Sparrow 2.5.5 runtime covered twelve wallet
 setups: 2-of-2 and 2-of-3, all three script types, mainnet and regtest. Its actual

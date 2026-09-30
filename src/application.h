@@ -8,6 +8,7 @@ namespace td {
 Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account);
 QRMessage PublicDescriptor(const Policy& policy, const Keys& keys);
 QRMessage PublicHDKey(const Keys& keys, const Path& path);
+QRMessage PublicAccount(const Keys& keys, const Path& path);
 std::string PublicKeyText(const Keys& keys, const Path& path);
 Policy ImportMultisig(const QRMessage& message);
 using WalletApproval = std::function<bool(const ReviewLines&, const ReviewLines&)>;
