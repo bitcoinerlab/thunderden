@@ -23,7 +23,7 @@ size_t FragmentSize(const QRMessage& message, size_t preferred)
 {
     Require(!message.cbor.empty() && message.cbor.size() <= MAX_UR_MESSAGE, "UR message size limit exceeded");
     Require(message.type == "crypto-psbt" || message.type == "bytes"
-        || message.type == "output-descriptor" || message.type == "hdkey",
+        || message.type == "output-descriptor" || message.type == "hdkey" || message.type == "crypto-output",
         "Unsupported outgoing UR type");
     const auto size = std::max(preferred, (message.cbor.size() + MAX_UR_PARTS - 1) / MAX_UR_PARTS);
     Require(size >= 10 && size <= 2080, "UR fragment size limit exceeded");
@@ -61,7 +61,15 @@ bool URReceiver::Receive(std::string frame)
     const auto slash = frame.find('/', 3);
     Require(slash != frame.npos, "Missing UR body");
     const auto type = frame.substr(3, slash - 3);
-    Require(type == "crypto-psbt" || type == "bytes", "Unsupported incoming UR type");
+    Require(type == "crypto-psbt" || type == "bytes" || type == "crypto-output", "Unsupported incoming UR type");
+    const auto maximum = type == "crypto-output" ? MAX_WALLET_SETUP : MAX_UR_MESSAGE;
+    const auto finish = [&](std::vector<uint8_t> payload) {
+        Require(!payload.empty() && payload.size() <= maximum, "QR payload size limit exceeded");
+        // Wallet CBOR is parsed by the signer, independently of this untrusted
+        // scanner. It is a tagged script, not the byte-string used by PSBTs.
+        if (type != "crypto-output") UnwrapBytes(payload);
+        result_ = QRMessage{type, std::move(payload)};
+    };
     Require(type_.empty() || type_ == type, "Conflicting UR type");
     const auto second = frame.find('/', slash + 1);
     const auto body = frame.substr((second == frame.npos ? slash : second) + 1);
@@ -75,8 +83,7 @@ bool URReceiver::Receive(std::string frame)
     }
     if (second == frame.npos) {
         Require(!header_, "Single-part UR conflicts with multipart scan");
-        UnwrapBytes(cbor);
-        result_ = QRMessage{type, std::move(cbor)};
+        finish(std::move(cbor));
         return true;
     }
     const auto sequence = std::string_view(frame).substr(slash + 1, second - slash - 1);
@@ -88,7 +95,7 @@ bool URReceiver::Receive(std::string frame)
     CborReader in(cbor);
     in.Tuple(5);
     Require(in.UInt() == number && in.UInt() == parts, "UR sequence/header mismatch");
-    const auto length = in.UInt(MAX_UR_MESSAGE), checksum = in.UInt();
+    const auto length = in.UInt(maximum), checksum = in.UInt();
     const auto data = in.Bytes(MAX_QR_TEXT);
     in.End();
     Require(length > 0 && !data.empty(), "Invalid fountain fragment");
@@ -110,9 +117,7 @@ bool URReceiver::Receive(std::string frame)
     ur::FountainEncoder::Part part(number, parts, length, checksum, {data.begin(), data.end()});
     Require(decoder_.receive_part(part) && !decoder_.is_failure(), "Invalid fountain message");
     if (decoder_.is_success()) {
-        auto message = decoder_.result_message();
-        UnwrapBytes(message);
-        result_ = QRMessage{type, std::move(message)};
+        finish(decoder_.result_message());
     }
     return true;
 }

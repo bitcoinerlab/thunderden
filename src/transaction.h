@@ -16,6 +16,7 @@ struct InputReview {
     std::optional<Position> position;
     bool finalized;
     std::optional<int> signing_rule; // Present only for inputs this signer will process.
+    bool full_previous{false};
 };
 
 struct OutputReview {
@@ -39,6 +40,7 @@ struct TransactionReview {
     CAmount recognized_inputs{0};
     CAmount recognized_outputs{0};
     size_t unrecognized_inputs{0};
+    bool fee_unverified{false};
     std::optional<int64_t> estimated_vsize; // Weight-based estimate, not relay policy.
     std::vector<InputReview> inputs;
     std::vector<OutputReview> outputs;
@@ -64,6 +66,8 @@ public:
     ReviewedTransaction(ReviewedTransaction&&) = delete;
     ReviewedTransaction& operator=(ReviewedTransaction&&) = delete;
     const TransactionReview& Review() const { return review_; }
+    // Public-only completion checks for automatic standard-account/multisig selection.
+    size_t PendingInputs(const Keys& session) const;
     // The callback must render the supplied review and obtain local user consent.
     // A declined review returns no result. Invalid requests throw before consent.
     std::optional<SigningResult> Sign(const Keys& session,

@@ -4,9 +4,8 @@
 #include <cbor-lite.hpp>
 
 namespace td {
-// UR transport and QR commands need only definite arrays, unsigned integers,
-// bytes and printable text. Check lengths before slicing or allocating.
-// No generic object tree, recursion, maps, floats or peer-sized allocations.
+// Bounded, schema-specific readers; no generic object tree or recursive parser.
+// Check lengths before slicing or allocating, including public wallet setup data.
 class CborReader {
     std::span<const uint8_t> data_;
     uint8_t Byte() {
@@ -39,6 +38,14 @@ public:
         const auto size = Head(4); Require(size <= maximum, "Array limit exceeded"); return size;
     }
     void Tuple(size_t size) { Require(Array(size) == size, "Wrong array length"); }
+    size_t Map(size_t maximum) {
+        const auto size = Head(5); Require(size <= maximum, "Map limit exceeded"); return size;
+    }
+    uint64_t Tag() { return Head(6); }
+    bool Bool() {
+        const auto value = Head(7); Require(value == 20 || value == 21, "Expected CBOR boolean"); return value == 21;
+    }
+    void IgnoreText(size_t maximum) { Data(3, maximum); }
     std::span<const uint8_t> Bytes(size_t maximum) { return Data(2, maximum); }
     std::string Text(size_t maximum) {
         const auto bytes = Data(3, maximum);

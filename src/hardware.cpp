@@ -11,13 +11,13 @@
 #include <stdexcept>
 
 namespace td {
-void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* review)
+namespace {
+void ShowFrames(Terminal& terminal, std::string frame, URSender* sender, const ReviewScreen* review)
 {
-    URSender sender(message);
-    auto frame = sender.Next();
-    const bool animated = sender.Parts() > 1;
-    // Reserve sequence-number growth so every frame keeps the same geometry.
-    const QRImage probe(std::string(std::min(MAX_QR_TEXT, frame.size() + 64), 'A'));
+    const bool animated = sender && sender->Parts() > 1;
+    // Reserve sequence growth for uppercase UR frames. Plain public-key QRs
+    // contain case-sensitive Base58, so size those from the actual payload.
+    const QRImage probe(animated ? std::string(std::min(MAX_QR_TEXT, frame.size() + 64), 'A') : frame);
     const int version = (probe.width - 17) / 4;
     const auto caption = review ? "Left/b: Review   Esc: Finish" : "Esc: Finish";
     while (true) {
@@ -30,13 +30,25 @@ void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* re
                 if (key == 27 || key == 3 || key == 'q') return;
                 if (review && (key == 'b' || key == KEY_LEFT)) break;
                 if (animated) {
-                    frame = sender.Next();
+                    frame = sender->Next();
                     display.QR(QRImage(frame, version), caption);
                 }
             }
         } // Return the framebuffer to text mode before reopening the review.
         if (!terminal.Revisit(*review)) return;
     }
+}
+}
+
+void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* review)
+{
+    URSender sender(message);
+    ShowFrames(terminal, sender.Next(), &sender, review);
+}
+
+void ShowQR(Terminal& terminal, const std::string& text, const ReviewScreen* review)
+{
+    ShowFrames(terminal, text, nullptr, review);
 }
 
 void ConfigureConsole(int tty)

@@ -93,6 +93,10 @@ The final menu option ends the session and clears the keys. The completion scree
 stays open until Enter starts a fresh session. Turn the laptop off completely when
 finished rather than leaving it asleep.
 
+Current source builds also clear the loaded multisig setup when the session ends.
+See the [Sparrow guide](SPARROW.md) for the new setup and automatic signing flow;
+these changes are not included in the published preview 4 image.
+
 ## Build or test: which command do I need?
 
 | Command | What it does |

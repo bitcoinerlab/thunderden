@@ -1,4 +1,4 @@
-"""Independent public HD-key and compact output-descriptor schema checks."""
+"""Independent HD-key encoding, static public-key and compact descriptor checks."""
 import io
 import json
 import subprocess
@@ -24,6 +24,7 @@ for vector in vectors:
     assert "m/" + key.origin.path().replace("'", "h") == vector["path"]
     assert key.origin.source_fingerprint.hex() == vector["fingerprint"]
     assert key.bip32_key() == vector["key"], "Exported metadata changed the account xpub"
+    assert vector["public_key_text"] == f'[{vector["fingerprint"]}{vector["path"][1:]}]{key.bip32_key()}'
     assert (key.use_info is None) == (vector["network"] == "main")
     if key.use_info is not None:
         assert key.use_info.type == 0 and key.use_info.network == 1
@@ -32,11 +33,11 @@ for vector in vectors:
     assert set(descriptor) == {1, 2} and len(descriptor[2]) == 1
     assert descriptor[2][0].tag == 40303
     nested = HDKey.from_data_item(descriptor[2][0])
-    assert nested.to_cbor() == cbor, "Descriptor key differs from the standalone public export"
+    assert nested.to_cbor() == cbor, "Descriptor key differs from the public HD-key encoder"
     source = descriptor[1]
     assert source.count("@0") == 1 and "/<0;1>/*" in source and "#" not in source
     origin = nested.origin.source_fingerprint.hex() + "/" + nested.origin.path().replace("'", "h")
     expanded = source.replace("@0", f"[{origin}]{nested.bip32_key()}")
     assert expanded == vector["descriptor"].split("#")[0], "Compact export changed the reviewed descriptor"
     assert len(vector["descriptor"].split("#")[1]) == 8
-print("PASS: eight public hdkey and compact output-descriptor exports reconstruct the reviewed descriptors")
+print("PASS: eight static public-key and compact descriptor exports retain the reviewed keys and origins")

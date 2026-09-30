@@ -7,13 +7,15 @@ the signer. There is no network server on the offline laptop.
 The application uses UR v2 with Bytewords-minimal encoding and fountain-coded
 multipart messages. PSBTs remain version 0. BBQR and legacy multipart formats are
 not supported. Outgoing UR text is uppercase for QR alphanumeric encoding.
+The manual public-key export is a separate, case-sensitive static text QR.
 
 | Message | UR type | Purpose |
 | --- | --- | --- |
-| Plain PSBT | `crypto-psbt` | Standard transaction exchange with a locally chosen account |
+| Plain PSBT | `crypto-psbt` | Standard transaction exchange with a verified matching account or approved wallet |
 | Thunder Den command | `bytes` | Information, xpub retrieval, registration, address checks and policy-based signing |
 | Public descriptor | `output-descriptor` | One-way export of a complete public wallet descriptor |
-| Public extended key | `hdkey` | One-way export of a public key with its origin |
+| Public extended key | Plain text QR | One-way `[fingerprint/path]xpub` or `tpub` export |
+| Multisig setup | `crypto-output` | Import and locally approve a supported public multisig account |
 
 ## Human-operated exchange
 
@@ -27,28 +29,33 @@ the online camera is pointed at its screen.
 ## Standard PSBT exchange
 
 `ur:crypto-psbt` contains a CBOR byte string holding the raw PSBT. For an incoming
-plain PSBT, the user selects a BIP44/49/84/86 account locally. The application builds
-the exact default policy from the seed and uses the normal policy/approval engine.
-The unsigned request is never allowed to choose a private-key path implicitly.
+plain PSBT, derivation hints suggest BIP44/49/84/86 accounts. The application builds
+the exact default policies from the seed and verifies script matches; it can also
+match the session's approved multisig wallet. Hints cannot authorize arbitrary
+paths. One match goes directly to review; several matches require selection.
 The result is another `ur:crypto-psbt`, including when only partially signed.
 
-Every input must include its full previous transaction unless all inputs are
-Taproot. For inputs it signs, Thunder Den accepts only `SIGHASH_ALL` outside Taproot
+Every input needs valid previous-output data. Legacy/unclassified inputs require
+`non_witness_utxo`; supported SegWit inputs may use `witness_utxo`. Missing data
+never permits conflicting amounts or scripts. For inputs it signs, Thunder Den accepts only `SIGHASH_ALL` outside Taproot
 and `SIGHASH_DEFAULT` for Taproot. Derivation metadata supplies candidate wallet
 positions; exact policy-script matches establish ownership and change. See
-[Signing](DESIGN.md#signing) for the validation rules.
+[Signing](DESIGN.md#signing) for the validation and fee-assurance rules. Fees and
+affected totals remain qualified when input amounts are not protected by full
+previous transactions or the selected signatures' commitments. Signing those
+requests requires the explicit [fee warning](FEES.md), then transaction approval.
 
 This route preserves standard PSBT QR exchange for wallets such as Sparrow using
-UR mode. It does not require the command format below. The user-tested
-[single-signature BIP44/account 0 workflow](SPARROW.md) uses Sparrow's QR export
-that preserves full previous transactions. Sparrow's BIP84/SegWit QR export
-normally omits them and is rejected by Thunder Den's strict fee checks.
+UR mode. It does not require the command format below. Each pass signs one policy
+and preserves existing signatures. [The Sparrow guide](SPARROW.md) explains wallet
+setup, compact PSBTs and multiple signing passes. The older preview 4 image used
+the stricter full-previous-transaction rule outside all-Taproot spends.
 Public descriptor import checks and the scope of physical testing are recorded
 in [implementation status](STATUS.md#sparrow-integration).
 
 ## Public exports
 
-**Share wallet setup (descriptor)** produces `ur:output-descriptor` for a standard
+**Share a single-signature wallet** produces `ur:output-descriptor` for a standard
 BIP44/49/84/86 account. Map field 1 (`source`) contains a placeholder descriptor,
 such as `tr(@0/<0;1>/*)`, and field 2 (`keys`) contains its tagged public `hdkey`.
 The receive/change suffix stays in `source`, which has no textual checksum.
@@ -57,17 +64,44 @@ This is the compact form of
 [BCR-2023-010](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2023-010-output-descriptor.md).
 The standard also permits full text without `keys`, but Sparrow's importer assumes
 that the key list is present. The compact form avoids that compatibility bug.
-**Share a public key (xpub)** produces public-only `ur:hdkey`, including chain code, origin,
-master fingerprint and network information. Public root keys are supported.
+**Share a public key** produces one static text QR, for example
+`[a1b2c3d4/48h/1h/0h/2h]tpub...`. The extended key includes its chain code and
+BIP32 metadata; the prefix adds its master fingerprint and origin. Base58 case
+is preserved. Public root keys use `[fingerprint]xpub...`. No private keys are
+exported. See the [format rationale](DESIGN.md#qr-exchange).
 
-These use the current Blockchain Commons registry: `output-descriptor` (40308),
+The single-signature descriptor uses the current Blockchain Commons registry: `output-descriptor` (40308),
 `hdkey` (40303), nested `keypath` (40304) and `coin-info` (40305). The outer UR type
 already identifies its CBOR object, so the top-level tag is omitted. Private-key
-fields are never emitted. The previous `crypto-account` export has been replaced.
+fields are never emitted. The nested HD-key encoding is independent of the
+manual static public-key QR.
 
 The user sees a short summary with optional details and presses Enter to show the
-QR. Public exports are not registration instructions. The scanner accepts only
-PSBTs and Thunder Den commands, not arbitrary descriptors or key exports as commands.
+QR. Public-key exports are not registration instructions.
+
+## Direct multisig setup import
+
+Incoming `ur:crypto-output` uses the legacy registry tags emitted by Sparrow's
+Settings descriptor QR: `sh` (400), `wsh` (401), `sortedmulti` (407), `crypto-hdkey`
+(303), `crypto-keypath` (304) and `crypto-coin-info` (305).
+
+The supported shapes are `sh(sortedmulti(...))`, `sh(wsh(sortedmulti(...)))` and
+`wsh(sortedmulti(...))`. This is a standard-account import: complete origins must
+be `m/45h` for Sparrow's legacy layout or `m/48h/coinh/accounth/1h` / `2h` for
+nested/native SegWit. Each key must be public with a chain code and consistent
+depth/parent metadata. Keys and threshold must satisfy Core's policy checks.
+
+The packet is at most 16 KiB. Definite maps/arrays, minimal integer encodings,
+unique known fields and bounded lengths are required. Optional key labels/notes
+are bounded to 256 bytes each and ignored. Private keys, bare multisig, unsorted
+multisig, explicit child paths and unsupported scripts are rejected. Since Sparrow
+omits child paths, `/0/*` receiving and `/1/*` change are explicitly shown and
+approved. Mainnet/test-network family is checked; the exact test network remains
+the user's local choice.
+
+Successful local registration retains one policy and its proof in RAM; no reply
+QR is required. Subsequent plain PSBTs can use that policy. Existing Thunder Den
+commands continue to carry their own policy and proof.
 
 ## Thunder Den commands
 

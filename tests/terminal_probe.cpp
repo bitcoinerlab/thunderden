@@ -1,4 +1,5 @@
 #include "terminal.h"
+#include "multisig_fixture.h"
 #include <util/strencodings.h>
 #include <unistd.h>
 #include <cstdio>
@@ -8,6 +9,47 @@ int main(int argc, char** argv)
 {
     try {
         td::Terminal terminal(dup(STDIN_FILENO));
+        if (argc == 2 && std::string_view(argv[1]).starts_with("workflow-")) {
+            const std::string mode = argv[1];
+            ECC_Context context;
+            SelectParams(ChainType::REGTEST);
+            td::Keys alice(fixture::Bytes(fixture::WORDS), {}), bob(fixture::Bytes(fixture::WORDS), fixture::Bytes("cosigner"));
+            const auto setup = fixture::Setup(2, 2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)});
+            std::optional<td::ApprovedWallet> loaded;
+            if (mode == "workflow-replace") {
+                auto old = td::ImportMultisig(fixture::Setup(0, 2, {&alice, &bob}, {fixture::Path(0), fixture::Path(0)}));
+                const auto id = old.ID();
+                loaded.emplace(td::ApprovedWallet{std::move(old), alice.RegistrationTag(id)});
+                const bool replaced = td::LoadWallet(terminal, alice, loaded, setup);
+                td::Require((loaded->policy.ID() == id) == !replaced, "Cancelled setup replaced the loaded wallet");
+                std::puts(replaced ? "REPLACED" : "KEPT");
+                return 0;
+            }
+            auto first = td::DefaultPolicy(alice, 84, 0), second = td::DefaultPolicy(alice, 84, 1);
+            auto multisig = td::ImportMultisig(setup);
+            auto psbt = mode == "workflow-inline" ? fixture::Spend({&multisig}, true)
+                : fixture::Spend({&first, mode == "workflow-many" ? &second : &first}, mode == "workflow-fee");
+            const auto bytes = fixture::Serialize(psbt);
+            const td::QRMessage request{"crypto-psbt", td::CborBytes({reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()})};
+            std::optional<td::ReviewScreen> completed;
+            unsigned scans = 0;
+            auto response = td::SignRequest(terminal, alice, loaded, request, [&] { ++scans; return setup; },
+                [&](const auto& review) { return td::ApproveTransaction(terminal, review, completed); });
+            td::Require(scans <= 1, "Setup caused an unnecessary transaction rescan");
+            if (response) {
+                const auto raw = td::UnwrapBytes(response->cbor);
+                PartiallySignedTransaction signed_psbt;
+                std::string error;
+                td::Require(DecodeRawPSBT(signed_psbt, std::as_bytes(std::span(raw)), error), "Bad signed reply");
+                size_t signatures = 0;
+                for (const auto& input : signed_psbt.inputs) signatures += input.partial_sigs.size();
+                td::Require(signatures > 0, "No signature in reply");
+                if (mode == "workflow-many") td::Require(signatures == 1, "Signed multiple policies in one pass");
+                if (completed->warning) terminal.Revisit(*completed);
+            }
+            std::printf("%s %s\n", loaded ? "LOADED" : "EMPTY", response ? "SIGNED" : "CANCELLED");
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "input") {
             td::SecretInput visibility;
             const auto secret = terminal.Input("Secret input test", {"Enter public test data"}, "Secret: ", 32, &visibility);

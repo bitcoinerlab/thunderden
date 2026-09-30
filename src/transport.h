@@ -8,6 +8,7 @@
 #include <optional>
 
 namespace td {
+inline constexpr size_t MAX_WALLET_SETUP = 16384;
 inline constexpr size_t MAX_UR_MESSAGE = 2 * 1024 * 1024 + 65536;
 inline constexpr size_t MAX_UR_PARTS = 1024;
 inline constexpr size_t MAX_QR_TEXT = 4296;

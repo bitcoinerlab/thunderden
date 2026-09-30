@@ -106,6 +106,7 @@ ReviewLines TransactionLines(const TransactionReview& review)
         "Network: " + NetworkName(review.network),
         review.default_account ? "Account: " + std::to_string(review.default_account->at(2) & 0x7fffffff) : "Wallet: " + review.policy_name,
     };
+    if (review.default_account) lines.push_back("Address type: " + AccountType(review.default_account->at(0) & 0x7fffffff));
     CAmount change = 0;
     size_t change_count = 0, destination = 0;
     const auto destinations = std::count_if(review.outputs.begin(), review.outputs.end(), [](const auto& output) {
@@ -126,24 +127,29 @@ ReviewLines TransactionLines(const TransactionReview& review)
     }
     lines.push_back("");
     if (!destinations) lines.push_back("All outputs belong to this wallet.");
-    lines.push_back("Fee: " + Amount(review.fee));
+    lines.push_back(std::string(review.fee_unverified ? "Unverified fee: " : "Fee: ") + Amount(review.fee));
     if (review.estimated_vsize) {
         const auto rate = review.fee * 100 / *review.estimated_vsize;
-        lines.push_back("Estimated fee rate: " + std::to_string(rate / 100) + "."
+        lines.push_back(std::string(review.fee_unverified ? "Unverified fee rate: " : "Estimated fee rate: ") + std::to_string(rate / 100) + "."
             + (rate % 100 < 10 ? "0" : "") + std::to_string(rate % 100) + " sat/vB");
     } else {
-        lines.push_back("Fee rate unavailable; fee above is exact.");
+        lines.push_back(review.fee_unverified ? "Fee rate unavailable; input amounts are not fully verified." : "Fee rate unavailable; fee above is exact.");
     }
     if (!review.unrecognized_inputs) {
-        lines.push_back("Wallet decrease: " + Amount(review.recognized_inputs - review.recognized_outputs));
+        lines.push_back(std::string(review.fee_unverified ? "Wallet decrease (unverified amounts): " : "Wallet decrease: ")
+            + Amount(review.recognized_inputs - review.recognized_outputs));
     } else {
         lines.push_back("Inputs not verified as this wallet: " + std::to_string(review.unrecognized_inputs));
-        lines.push_back("Verified wallet inputs: " + Amount(review.recognized_inputs));
+        lines.push_back(std::string(review.fee_unverified ? "Wallet inputs (unverified amounts): " : "Verified wallet inputs: ") + Amount(review.recognized_inputs));
         lines.push_back("Verified wallet outputs: " + Amount(review.recognized_outputs));
-        lines.push_back("These wallet totals cover verified inputs/outputs only.");
+        lines.push_back(review.fee_unverified ? "Wallet ownership is checked; input amounts are not fully verified."
+            : "These wallet totals cover verified inputs/outputs only.");
     }
     if (change_count) lines.push_back("Verified change: " + Amount(change) + " (" + std::to_string(change_count)
         + (change_count == 1 ? " output)" : " outputs)"));
+    if (review.fee_unverified) lines.push_back("The actual fee may be higher than shown. Continuing does not verify these amounts.");
+    else if (std::any_of(review.inputs.begin(), review.inputs.end(), [](const auto& input) { return !input.full_previous; }))
+        lines.push_back("Compact input data: incorrect amounts would make the signatures added here invalid.");
     const bool all_final = std::all_of(review.inputs.begin(), review.inputs.end(), [](const auto& input) { return input.sequence == 0xffffffff; });
     bool timed = review.locktime && !all_final;
     if (timed) lines.push_back("Transaction locktime: " + (review.locktime < 500000000
@@ -173,6 +179,7 @@ ReviewLines TransactionDetails(const TransactionReview& review)
         "Unrecognized inputs: " + std::to_string(review.unrecognized_inputs),
     };
     if (review.default_account) lines.push_back("Account path: " + PathText(*review.default_account));
+    if (review.fee_unverified) lines.push_back("Input totals and fee use amounts that are not fully verified.");
     if (review.estimated_vsize) lines.push_back("Estimated size: " + std::to_string(*review.estimated_vsize) + " vB");
     lines.push_back("Transaction version: " + std::to_string(review.version));
     lines.push_back("Locktime: " + std::to_string(review.locktime)
@@ -186,8 +193,11 @@ ReviewLines TransactionDetails(const TransactionReview& review)
         lines.push_back("--- Input " + std::to_string(i + 1) + " of " + std::to_string(review.inputs.size()) + " ---");
         lines.push_back(input.previous.hash.ToString() + ":" + std::to_string(input.previous.n));
         lines.push_back("Amount: " + Amount(input.amount));
+        lines.push_back(input.full_previous ? "Amount checked against the previous transaction"
+            : "Amount supplied by the wallet app; previous transaction not included");
         lines.push_back("Sequence: " + std::to_string(input.sequence));
-        lines.push_back(input.finalized ? "Already finalized and verified" : input.position ? "Verified policy input" : "Unrecognized input - not signed");
+        lines.push_back(input.finalized ? "Finalized signatures verified against the supplied output data"
+            : input.position ? "Verified policy script" : "Unrecognized input - not signed");
         if (input.position) lines.push_back(AddressPosition(*input.position));
         if (input.signing_rule) lines.push_back(*input.signing_rule == SIGHASH_DEFAULT ? "Signing rule: DEFAULT" : "Signing rule: ALL");
     }
@@ -200,5 +210,16 @@ ReviewLines TransactionDetails(const TransactionReview& review)
         lines.push_back(AddressPosition(*output.position));
     }
     return lines;
+}
+
+ReviewLines FeeWarning()
+{
+    return {
+        "Wallet apps such as Sparrow may omit previous transactions to keep QR codes small.", "",
+        "This means ThunderDen cannot fully verify the fee.", "",
+        "This is usually fine, but repeated signing requests can be abused to hide a higher fee.", "",
+        "If your wallet unexpectedly asks you to sign again, stop and check why. Otherwise, this warning is expected and you can continue.", "",
+        "Learn more: github.com/bitcoinerlab/thunderden/blob/master/docs/FEES.md",
+    };
 }
 }

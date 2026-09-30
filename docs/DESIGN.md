@@ -120,6 +120,33 @@ Software wallets retain the policy and proof and supply them for later operation
 They are untrusted data sources. Registration authenticates the wallet definition;
 every transaction still requires its own review and approval.
 
+### Direct multisig setup
+
+The console can also load one public wallet setup from Sparrow's `crypto-output`
+QR. `wallet_import.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
+or native SegWit. It is a small, bounded account importer, not a general descriptor
+language parser. Core remains the script engine.
+
+The importer requires complete public key origins: Sparrow's `m/45h` legacy
+layout or the corresponding hardened BIP48 account path. Each cosigner may use a
+different account number. Sparrow omits child paths in this QR, so Thunder Den
+explicitly constructs and reviews `/0/*` receiving and `/1/*` change branches.
+Explicit child paths are rejected by this import rather than silently changed.
+Names and notes in the QR are bounded and ignored. A generated wallet label is
+for readability; the exact policy and key vector establish wallet identity.
+
+The signer parses this data independently of the scanner. The existing
+registration gate checks local ownership, shows every cosigner key and obtains
+typed `REGISTER` approval before generating a proof. The approved policy and
+proof stay together in one RAM-only slot. A failed or declined replacement keeps
+the old slot. Ending the session removes it. The underlying HMAC does not expire
+at logout; existing command clients still use their saved proofs normally.
+
+Our key can be verified from the seed. Other cosigners must be checked against
+their devices or a trusted backup. Comparing two displays fed by the same
+compromised coordinator does not authenticate those cosigners. After reboot,
+fresh approval of a substituted setup is not proof that it is the old wallet.
+
 ## Signing
 
 `ReviewedTransaction` owns a decoded PSBTv0, its authorized policy and the review
@@ -127,11 +154,29 @@ facts. It accepts at most 1 MiB of PSBT data and 128 inputs/outputs each. Core c
 the unsigned transaction; Thunder Den rejects conflicting previous-output data,
 out-of-range amounts, unsupported signing rules and invalid finalized inputs.
 
-Every input requires its full previous transaction unless all inputs are Taproot.
-Legacy and SegWit-v0 signatures do not commit to other inputs' amounts; trusting
-those amounts alone would permit misleading fee review. All-Taproot transactions
-may use witness UTXOs because the selected Taproot signing rule commits to every
-input's amount and script.
+Every input needs a usable previous output. Full previous transactions are checked
+against the referenced txid and output index; conflicting witness UTXOs are
+rejected. Legacy and unclassified input types require full previous transactions.
+Compact data is accepted only for recognized native SegWit-v0, wrapped SegWit-v0
+or native Taproot outputs. Wrapped inputs require a redeem script whose hash
+matches the supplied output; our own scripts come from the authorized policy.
+
+The review records which inputs have full previous transactions. Fee assurance is
+checked for each eligible signing input: legacy ALL commits to no input amounts,
+SegWit-v0 ALL commits to its own amount, and Taproot DEFAULT commits to every input
+amount and script. If any signature from the selected policy could leave a missing
+amount unauthenticated, the fee is marked unverified. This includes external
+inputs. A single-input SegWit-v0 spend can use compact data safely against this fee
+attack: a wrong amount makes its signature invalid. Taproot DEFAULT likewise
+protects all amounts, including in a mixed-input transaction.
+
+An unverified-fee request requires an explicit red warning confirmation followed
+by the normal review and typed `SIGN`. The warning is not an error notice: Esc
+cancels, and navigation alone does not accept the last warning page. The red
+heading and qualified fee/input totals persist through Details, final confirmation
+and revisiting the reply. Accepting the warning does not authenticate the missing
+amounts or stop the known multi-input fee attack. [Fee guidance](FEES.md) explains
+the tradeoff in plain English.
 
 Derivation hints propose address positions; only an exact match against the
 authorized policy's derived script establishes ownership. Receive/self-payment
@@ -142,6 +187,19 @@ Each input/output permits at most 128 derivation hints and 16 candidate position
 Supplied redeem/witness scripts and Taproot commitments are checked against Core's
 public descriptor expansion before approval.
 
+Plain PSBTs suggest standard account candidates through their origins. Only
+BIP44/49/84/86 paths within the existing account bounds are considered, with a
+maximum of eight candidate accounts plus the loaded multisig wallet. Fingerprints
+and paths are hints; exact locally derived scripts establish a match. Public-only
+completion checks and verification of existing local signatures filter out wallets
+that have nothing to add. No transaction signature is made during detection.
+
+One match goes directly to review. Multiple matches produce a chooser, then the
+same review. Each pass signs one policy and preserves existing signatures; it
+never falls back silently to another policy. Missing multisig setup can be loaded
+inline while retaining an owned copy of the original PSBT. Setup approval and
+transaction approval remain separate. See the [multi-account example](SPARROW.md#transactions-using-more-than-one-wallet).
+
 The immutable review exposes wallet identity, network, input outpoints and amounts,
 destinations or raw output scripts, wallet flow, fee, sequences, locktime and
 per-input signing rules. A weight-based size estimate uses Core's dummy signatures;
@@ -149,7 +207,7 @@ unverified request signatures cannot shrink it. The estimate is unavailable when
 an unfinished external input or unsatisfied script prevents dummy finalization.
 
 The mandatory signing review shows wallet/network, every non-change destination's
-full address or script and amount, the exact fee, an estimated fee rate when
+full address or script and amount, the fee with its assurance, a fee-rate estimate when
 available, and verified change totals/counts. Receive/self-payments remain visible.
 Only independently verified change addresses move to Details. With unrecognized
 inputs, wallet accounting is explicitly limited to verified inputs/outputs rather
@@ -222,9 +280,21 @@ for complete instructions. QR modules remain black on white with a quiet border.
 ## QR exchange
 
 The [protocol](PROTOCOL.md) uses UR v2, including animated fountain-coded messages.
-Standard PSBT exchange uses `crypto-psbt`; public exports use `output-descriptor`
-and `hdkey`. Plain PSBT input prompts for a local default account, which is
-constructed and checked by the same policy engine. Named policy operations use
+Standard PSBT exchange uses `crypto-psbt`; single-signature wallet exports use
+`output-descriptor`. Public keys use one static, case-sensitive text QR containing
+`[master fingerprint/origin path]xpub` (or `tpub`). This is SeedSigner's static
+public-key format. Sparrow's SeedSigner/Specter importers and its watch-only camera
+preserve all three fields through this route. Sparrow 2.3.1/2.5.5 can decode our
+former standalone `ur:hdkey`, but the watch-only handler copies only its key and
+the airgapped import screen does not handle that result. The format choice is for
+end-to-end interoperability, not a different key derivation or security rule.
+
+There is no user-facing format switch. The public HD-key CBOR encoder remains
+internal to compact `output-descriptor` export. Liana obtains xpubs through
+`GET_XPUB` command replies, independently of manual public-key QRs.
+
+Incoming `crypto-output` carries the bounded multisig setup described above.
+Plain PSBT input uses verified automatic matching. Named policy commands use
 explicit versioned requests carrying the complete wallet definition and proof.
 The [Thunder Den commands](PROTOCOL.md#thunder-den-commands) and UR transport
 share a bounded CBOR reader. It rejects non-minimal encodings and checks lengths
@@ -237,8 +307,9 @@ temporary private key and chain code are cleared before returning.
 Captured frames are bounded and their row stride is honored. Incoming multipart
 messages must keep consistent types, lengths, counts and checksums; conflicting
 streams never silently replace scan state. Outgoing animation keeps a fixed QR
-geometry and a four-module quiet border. Animated QR codes have Space to pause or
-resume; static codes show only Esc to go back and ignore Space.
+geometry and a four-module quiet border. Static public-key QRs are sized from
+their actual case-sensitive payload. QR results share the same review/Finish
+controls; animation advances automatically.
 
 Scanning continues while complete previews arrive. Ten seconds without a complete
 preview or result ends the scan with a timeout message. The preview controls
@@ -274,9 +345,9 @@ byte-identical images from clean outputs.
 Tests and development tools stay outside the signer image. For an AI-assisted
 audit of Thunder Den's own code, start with:
 
-- `src/main.cpp`, `src/terminal.cpp`, `src/review.cpp` and `src/hardware.cpp`:
+- `src/main.cpp`, `src/application_ui.cpp`, `src/terminal.cpp`, `src/review.cpp` and `src/hardware.cpp`:
   recovery input, session lifetime, what is displayed and how consent is obtained.
-- `src/application.cpp`, `src/policy.cpp`, `src/transaction.cpp` and `src/keys.cpp`:
+- `src/application.cpp`, `src/wallet_import.cpp`, `src/policy.cpp`, `src/transaction.cpp` and `src/keys.cpp`:
   request validation, wallet authorization, immutable review and key use.
 - `src/scanner_main.cpp`, `src/camera.cpp`, `src/transport.cpp`, `src/scan.cpp` and
   `src/isolation.cpp`: image/QR decoding, input bounds and the process boundary.

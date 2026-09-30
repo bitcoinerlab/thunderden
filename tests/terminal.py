@@ -354,6 +354,82 @@ for finish in (False, True):
     assert b"Type SIGN" not in p.all_text, "Revisiting a result asked to sign again"
 print("PASS: completed-result inspection uses Show QR again and Finish without another approval")
 
+def approve_review(p, word=b"SIGN"):
+    while True:
+        p.wait(b"Esc:")
+        last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        p.send(b"\r")
+        if b"Enter: continue" in last:
+            break
+    p.enter(b"Type " + word + b" then Enter: ", word + b"\r")
+
+
+p = Probe("workflow-one", rows=40)
+p.wait(b"Review transaction")
+approve_review(p)
+output, _ = p.finish(0)
+assert b"EMPTY SIGNED" in output
+assert b"Choose a wallet to sign with" not in p.all_text and b"Choose an address type" not in p.all_text
+
+for columns in (40, 80):
+    p = Probe("workflow-many", rows=40, columns=columns)
+    p.enter(b"Enter/1-2: Select", b"1")
+    p.wait(b"Review transaction")
+    p.enter(b"Esc:", b"\x1b")
+    p.enter(b"Enter/1-2: Select", b"2")
+    p.wait(b"Account: 1")
+    approve_review(p)
+    output, _ = p.finish(0)
+    assert b"EMPTY SIGNED" in output
+
+for accept_setup in (False, True):
+    p = Probe("workflow-inline", rows=40)
+    p.enter(b"Enter: scan wallet setup", b"\r")
+    p.wait(b"Check this multisig wallet")
+    if accept_setup:
+        approve_review(p, b"REGISTER")
+        p.wait(b"Review transaction")
+        approve_review(p)
+    else:
+        p.enter(b"Esc: Cancel", b"\x1b")
+    output, _ = p.finish(0)
+    assert (b"LOADED SIGNED" if accept_setup else b"EMPTY CANCELLED") in output
+    assert p.all_text.count(b"Load a multisig wallet?") == 1
+
+p = Probe("workflow-replace", rows=40)
+p.wait(b"This will replace the loaded multisig wallet.")
+p.enter(b"Esc: Cancel", b"\x1b")
+output, _ = p.finish(0)
+assert b"KEPT" in output
+
+for stop in ("warning", "review", "sign"):
+    p = Probe("workflow-fee", rows=40)
+    p.wait(b"Wallet apps such as Sparrow")
+    p.wait(b"Enter: continue to review")
+    assert b"\x1b[0;31;40mFee not fully verified" in p.all_text
+    if stop == "warning":
+        p.send(b"\x1b")
+    else:
+        p.send(b"n")  # Navigation alone must not consent on the warning's last page.
+        time.sleep(0.03)
+        assert p.process.poll() is None and b"Unverified fee:" not in p.all_text
+        p.send(b"\r")
+        p.wait(b"Unverified fee:")
+        if stop == "review":
+            p.enter(b"Esc: Cancel", b"\x1b")
+        else:
+            p.enter(b"Esc: Cancel", b"d")
+            p.wait(b"Wallet ID:")
+            p.enter(b"Esc: Cancel", b"d")
+            p.wait(b"Unverified fee:")
+            approve_review(p)
+            p.enter(b"Esc: Finish", b"\x1b")
+            assert len(re.findall(rb"\x1b\[0;31;40m(?:Review - |Signed - )?[Ff]ee not fully verified", p.all_text)) >= 5
+            assert b"The fee uses unverified input amounts." in p.all_text
+    output, _ = p.finish(0)
+    assert (b"SIGNED" in output) == (stop == "sign")
+print("PASS: automatic signing, chooser/back, inline setup, atomic replacement and persistent fee-warning consent")
+
 MNEMONIC = ["abandon"] * 11 + ["about"]
 
 
@@ -381,6 +457,7 @@ for choice, network, coin in [(b"\r", b"Bitcoin mainnet", 0), (b"2", b"Signet", 
     p.enter(b"5: Legacy testnet3", choice)
     p.wait(network)
     p.enter(b"4: End session (clear keys)", b"3")
+    p.enter(b"Enter a custom path (advanced)", b"4")
     p.wait(f"For example: m/84h/{coin}h/0h".encode())
     p.enter(b"Path: ", b"\x1b")
     p.enter(b"4: End session (clear keys)", b"4")
@@ -428,6 +505,7 @@ p.wait(b"Press Enter to show the QR code.")  # Same keys, without re-entering th
 p.send(b"q")
 p.wait(b"4: End session (clear keys)")
 p.send(b"3")  # The third shortcut now shares a public key; exit is last.
+p.enter(b"Enter a custom path (advanced)", b"4")
 p.enter(b"Path: ", b"m/84h/1h/0h\r")
 p.wait(b"Press Enter to show the QR code.")
 assert b"Path: m/84h/1h/0h" in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Public-key path was changed"

@@ -31,9 +31,9 @@ class Terminal {
     void At(size_t row, size_t column);
     void Row(const Layout& view, size_t index, std::string_view text, Tone tone = Tone::Plain);
     void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
-        std::string_view footer, int selected = -1, std::string_view pager = {});
+        std::string_view footer, int selected = -1, std::string_view pager = {}, bool warning = false);
     bool Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
-        const ReviewLines& details, PageMode mode);
+        const ReviewLines& details, PageMode mode, bool warning = false);
 public:
     Terminal();
     explicit Terminal(int owned_fd);
@@ -48,10 +48,10 @@ public:
     int Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction = {},
         bool cancellable = true);
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
-        size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {});
+        size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false);
     SecretBytes Mnemonic();
-    bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {});
-    bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {});
+    bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {}, bool warning = false);
+    bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {}, bool warning = false);
     bool Revisit(const ReviewScreen& review);
     void Notice(std::string_view title, const ReviewLines& lines);
     bool SessionEnded();

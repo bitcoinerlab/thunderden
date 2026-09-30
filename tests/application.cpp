@@ -3,6 +3,7 @@
 #include "hardware.h"
 #include "qr_commands.h"
 #include "cbor.h"
+#include "multisig_fixture.h"
 
 #include <chainparams.h>
 #include <key_io.h>
@@ -233,6 +234,117 @@ void CameraFrames()
     std::puts("PASS: webcam row padding, RGB/BGR/YUYV conversion and malformed frame bounds");
 }
 
+UniValue Addresses(const td::Policy& policy)
+{
+    UniValue addresses(UniValue::VARR);
+    for (unsigned branch : {0, 1}) for (unsigned index : {0, 1, 7, 1000}) {
+        CTxDestination destination;
+        Check(ExtractDestination(policy.Script(branch, index), destination), "No imported address");
+        addresses.push_back(EncodeDestination(destination));
+    }
+    return addresses;
+}
+
+void PublicKeyImages(const td::Keys& keys)
+{
+    td::QRScanner scanner;
+    for (const auto& path : std::vector<td::Path>{{}, fixture::Path(0), fixture::Path(1, 7), fixture::Path(2, 7), td::Path(32, 0xffffffffU)}) {
+        const auto text = td::PublicKeyText(keys, path);
+        const td::QRImage qr(text);
+        const int width = (qr.width + 8) * 4;
+        std::vector<uint8_t> image(width * width, 255);
+        for (int y = 0; y < qr.width; ++y) for (int x = 0; x < qr.width; ++x)
+            for (int dy = 0; dy < 4; ++dy) for (int dx = 0; dx < 4; ++dx)
+                image[((y + 4) * 4 + dy) * width + (x + 4) * 4 + dx] = qr.modules[y * qr.width + x] ? 0 : 255;
+        const auto decoded = scanner.Scan(image, width, width);
+        Check(decoded == std::vector<std::string>{text}, "Static xpub QR lost case or origin information");
+    }
+    std::puts("PASS: case-sensitive public-key QR optical round trips, including root and maximum-depth keys");
+}
+
+void Multisig(const td::Keys& alice, bool vectors = false)
+{
+    td::Keys bob(Bytes(MNEMONIC), Bytes("cosigner")), carol(Bytes(MNEMONIC), Bytes("third"));
+    UniValue rows(UniValue::VARR);
+    for (auto network : {ChainType::MAIN, ChainType::REGTEST}) {
+        SelectParams(network);
+        for (unsigned kind : {0, 1, 2}) for (size_t count : {2, 3}) {
+            std::vector<const td::Keys*> signers{&alice, &bob};
+            if (count == 3) signers.push_back(&carol);
+            std::vector<td::Path> paths;
+            for (size_t i = 0; i < count; ++i) paths.push_back(fixture::Path(kind, i * 7));
+            const auto qr = fixture::Setup(kind, 2, signers, paths);
+            const auto policy = td::ImportMultisig(qr);
+            Check(policy.OwnedKeys(alice) == std::vector<size_t>{0}, "Imported key ownership changed");
+            for (size_t i = 0; i < count; ++i)
+                Check(policy.KeyInformation()[i].text == td::PublicKeyText(*signers[i], paths[i]), "Import changed an origin or xpub");
+            for (unsigned branch : {0, 1}) for (unsigned index : {0, 1, 7, 1000}) {
+                std::vector<CPubKey> pubs;
+                for (size_t i = 0; i < count; ++i) {
+                    auto path = paths[i]; path.push_back(branch); path.push_back(index);
+                    pubs.push_back(signers[i]->PublicAt(path).pubkey);
+                }
+                std::sort(pubs.begin(), pubs.end());
+                auto script = GetScriptForMultisig(2, pubs);
+                if (kind) script = GetScriptForDestination(WitnessV0ScriptHash(script));
+                if (kind != 2) script = GetScriptForDestination(ScriptHash(script));
+                Check(policy.Script(branch, index) == script, "Import changed threshold, branches or per-index key sorting");
+            }
+            Check(!td::ApproveWallet(policy, alice, [](const auto&, const auto&) { return false; }), "Declined setup produced a proof");
+            const auto proof = td::ApproveWallet(policy, alice, [](const auto&, const auto&) { return true; });
+            Check(proof && policy.Authorized(alice, *proof), "Approved setup could not authorize signing");
+            auto changed = td::ImportMultisig(fixture::Setup(kind, 1, signers, paths));
+            Check(!changed.Authorized(alice, *proof), "Changed threshold reused approval");
+            auto bad = qr; bad.cbor.push_back(0);
+            Reject([&] { td::ImportMultisig(bad); });
+            bad = qr; bad.cbor.pop_back();
+            Reject([&] { td::ImportMultisig(bad); });
+            bad = qr; bad.cbor[2] = 0x99;
+            Reject([&] { td::ImportMultisig(bad); });
+            bad = qr;
+            const size_t map = kind == 1 ? 9 : 6;
+            bad.cbor[map] = 0xa3;
+            bad.cbor.insert(bad.cbor.end(), {1, 2});
+            Reject([&] { td::ImportMultisig(bad); });
+            bad = qr;
+            const std::array<uint8_t, 2> private_flag{2, 0xf4};
+            auto flag = std::search(bad.cbor.begin(), bad.cbor.end(), private_flag.begin(), private_flag.end());
+            Check(flag != bad.cbor.end(), "No private flag in fixture");
+            flag[1] = 0xf5;
+            Reject([&] { td::ImportMultisig(bad); });
+            Reject([&] { td::ImportMultisig(fixture::Setup(kind, count + 1, signers, paths)); });
+            auto wrong_paths = paths; wrong_paths[0].back() ^= 1;
+            Reject([&] { td::ImportMultisig(fixture::Setup(kind, 2, signers, wrong_paths)); });
+            Reject([&] { td::ImportMultisig(fixture::Setup(kind, 2, {&alice, &alice}, {paths[0], paths[0]})); });
+            SelectParams(network == ChainType::MAIN ? ChainType::REGTEST : ChainType::MAIN);
+            Reject([&] { td::ImportMultisig(qr); });
+            SelectParams(network);
+            UniValue row(UniValue::VOBJ), public_keys(UniValue::VARR);
+            for (const auto& info : policy.KeyInformation()) public_keys.push_back(info.text);
+            row.pushKV("network", ChainTypeToString(network)); row.pushKV("kind", kind);
+            row.pushKV("keys", public_keys); row.pushKV("descriptor", policy.DescriptorText());
+            row.pushKV("cbor", HexStr(qr.cbor)); row.pushKV("addresses", Addresses(policy));
+            row.pushKV("psbt", HexStr(fixture::Serialize(fixture::Spend({&policy, &policy}))));
+            row.pushKV("single_psbt", HexStr(fixture::Serialize(fixture::Spend({&policy}))));
+            rows.push_back(row);
+        }
+    }
+    auto spoof = fixture::Setup(2, 2, {&bob, &carol}, {fixture::Path(2), fixture::Path(2, 7)});
+    td::CborWriter old_fp, new_fp;
+    old_fp.UInt(ReadBE32(bob.RootFingerprint().data())); new_fp.UInt(ReadBE32(alice.RootFingerprint().data()));
+    Check(old_fp.data.size() == new_fp.data.size(), "Fingerprint fixture sizes changed");
+    auto fp = std::search(spoof.cbor.begin(), spoof.cbor.end(), old_fp.data.begin(), old_fp.data.end());
+    Check(fp != spoof.cbor.end(), "No fingerprint in fixture");
+    std::copy(new_fp.data.begin(), new_fp.data.end(), fp);
+    auto foreign = td::ImportMultisig(spoof);
+    Check(foreign.OwnedKeys(alice).empty(), "Spoofed QR fingerprint established key ownership");
+    Reject([&] { td::ApproveWallet(foreign, alice, [](const auto&, const auto&) -> bool {
+        throw std::runtime_error("Unowned QR setup reached approval");
+    }); });
+    if (vectors) std::puts(rows.write().c_str());
+    else std::puts("PASS: multisig setup origins, three script types, both branches, approval and malformed setup rejection");
+}
+
 void ExportVectors(const td::Keys& keys)
 {
     UniValue vectors(UniValue::VARR);
@@ -247,6 +359,7 @@ void ExportVectors(const td::Keys& keys)
             row.pushKV("key", td::EncodePublic(info.key, network == ChainType::MAIN));
             row.pushKV("fingerprint", HexStr(info.fingerprint));
             row.pushKV("path", td::PathText(info.origin));
+            row.pushKV("public_key_text", td::PublicKeyText(keys, info.origin));
             row.pushKV("cbor", HexStr(td::PublicHDKey(keys, info.origin).cbor));
             const auto exported = td::PublicDescriptor(policy, keys);
             row.pushKV("descriptor_cbor", HexStr(exported.cbor));
@@ -275,7 +388,33 @@ int main(int argc, char** argv)
         SelectParams(ChainType::REGTEST);
         td::Keys keys(Bytes(MNEMONIC), {});
         if (argc == 2 && std::string_view(argv[1]) == "--export-vectors") { ExportVectors(keys); return 0; }
-        Registration(keys); Signing(keys); CameraFrames();
+        if (argc == 2 && std::string_view(argv[1]) == "--wallet-vectors") { Multisig(keys, true); return 0; }
+        if (argc == 4 && std::string_view(argv[1]) == "--import") {
+            SelectParams(std::string_view(argv[2]) == "main" ? ChainType::MAIN : ChainType::REGTEST);
+            auto policy = td::ImportMultisig({"crypto-output", ParseHex(argv[3])});
+            Check(!policy.OwnedKeys(keys).empty(), "Sparrow fixture lost local key");
+            std::puts(Addresses(policy).write().c_str());
+            return 0;
+        }
+        if (argc == 6 && std::string_view(argv[1]) == "--sign") {
+            SelectParams(std::string_view(argv[2]) == "main" ? ChainType::MAIN : ChainType::REGTEST);
+            Check(std::string_view(argv[5]) == "alice" || std::string_view(argv[5]) == "bob", "Unknown public fixture signer");
+            td::Keys signer(Bytes(MNEMONIC), Bytes(std::string_view(argv[5]) == "bob" ? "cosigner" : ""));
+            auto policy = td::ImportMultisig({"crypto-output", ParseHex(argv[3])});
+            td::ApprovedWallet loaded{policy.Copy(), *td::ApproveWallet(policy, signer, [](const auto&, const auto&) { return true; })};
+            const auto psbt = ParseHex(argv[4]);
+            auto options = td::FindSigningWallets(std::as_bytes(std::span(psbt)), signer, &loaded);
+            Check(options.wallets.size() == 1, "Sparrow PSBT did not match exactly one approved wallet");
+            const auto signed_psbt = options.wallets[0].transaction->Sign(signer, [](const auto&) { return true; });
+            Check(signed_psbt.has_value(), "Fixture signing declined");
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("psbt", HexStr(signed_psbt->psbt));
+            result.pushKV("complete", signed_psbt->complete);
+            result.pushKV("fee_unverified", options.wallets[0].transaction->Review().fee_unverified);
+            std::puts(result.write().c_str());
+            return 0;
+        }
+        Registration(keys); Signing(keys); CameraFrames(); Multisig(keys); PublicKeyImages(keys);
         return 0;
     } catch (const std::exception& error) { std::fprintf(stderr, "%s\n", error.what()); return 1; }
 }

@@ -73,6 +73,15 @@ void Vectors()
         missing.Receive(GOLDEN[i]);
     }
     Check(missing.Result() && missing.Result()->cbor == receiver.Result()->cbor, "Mixed-frame recovery failed");
+    // Wallet CBOR is opaque to transport; the signer separately validates it.
+    const td::QRMessage wallet{"crypto-output", {0xd9, 1, 0x91, 0xd9, 1, 0x97, 0xa2, 1, 2, 2, 0x80}};
+    for (size_t fragment : {size_t{10}, size_t{260}}) {
+        td::URSender output(wallet, fragment);
+        td::URReceiver input;
+        for (size_t i = 0; i < output.Parts(); ++i) input.Receive(output.Next());
+        Check(input.Result() && input.Result()->type == wallet.type && input.Result()->cbor == wallet.cbor,
+            "Wallet setup transport changed its type or bytes");
+    }
     std::puts("PASS: published UR single/multipart vectors, reordered frames and fountain recovery");
 }
 
@@ -120,6 +129,8 @@ void Adversarial()
     Reject([&] { td::URReceiver{}.Receive(Frame(huge_length, "ur:bytes/1-9/")); });
     auto enormous_count = ParseHex("85011affffffff1901031a010203044100");
     Reject([&] { td::URReceiver{}.Receive(Frame(enormous_count, "ur:bytes/1-4294967295/")); });
+    td::URSender oversized_wallet({"crypto-output", std::vector<uint8_t>(td::MAX_WALLET_SETUP + 1, 1)});
+    Reject([&] { td::URReceiver{}.Receive(oversized_wallet.Next()); });
     for (size_t i = 1; i < 9; ++i) active.Receive(GOLDEN[i]);
     Check(active.Result().has_value(), "Invalid frames poisoned valid scan");
     std::puts("PASS: size/count/CBOR bounds, checksum failures, duplicate conflicts and BBQR rejection");

@@ -16,11 +16,8 @@
 namespace {
 using namespace td;
 
-std::pair<unsigned, unsigned> Account(Terminal& terminal)
+unsigned AccountNumber(Terminal& terminal)
 {
-    const int choice = terminal.Menu("Choose an address type", {"Native SegWit (BIP84)", "Taproot (BIP86)",
-        "Wrapped SegWit (BIP49)", "Legacy (BIP44)"}, "Choose the address type used by your wallet app.");
-    constexpr unsigned purposes[]{84, 86, 49, 44};
     const auto answer = terminal.Input("Choose an account",
         {"Use the account number from your wallet app.", "The first account is number 0."}, "Account number 0-100 [0]: ", 3);
     unsigned number = 0;
@@ -29,12 +26,37 @@ std::pair<unsigned, unsigned> Account(Terminal& terminal)
         const auto [end, error] = std::from_chars(first, first + answer.size(), number);
         Require(error == std::errc{} && end == first + answer.size() && number <= 100, "Invalid account number");
     }
-    return {purposes[choice], number};
+    return number;
+}
+
+std::pair<unsigned, unsigned> Account(Terminal& terminal)
+{
+    const int choice = terminal.Menu("Choose an address type", {"Native SegWit (BIP84)", "Taproot (BIP86)",
+        "Wrapped SegWit (BIP49)", "Legacy (BIP44)"}, "Choose the address type used by your wallet app.");
+    constexpr unsigned purposes[]{84, 86, 49, 44};
+    return {purposes[choice], AccountNumber(terminal)};
+}
+
+Path PublicKeyPath(Terminal& terminal)
+{
+    const int choice = terminal.Menu("Choose a public key", {"Native SegWit multisig * (BIP48)",
+        "Nested SegWit multisig (BIP48)", "Legacy multisig (P2SH)", "Enter a custom path (advanced)"},
+        "* Recommended for a new multisig wallet.");
+    if (choice == 2) return {0x8000002dU};
+    if (choice < 2) return {0x80000030U, Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U,
+        0x80000000U | AccountNumber(terminal), choice == 0 ? 0x80000002U : 0x80000001U};
+    const auto answer = terminal.Input("Enter a custom path", {"Enter the derivation path provided by your wallet app.",
+        Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);
+    std::string text(answer.begin(), answer.end());
+    std::replace(text.begin(), text.end(), 'h', '\'');
+    Path path;
+    Require(ParseHDKeypath(text, path) && path.size() <= 32, "Invalid BIP32 path");
+    return path;
 }
 
 QRMessage Scan(Terminal& terminal)
 {
-    terminal.Screen("Scan a wallet request", {"Opening the camera on this device...",
+    terminal.Screen("Scan a QR code", {"Opening the camera on this device...",
         "Point it at the QR code shown by your wallet app."}, "Esc: Cancel");
     Display display(terminal);
     ScanProcess scanner(ScannerExecutable());
@@ -79,6 +101,7 @@ int main(int argc, char** argv)
         td::PrepareSigner(); // Before any recovery input or private key exists.
         ECC_Context context;
         std::unique_ptr<td::Keys> session;
+        std::optional<td::ApprovedWallet> loaded_wallet;
         const auto keys = [&]() -> const td::Keys& {
             if (!session) {
                 const auto mnemonic = terminal.Mnemonic();
@@ -103,8 +126,9 @@ int main(int argc, char** argv)
         };
         while (true) {
             const int choice = terminal.Menu("What would you like to do?", {
-                "Scan a wallet request", "Share wallet setup (descriptor)", "Share a public key (xpub)", "End session (clear keys)"},
-                "Start an action in your wallet app, then scan the QR code it shows.", false);
+                "Scan a QR code", "Share a single-signature wallet", "Share a public key", "End session (clear keys)"},
+                loaded_wallet ? "Loaded wallet: " + loaded_wallet->policy.Name()
+                    : "Scan a transaction or wallet setup from your wallet app.", false);
             if (choice == 3) return 0;
             try {
                 if (choice == 1) {
@@ -120,13 +144,8 @@ int main(int argc, char** argv)
                     if (terminal.Confirm("Share your wallet setup", review.summary, "show the QR code", review.details))
                         td::ShowQR(terminal, td::PublicDescriptor(policy, keys()), &review);
                 } else if (choice == 2) {
-                    const auto answer = terminal.Input("Choose a public key to share", {"Enter the derivation path provided by your wallet app.",
-                        Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);
-                    std::string path_text(answer.begin(), answer.end());
-                    std::replace(path_text.begin(), path_text.end(), 'h', '\'');
-                    std::vector<uint32_t> path;
-                    td::Require(ParseHDKeypath(path_text, path) && path.size() <= 32, "Invalid BIP32 path");
-                    const auto message = td::PublicHDKey(keys(), path);
+                    const auto path = PublicKeyPath(terminal);
+                    const auto message = td::PublicKeyText(keys(), path);
                     const td::ReviewScreen review{"Public key (xpub)", td::PublicKeyReview(keys(), path),
                         {td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)}};
                     if (terminal.Confirm("Share a public key (xpub)", review.summary, "show the QR code", review.details))
@@ -137,18 +156,12 @@ int main(int argc, char** argv)
                     std::optional<td::QRMessage> response;
                     std::optional<td::ReviewScreen> completed;
                     const auto approve = [&](const td::TransactionReview& review) {
-                        completed = td::ReviewScreen{"Signed transaction - review", td::TransactionLines(review), td::TransactionDetails(review)};
-                        return terminal.Approve("Review transaction", completed->summary, "SIGN", completed->details);
+                        return td::ApproveTransaction(terminal, review, completed);
                     };
                     if (message.type == "crypto-psbt") {
-                        const auto bytes = td::UnwrapBytes(message.cbor);
-                        td::Require(bytes.size() <= td::ReviewedTransaction::MAX_PSBT_BYTES, "PSBT size limit exceeded");
-                        const auto [purpose, account] = Account(terminal);
-                        const auto raw = std::as_bytes(std::span(bytes));
-                        const td::ReviewedTransaction reviewed(td::DefaultPolicy(keys(), purpose, account), keys(), td::Digest{}, raw);
-                        const auto result = reviewed.Sign(keys(), approve);
-                        if (result) response = td::QRMessage{"crypto-psbt", td::CborBytes({
-                            reinterpret_cast<const uint8_t*>(result->psbt.data()), result->psbt.size()})};
+                        response = td::SignRequest(terminal, keys(), loaded_wallet, message, [&] { return Scan(terminal); }, approve);
+                    } else if (message.type == "crypto-output") {
+                        LoadWallet(terminal, keys(), loaded_wallet, message);
                     } else {
                         auto result = td::HandleQRRequest(message, keys(), {
                             [&](const auto& lines) {

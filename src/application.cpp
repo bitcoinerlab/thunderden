@@ -7,6 +7,26 @@
 #include <util/strencodings.h>
 
 namespace td {
+std::string PublicKeyText(const Keys& keys, const Path& path)
+{
+    Require(path.size() <= 32, "Export path is too deep");
+    // SeedSigner's static [origin]xpub format fills fingerprint/path in both
+    // Sparrow's watch-only scanner and its SeedSigner/Specter importers. The
+    // standalone ur:hdkey route drops that metadata in Sparrow 2.3.1/2.5.5.
+    // Keep PublicHDKey's CBOR for the compact descriptor, not a second UI format.
+    return "[" + HexStr(keys.RootFingerprint()) + PathText(path).substr(1) + "]"
+        + EncodePublic(keys.PublicAt(path), Params().GetChainType() == ChainType::MAIN);
+}
+
+std::optional<Digest> ApproveWallet(const Policy& policy, const Keys& keys, const WalletApproval& approve)
+{
+    Require(!policy.Name().empty() && !policy.OwnedKeys(keys).empty(), "This wallet does not contain a key from your recovery words");
+    Require(bool(approve), "Missing local approval");
+    const auto id = policy.ID();
+    if (!approve(PolicyReview(policy, keys), {"Wallet ID: " + HexStr(id), "", "Full public descriptor:", policy.DescriptorText()})) return {};
+    return keys.RegistrationTag(id);
+}
+
 Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account)
 {
     const bool mainnet = Params().GetChainType() == ChainType::MAIN;

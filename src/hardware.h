@@ -11,6 +11,7 @@ void ConfigureConsole(int tty);
 // Displays an already completed result; revisiting its public review cannot
 // repeat signing/registration or change the reply being shown.
 void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* review = nullptr);
+void ShowQR(Terminal& terminal, const std::string& text, const ReviewScreen* review = nullptr);
 
 class Display {
     int fd_{-1}, tty_;

@@ -29,6 +29,7 @@ class Policy {
     bool mainnet_;
 public:
     Policy(std::string name, std::string text, std::vector<std::string> keys, bool mainnet);
+    Policy Copy() const;
     const std::string& Name() const { return name_; }
     const std::string& Template() const { return text_; }
     const std::vector<KeyInfo>& KeyInformation() const { return keys_; }

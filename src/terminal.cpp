@@ -152,7 +152,7 @@ void Terminal::Row(const Layout& view, size_t index, std::string_view text, Tone
 }
 
 void Terminal::Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
-    std::string_view footer, int selected, std::string_view pager)
+    std::string_view footer, int selected, std::string_view pager, bool warning)
 {
     // Navigation prepares body rows and owns the layout. Drawing never reads keys
     // or repaginates a review; every emitted field is still checked as plain text.
@@ -168,7 +168,8 @@ void Terminal::Draw(const Layout& view, std::string_view title, const ReviewLine
         Write(std::string(view.width - 11 - network_.size(), ' ')); Write("\033[33m"); Write(network_);
     }
     At(view.body - 3, view.left); Write("\033[90m"); Write(std::string(view.width, '-'));
-    At(view.body - 2, view.left); Write("\033[1;37m"); Write(title); Write("\033[0;37;40m");
+    At(view.body - 2, view.left); Write(warning ? "\033[0;31;40m" : "\033[1;37m");
+    Write(title); Write("\033[0;37;40m");
     for (size_t i = 0; i < rows.size(); ++i) Row(view, i, rows[i], int(i) == selected ? Tone::Selected : Tone::Plain);
     At(view.rows - 2, view.left); Write("\033[90m"); Write(std::string(view.width, '-'));
     if (!pager.empty()) {
@@ -229,7 +230,7 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
 }
 
 SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
-    size_t limit, SecretInput* secret, SecretBytes result, std::string error)
+    size_t limit, SecretInput* secret, SecretBytes result, std::string error, bool warning)
 {
     const auto view = View();
     Printable(prompt);
@@ -254,7 +255,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
         auto text = Wrap(error.empty() ? introduction : ReviewLines{error}, view.width);
         if (hint_rows + (secret && !text.empty() ? 1 : 0) + text.size() + 2 > view.height) {
             if (!Pages(title, error.empty() ? introduction : ReviewLines{error}, "continue", {},
-                error.empty() ? PageMode::Review : PageMode::Error)) throw Cancelled{};
+                error.empty() ? PageMode::Review : PageMode::Error, warning)) throw Cancelled{};
             text.clear();
         }
         auto lines = text;
@@ -266,7 +267,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
         lines.emplace_back(""); // A blank row always separates instructions from input.
         Require(lines.size() < view.height, "Not enough room for the input field");
         Draw(view, title, lines, word ? std::string("Enter: Next   Backspace: Edit")
-            + (secret->word_number > 1 ? "   Up: Previous word" : "") + "   Esc: Cancel" : "Enter: Continue   Esc: Cancel");
+            + (secret->word_number > 1 ? "   Up: Previous word" : "") + "   Esc: Cancel" : "Enter: Continue   Esc: Cancel", -1, {}, warning);
         if (!error.empty()) for (size_t i = 0; i < text.size(); ++i) Row(view, i, text[i], Tone::Error);
         input_row = view.body + lines.size();
         Flush();
@@ -358,7 +359,7 @@ SecretBytes Terminal::Mnemonic()
 }
 
 bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
-    const ReviewLines& details, PageMode mode)
+    const ReviewLines& details, PageMode mode, bool warning)
 {
     const auto view = View();
     const auto wrapped = Wrap(lines, view.width);
@@ -397,8 +398,9 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
             + (page ? "  Left/b: Back" : "") + (details.empty() ? "" : detailed ? "  d: Summary" : "  d: Details")
             + (mode == PageMode::Idle ? "" : mode == PageMode::Completed ? "  Esc: Finish" : "  Esc: Cancel");
         Flush();
-        Draw(view, title, visible, footer, -1, pager);
-        if (mode == PageMode::Error) for (size_t i = 0; i < end - first; ++i) Row(view, i, visible[i], Tone::Error);
+        Draw(view, title, visible, footer, -1, pager, warning);
+        if (mode == PageMode::Error || (warning && mode == PageMode::Confirm))
+            for (size_t i = 0; i < end - first; ++i) Row(view, i, visible[i], Tone::Error);
         const int key = Key();
         Require(View() == view, "Display changed during review. Start the review again.");
         if (mode == PageMode::Idle) {
@@ -416,12 +418,14 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
     }
 }
 
-bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details)
+bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details, bool warning)
 {
-    if (!Pages(title, lines, "continue", details, PageMode::Review)) return false;
+    if (!Pages(title, lines, "continue", details, PageMode::Review, warning)) return false;
     try {
         const auto answer = Input(title, {"You have reached the end of this review.",
-            "Confirm only if the details match what you intended."}, "Type " + std::string(confirmation) + " then Enter: ", 32);
+            warning ? "The fee uses unverified input amounts. Confirm only if you accept this risk."
+                : "Confirm only if the details match what you intended."}, "Type " + std::string(confirmation) + " then Enter: ", 32,
+            nullptr, {}, {}, warning);
         return std::string_view(reinterpret_cast<const char*>(answer.data()), answer.size()) == confirmation;
     } catch (const Cancelled&) { return false; }
 }
@@ -431,14 +435,14 @@ void Terminal::Notice(std::string_view title, const ReviewLines& lines)
     Pages(title, lines, "continue", {}, PageMode::Error);
 }
 
-bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details)
+bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details, bool warning)
 {
-    return Pages(title, lines, action, details, PageMode::Confirm);
+    return Pages(title, lines, action, details, PageMode::Confirm, warning);
 }
 
 bool Terminal::Revisit(const ReviewScreen& review)
 {
-    return Pages(review.title, review.summary, "show QR again", review.details, PageMode::Completed);
+    return Pages(review.title, review.summary, "show QR again", review.details, PageMode::Completed, review.warning);
 }
 
 bool Terminal::SessionEnded()

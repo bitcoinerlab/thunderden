@@ -7,6 +7,7 @@ struct ReviewScreen {
     std::string title;
     ReviewLines summary;
     ReviewLines details;
+    bool warning{false};
 };
 std::string Amount(CAmount value);
 std::string PathText(const Path& path);
@@ -18,4 +19,5 @@ ReviewLines PolicyDetails(const Policy& policy, const Keys& keys);
 ReviewLines PolicyReview(const Policy& policy, const Keys& keys);
 ReviewLines TransactionLines(const TransactionReview& review);
 ReviewLines TransactionDetails(const TransactionReview& review);
+ReviewLines FeeWarning();
 }

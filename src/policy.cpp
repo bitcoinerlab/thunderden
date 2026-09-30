@@ -185,6 +185,13 @@ Policy::Policy(std::string name, std::string text, std::vector<std::string> keys
     public_text_ = std::move(expanded);
 }
 
+Policy Policy::Copy() const
+{
+    std::vector<std::string> keys;
+    for (const auto& key : keys_) keys.push_back(key.text);
+    return Policy(name_, text_, std::move(keys), mainnet_);
+}
+
 Digest Policy::ID() const
 {
     DataStream stream;

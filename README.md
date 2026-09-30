@@ -8,7 +8,7 @@ codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
 before you use it. Its own signer and scanner code, build scripts, boot settings
-and image checks total only around 3,800 lines. We keep that code clear, with
+and image checks total only around 4,400 lines. We keep that code clear, with
 few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
@@ -67,16 +67,13 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 
 ## Use with Sparrow
 
-The tested [Sparrow](https://sparrowwallet.com/) single-signature workflow uses
-**Legacy (BIP44), account 0**. Sparrow exchanges QR codes directly with Thunder Den:
-import its public descriptor, create a transaction in Sparrow, sign on Thunder Den,
-then scan the reply and broadcast. Sparrow calls the wallet **read-only** because
-it holds no private keys; Thunder Den provides the signatures.
+The published preview has a user-tested **Legacy (BIP44), account 0** workflow with
+[Sparrow](https://sparrowwallet.com/). Current source builds also support direct
+multisig setup, automatic account matching and compact SegWit PSBT review.
 
-Use BIP44 for this workflow because Sparrow's SegWit QR export omits previous
-transactions needed by Thunder Den's fee checks. See the
-[Sparrow walkthrough](docs/SPARROW.md) for the steps and security explanation.
-A multisig walkthrough is planned separately.
+Sparrow exchanges QR codes directly with Thunder Den. It holds public wallet
+information; Thunder Den reviews and signs transactions. See the
+[Sparrow guide](docs/SPARROW.md) for setup, build requirements and validation scope.
 
 ## Use with Liana
 
@@ -124,6 +121,7 @@ To build your own USB image, follow the [build and test instructions](docs/BUILD
 ## Follow the work
 
 - [Design](docs/DESIGN.md)
+- [Fee verification and compact PSBTs](docs/FEES.md)
 - [Scanner isolation](docs/ISOLATION.md)
 - [Build and tests](docs/BUILD.md)
 - [End-to-end signing walkthrough](docs/WALKTHROUGH.md)

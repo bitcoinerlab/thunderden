@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-09-29, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-09-30, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow single-signature BIP44 workflow](SPARROW.md) has also been
@@ -13,6 +13,8 @@ with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
 write/read-back verification passed. Broader laptop/camera coverage and final
 release verification remain outstanding.
 Current executable sizes refer to the latest recorded build below.
+Current source also includes the direct multisig/compact-PSBT work described
+below. Those changes are not in the published preview 4 image.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
@@ -91,10 +93,49 @@ On 2026-09-29, the user reported a successful physical single-signature
 the Sparrow/Thunder Den QR signing round trip. See the [walkthrough](SPARROW.md).
 A Sparrow multisig walkthrough is planned separately.
 
-Sparrow's BIP84/SegWit QR export omits full previous transactions and was rejected
-by Thunder Den. The BIP44 route retains that data; the signer's strict fee checks
-remain in place. Automated descriptor-import checks below separately cover all
-four standard account types in Sparrow 2.3.1 and 2.5.5.
+In preview 4, Sparrow's BIP84/SegWit QR export omitted full previous transactions
+and was rejected. BIP44 retained that data. The newer source accepts compact
+SegWit inputs with explicit fee-assurance review, as described in [FEES.md](FEES.md).
+Automated descriptor-import checks below separately cover all four standard
+account types in Sparrow 2.3.1 and 2.5.5.
+
+### Direct multisig source changes
+
+Source changes after `31c541f` add one static `[fingerprint/path]xpub` public-key
+QR, three multisig key shortcuts, a session-only approved wallet and automatic
+selection of verified signing accounts. The direct importer accepts Sparrow's
+standard legacy P2SH, nested SegWit and native SegWit sorted-multisig setup QRs.
+Wallet CBOR is validated in the signer; the scanner and its pipe enforce size/type bounds.
+Legacy/unclassified inputs still require full previous transactions. Fee warnings
+for compact inputs remain visible through approval and result review.
+
+Headless checks using the official Sparrow 2.5.5 runtime covered twelve wallet
+setups: 2-of-2 and 2-of-3, all three script types, mainnet and regtest. Its actual
+SeedSigner, Krux and Specter public-key importers and the conversion used by its
+watch-only text scanner preserved each public key, master fingerprint and path.
+Sparrow's actual Settings descriptor encoder produced setup QRs which Thunder Den
+imported; receiving/change addresses at indices 0, 1, 7 and 1000 matched Core.
+
+For each setup, one-input and two-input PSBTs passed through Sparrow's actual
+serializer with its SeedSigner QR-export flags. Thunder Den added signatures in
+two cosigner passes, and Sparrow parsed and verified the returned signatures and
+recognized completion. Fee-assurance flags matched the full/compact input data.
+These fixtures are synthetic and do not establish chain or mempool acceptance.
+
+Native regression checks cover automatic account selection, one-policy passes,
+already-signed inputs, all three multisig types and signature preservation. A
+two-request fee-attack fixture verifies that the attack remains possible after
+accepting the disclosed risk; a false single-input amount instead makes the
+signature invalid against the actual previous output. Pseudo-terminal checks
+cover setup approval, cancelled replacement, inline setup during signing,
+chooser/back navigation and persistent red fee-warning consent.
+All eleven native suites passed with
+`docker compose --progress quiet run --build --rm test`, including the confined
+scanner's wallet-setup transport and rejection of oversized setup messages.
+
+A physical camera/signing round trip and boot-image checks for these source
+changes have not yet been recorded. The [current guide](SPARROW.md) requires a
+source build and keeps the earlier preview 4 walkthrough linked separately.
 
 ## Verified native behavior
 
@@ -131,8 +172,8 @@ native ARM64 test execution remains unverified.
 - False change hints, mismatched scripts/Taproot commitments, incorrect previous
   outputs, duplicate inputs, amount limits, malformed PSBTs/signatures and
   unsupported signing rules.
-- External input disclosure, full-previous-transaction fee accounting,
-  witness-only all-Taproot signing and untrusted-signature-independent size estimates.
+- External input disclosure, authenticated or explicitly unverified fee accounting,
+  compact SegWit/Taproot signing and untrusted-signature-independent size estimates.
 - Verified Core source remains unchanged by configuration/build. Selected
   node/RPC/wallet/LevelDB symbols are absent from the signing test executable.
 - Signing tests observe only local netlink socket use and no filesystem-write
@@ -171,8 +212,9 @@ native ARM64 test execution remains unverified.
 - Normal logout displays its key-clear confirmation only after the signer exits.
   A fresh keyless viewer waits for Enter before starting a new signer; a new
   mnemonic, passphrase and network produce a new account. Failed exits remain stopped.
-- Eight main/test-network public `hdkey` exports decoded/re-encoded by `urtypes`
-  with updated registry tags and matching xpubs, origins and fingerprints. Compact
+- Eight main/test-network public HD-key encodings decoded/re-encoded by `urtypes`
+  with updated registry tags and matching xpubs, origins and fingerprints. The
+  static public-key text retains that same information. Compact
   `output-descriptor` maps reconstruct the complete reviewed receive/change descriptors.
 - Headless checks against the actual Sparrow 2.3.1 and 2.5.5 descriptor import code
   reproduce the null-key-list failure for the old, valid full-text encoding. The

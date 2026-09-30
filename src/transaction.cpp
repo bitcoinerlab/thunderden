@@ -1,4 +1,5 @@
 #include "transaction.h"
+#include "application.h"
 
 #include <chainparams.h>
 #include <consensus/tx_check.h>
@@ -14,6 +15,66 @@
 
 namespace td {
 namespace {
+PartiallySignedTransaction ReadPSBT(std::span<const std::byte> raw)
+{
+    Require(!raw.empty() && raw.size() <= ReviewedTransaction::MAX_PSBT_BYTES, "PSBT size limit exceeded");
+    PartiallySignedTransaction psbt;
+    std::string error;
+    Require(DecodeRawPSBT(psbt, raw, error) && psbt.GetVersion() == 0, "Invalid PSBTv0");
+    Require(psbt.inputs.size() <= 128 && psbt.outputs.size() <= 128, "Too many transaction inputs or outputs");
+    TxValidationState state;
+    const CTransaction tx{*psbt.tx};
+    Require(!tx.IsCoinBase() && CheckTransaction(tx, state), "Invalid unsigned transaction");
+    return psbt;
+}
+
+CTxOut PreviousOutput(const PartiallySignedTransaction& psbt, size_t index)
+{
+    const auto& input = psbt.inputs[index];
+    CTxOut utxo;
+    Require(psbt.GetInputUTXO(utxo, index), "Missing or incorrect previous output");
+    Require(input.witness_utxo.IsNull() || input.witness_utxo == utxo, "Conflicting previous-output data");
+    Require(MoneyRange(utxo.nValue), "Amount out of range");
+    Require(!utxo.scriptPubKey.IsUnspendable(), "Input spends an unspendable script");
+    return utxo;
+}
+
+// Only recognized witness families qualify for compact UTXO data. For P2SH,
+// the redeem script must actually hash to the supplied output; field presence
+// alone does not establish SegWit. Policy providers supply our own scripts.
+int WitnessVersion(const CScript& output, const SigningProvider& provider)
+{
+    CScript script = output;
+    const bool wrapped = script.IsPayToScriptHash();
+    if (wrapped) {
+        std::vector<std::vector<unsigned char>> solutions;
+        Solver(script, solutions);
+        if (!provider.GetCScript(CScriptID{uint160(solutions[0])}, script)) return -1;
+        Require(GetScriptForDestination(ScriptHash(script)) == output, "Wrong redeem script");
+    }
+    int version;
+    std::vector<unsigned char> program;
+    if (!script.IsWitnessProgram(version, program)) return -1;
+    if (version == 0 && (program.size() == 20 || program.size() == 32)) return 0;
+    return !wrapped && version == 1 && program.size() == 32 ? 1 : -1;
+}
+
+FlatSigningProvider ExternalScripts(const PSBTInput& input)
+{
+    FlatSigningProvider provider;
+    auto script = input.redeem_script;
+    if (script.empty() && !input.final_script_sig.empty()) {
+        // A finalized wrapped-witness scriptSig is a single redeem-script push.
+        auto pc = input.final_script_sig.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        if (input.final_script_sig.GetOp(pc, opcode, data) && pc == input.final_script_sig.end()
+            && opcode <= OP_PUSHDATA4) script = CScript(data.begin(), data.end());
+    }
+    if (!script.empty()) provider.scripts.emplace(CScriptID(script), script);
+    return provider;
+}
+
 template <typename Metadata>
 std::optional<Position> Locate(const Policy& policy, const CScript& script, const Metadata& metadata)
 {
@@ -127,13 +188,8 @@ ReviewedTransaction::ReviewedTransaction(Policy policy, const Keys& session,
 {
     Require(policy_.Authorized(session, tag), "Wallet policy is not authorized for this seed");
     std::copy(tag.begin(), tag.end(), tag_.begin());
-    Require(!raw_psbt.empty() && raw_psbt.size() <= MAX_PSBT_BYTES, "PSBT size limit exceeded");
-    std::string error;
-    Require(DecodeRawPSBT(psbt_, raw_psbt, error) && psbt_.GetVersion() == 0, "Invalid PSBTv0");
-    Require(psbt_.inputs.size() <= 128 && psbt_.outputs.size() <= 128, "Too many transaction inputs or outputs");
+    psbt_ = ReadPSBT(raw_psbt);
     const CTransaction tx{*psbt_.tx};
-    TxValidationState state;
-    Require(!tx.IsCoinBase() && CheckTransaction(tx, state), "Invalid unsigned transaction");
     review_.policy_id = policy_.ID();
     review_.policy_name = policy_.Name();
     review_.policy_template = policy_.Template();
@@ -146,15 +202,12 @@ ReviewedTransaction::ReviewedTransaction(Policy policy, const Keys& session,
 
     std::vector<CTxOut> utxos;
     CAmount inputs_total = 0, outputs_total = 0;
-    bool all_taproot = true;
+    size_t missing_previous = 0;
     for (size_t index = 0; index < psbt_.inputs.size(); ++index) {
         const auto& input = psbt_.inputs[index];
-        CTxOut utxo;
-        Require(psbt_.GetInputUTXO(utxo, index), "Missing or incorrect previous output");
-        Require(input.witness_utxo.IsNull() || input.witness_utxo == utxo, "Conflicting previous-output data");
-        Require(!utxo.scriptPubKey.IsUnspendable(), "Input spends an unspendable script");
+        const auto utxo = PreviousOutput(psbt_, index);
         AddAmount(inputs_total, utxo.nValue);
-        all_taproot &= utxo.scriptPubKey.IsPayToTaproot();
+        missing_previous += !input.non_witness_utxo;
         utxos.push_back(utxo);
         Require(input.m_musig2_participants.empty() && input.m_musig2_pubnonces.empty()
             && input.m_musig2_partial_sigs.empty(), "MuSig2 is not supported");
@@ -164,35 +217,35 @@ ReviewedTransaction::ReviewedTransaction(Policy policy, const Keys& session,
                 "Invalid partial signature encoding");
         }
     }
-    // Legacy/SegWit-v0 signatures do not commit to every input's amount. Full
-    // previous transactions prevent a coordinator understating other input values.
-    if (!all_taproot) {
-        for (const auto& input : psbt_.inputs) {
-            Require(bool(input.non_witness_utxo), "Full previous transactions are required outside all-Taproot spends");
-        }
-    }
-
     const auto txdata = PrecomputePSBTData(psbt_);
     auto public_psbt = psbt_;
-    size_t signable = 0;
+    size_t recognized = 0;
     for (size_t index = 0; index < psbt_.inputs.size(); ++index) {
         const auto& input = psbt_.inputs[index];
         const auto& utxo = utxos[index];
         const auto position = Locate(policy_, utxo.scriptPubKey, input);
+        auto provider = position ? policy_.PublicProvider(*position) : ExternalScripts(input);
+        const auto witness = WitnessVersion(utxo.scriptPubKey, provider);
+        Require(input.non_witness_utxo || witness >= 0,
+            "Full previous transactions are required for legacy or unrecognized input types");
         const bool finalized = PSBTInputSigned(input);
         Require(!finalized || PSBTInputSignedAndVerified(psbt_, index, &txdata), "Invalid finalized input");
         review_.inputs.push_back({tx.vin[index].prevout, utxo.nValue, tx.vin[index].nSequence, position, finalized,
-            position && !finalized ? std::optional{SigningRule(utxo)} : std::nullopt});
+            position && !finalized ? std::optional{SigningRule(utxo)} : std::nullopt, bool(input.non_witness_utxo)});
         if (!position) {
             ++review_.unrecognized_inputs;
             continue;
         }
         AddAmount(review_.recognized_inputs, utxo.nValue);
+        ++recognized;
         if (finalized) continue;
-        ++signable;
         const int rule = SigningRule(utxo);
         CheckSignatures(input, rule);
-        auto provider = policy_.PublicProvider(*position);
+        // DEFAULT binds every input amount. SegWit v0 ALL binds only its own;
+        // legacy ALL binds none. Warn if any signature we may release leaves
+        // an amount unauthenticated. Consent does not upgrade that assurance.
+        review_.fee_unverified |= witness != 1
+            && missing_previous > size_t(witness == 0 && !input.non_witness_utxo);
         auto& clean = public_psbt.inputs[index];
         clean = PSBTInput{};
         clean.non_witness_utxo = input.non_witness_utxo;
@@ -210,7 +263,7 @@ ReviewedTransaction::ReviewedTransaction(Policy policy, const Keys& session,
         clean.hash160_preimages = input.hash160_preimages;
         clean.hash256_preimages = input.hash256_preimages;
     }
-    Require(signable > 0, "No unfinished inputs were verified as belonging to this policy");
+    Require(recognized > 0, "No inputs were verified as belonging to this policy");
 
     for (size_t index = 0; index < tx.vout.size(); ++index) {
         const auto& output = tx.vout[index];
@@ -232,6 +285,9 @@ std::optional<SigningResult> ReviewedTransaction::Sign(const Keys& session,
 {
     Require(Params().GetChainType() == review_.network, "Network changed after review");
     Require(policy_.Authorized(session, tag_), "Seed changed after review");
+    Require(std::any_of(review_.inputs.begin(), review_.inputs.end(), [](const auto& input) {
+        return input.position && !input.finalized;
+    }), "Nothing more to sign for this wallet");
     Require(bool(approve), "Missing transaction approval callback");
     if (!approve(review_)) return {};
     Require(Params().GetChainType() == review_.network, "Network changed during approval");
@@ -266,5 +322,101 @@ std::optional<SigningResult> ReviewedTransaction::Sign(const Keys& session,
     stream << signed_psbt;
     Require(stream.size() <= 2 * MAX_PSBT_BYTES, "Signed PSBT size limit exceeded");
     return SigningResult{{stream.begin(), stream.end()}, added, complete};
+}
+
+size_t ReviewedTransaction::PendingInputs(const Keys& session) const
+{
+    Require(policy_.Authorized(session, tag_), "Wallet policy is not authorized for this seed");
+    auto public_psbt = psbt_;
+    const auto txdata = PrecomputePSBTData(public_psbt);
+    const auto fingerprint = session.RootFingerprint();
+    size_t pending = 0;
+    for (size_t i = 0; i < review_.inputs.size(); ++i) {
+        const auto& facts = review_.inputs[i];
+        if (!facts.position || facts.finalized) continue;
+        const auto provider = policy_.PublicProvider(*facts.position);
+        if (SignPSBTInput(provider, public_psbt, i, &txdata, facts.signing_rule, nullptr, false) == PSBTError::OK) continue;
+        const auto& input = public_psbt.inputs[i];
+        CTxOut utxo;
+        Require(public_psbt.GetInputUTXO(utxo, i), "Missing previous output");
+        const int witness = WitnessVersion(utxo.scriptPubKey, provider);
+        if (witness == 1) {
+            // Automatic selection supports BIP86, not inferred Taproot policies.
+            Require(review_.default_account.has_value(), "Load a supported multisig wallet setup");
+            Require(input.m_tap_key_sig.empty(), "Invalid existing Taproot signature");
+            ++pending;
+            continue;
+        }
+        auto code = utxo.scriptPubKey.IsPayToScriptHash() ? input.redeem_script : utxo.scriptPubKey;
+        if (witness == 0) {
+            int version;
+            std::vector<unsigned char> program;
+            Require(code.IsWitnessProgram(version, program), "Missing witness program");
+            code = program.size() == 20 ? GetScriptForDestination(PKHash(uint160(program))) : input.witness_script;
+        }
+        const MutableTransactionSignatureChecker checker(&*public_psbt.tx, i, utxo.nValue, txdata, MissingDataBehavior::FAIL);
+        bool missing = false;
+        for (const auto& [id, key_origin] : provider.origins) {
+            const auto& [pubkey, origin] = key_origin;
+            if (!std::equal(fingerprint.begin(), fingerprint.end(), origin.fingerprint)
+                || session.PublicAt(origin.path).pubkey != pubkey) continue;
+            const auto sig = input.partial_sigs.find(id);
+            if (sig == input.partial_sigs.end()) missing = true;
+            else Require(sig->second.first == pubkey && checker.CheckECDSASignature(sig->second.second,
+                {pubkey.begin(), pubkey.end()}, code, witness == 0 ? SigVersion::WITNESS_V0 : SigVersion::BASE),
+                "Invalid existing signature for this wallet");
+        }
+        pending += missing;
+    }
+    return pending;
+}
+
+SigningChoices FindSigningWallets(std::span<const std::byte> raw, const Keys& keys, const ApprovedWallet* loaded)
+{
+    const auto psbt = ReadPSBT(raw);
+    if (std::all_of(psbt.inputs.begin(), psbt.inputs.end(), PSBTInputSigned)) {
+        const auto data = PrecomputePSBTData(psbt);
+        for (size_t i = 0; i < psbt.inputs.size(); ++i) {
+            const auto utxo = PreviousOutput(psbt, i);
+            Require(psbt.inputs[i].non_witness_utxo || WitnessVersion(utxo.scriptPubKey, ExternalScripts(psbt.inputs[i])) >= 0,
+                "Full previous transactions are required for legacy or unrecognized input types");
+            Require(PSBTInputSignedAndVerified(psbt, i, &data), "Invalid finalized input");
+        }
+        return {{}, true};
+    }
+    std::set<std::pair<unsigned, unsigned>> accounts;
+    const auto fingerprint = keys.RootFingerprint();
+    const auto coin = Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U;
+    const auto hint = [&](const KeyOriginInfo& origin) {
+        const auto& path = origin.path;
+        if (!std::equal(fingerprint.begin(), fingerprint.end(), origin.fingerprint) || path.size() != 5
+            || path[1] != coin || path[2] < 0x80000000U || path[2] > 0x80000064U
+            || path[3] > 1 || path[4] >= 0x80000000U) return;
+        for (unsigned purpose : {44, 49, 84, 86}) if (path[0] == (0x80000000U | purpose)) {
+            accounts.emplace(purpose, path[2] & 0x7fffffffU);
+            Require(accounts.size() <= 8, "Too many signing accounts in one request");
+        }
+    };
+    for (const auto& input : psbt.inputs) {
+        Require(input.hd_keypaths.size() + input.m_tap_bip32_paths.size() <= 128, "Too many derivation hints");
+        for (const auto& [pubkey, origin] : input.hd_keypaths) hint(origin);
+        for (const auto& [pubkey, leaf_origin] : input.m_tap_bip32_paths) hint(leaf_origin.second);
+    }
+    SigningChoices result;
+    const auto add = [&](Policy policy, const Digest& proof) {
+        bool matches = false;
+        for (size_t i = 0; i < psbt.inputs.size(); ++i) {
+            const auto utxo = PreviousOutput(psbt, i);
+            matches |= Locate(policy, utxo.scriptPubKey, psbt.inputs[i]).has_value();
+        }
+        if (!matches) return;
+        result.matched_wallet = true;
+        auto transaction = std::make_unique<ReviewedTransaction>(std::move(policy), keys, proof, raw);
+        const auto count = transaction->PendingInputs(keys);
+        if (count) result.wallets.push_back({std::move(transaction), count});
+    };
+    for (const auto& [purpose, account] : accounts) add(DefaultPolicy(keys, purpose, account), Digest{});
+    if (loaded) add(loaded->policy.Copy(), loaded->proof);
+    return result;
 }
 }

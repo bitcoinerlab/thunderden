@@ -74,13 +74,9 @@ QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAppr
             auto policy = ReadPolicy(in);
             if (operation == 2) {
                 in.End();
-                Require(!policy.Name().empty() && !policy.OwnedKeys(keys).empty(), "Wallet is not owned");
-                const auto wallet_id = policy.ID();
-                if (!Approve(approve.register_wallet, PolicyReview(policy, keys), {
-                    "Wallet ID: " + HexStr(wallet_id), "", "Full public descriptor:", policy.DescriptorText()})) status = 1;
-                if (!status) {
-                    body.Array(2); body.Bytes(wallet_id); body.Bytes(keys.RegistrationTag(wallet_id));
-                }
+                const auto proof = ApproveWallet(policy, keys, approve.register_wallet);
+                if (!proof) status = 1;
+                else { body.Array(2); body.Bytes(policy.ID()); body.Bytes(*proof); }
             } else {
                 const auto proof = in.Bytes(32);
                 Require(policy.Authorized(keys, proof), "Invalid registration proof");

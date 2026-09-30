@@ -15,7 +15,7 @@ namespace td {
 namespace {
 static_assert(std::endian::native == std::endian::little);
 // Five uint32s: kind, width, height, progress, payload length.
-constexpr uint32_t PREVIEW = 1, PSBT = 2, REQUEST = 3, FAILURE = 4;
+constexpr uint32_t PREVIEW = 1, PSBT = 2, REQUEST = 3, FAILURE = 4, WALLET = 5;
 void Write(std::span<const uint8_t> bytes)
 {
     while (!bytes.empty()) {
@@ -117,8 +117,8 @@ std::optional<ScanUpdate> ScanProcess::Poll()
             Require(width > 0 && width <= 1920 && height > 0 && height <= 1080
                 && size == width * height && progress <= 100, "Invalid scanner preview");
         } else {
-            Require((kind == PSBT || kind == REQUEST) && width == 0 && height == 0 && progress == 0
-                && size > 0 && size <= MAX_UR_MESSAGE, "Invalid scanner result");
+            Require((kind == PSBT || kind == REQUEST || kind == WALLET) && width == 0 && height == 0 && progress == 0
+                && size > 0 && size <= (kind == WALLET ? MAX_WALLET_SETUP : MAX_UR_MESSAGE), "Invalid scanner result");
         }
         payload_.resize(size);
         checked_ = true;
@@ -130,7 +130,7 @@ std::optional<ScanUpdate> ScanProcess::Poll()
         preview_seen_ = true;
         deadline_ = std::chrono::steady_clock::now() + SCAN_FRAME_TIMEOUT;
     } else {
-        update.message = QRMessage{kind == PSBT ? "crypto-psbt" : "bytes", std::move(payload_)};
+        update.message = QRMessage{kind == PSBT ? "crypto-psbt" : kind == WALLET ? "crypto-output" : "bytes", std::move(payload_)};
         complete_ = true;
     }
     header_bytes_ = payload_bytes_ = 0;
@@ -145,8 +145,9 @@ void SendPreview(std::span<const uint8_t> gray, unsigned width, unsigned height,
 
 void SendScanResult(const QRMessage& message)
 {
-    Require(message.type == "crypto-psbt" || message.type == "bytes", "Unsupported scanner result");
-    Send({message.type == "crypto-psbt" ? PSBT : REQUEST, 0, 0, 0, static_cast<uint32_t>(message.cbor.size())}, message.cbor);
+    Require(message.type == "crypto-psbt" || message.type == "bytes" || message.type == "crypto-output", "Unsupported scanner result");
+    const auto kind = message.type == "crypto-psbt" ? PSBT : message.type == "crypto-output" ? WALLET : REQUEST;
+    Send({kind, 0, 0, 0, static_cast<uint32_t>(message.cbor.size())}, message.cbor);
 }
 
 void SendScanFailure(ScanFailure failure) noexcept
