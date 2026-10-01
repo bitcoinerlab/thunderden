@@ -5,6 +5,7 @@
 #include <chainparams.h>
 #include <crypto/common.h>
 #include <streams.h>
+#include <util/strencodings.h>
 
 namespace fixture {
 inline auto Bytes(std::string_view text) { return std::span(reinterpret_cast<const uint8_t*>(text.data()), text.size()); }
@@ -44,6 +45,21 @@ inline td::QRMessage Setup(unsigned kind, unsigned threshold, const std::vector<
         out.UInt(9); out.Text("Cosigner");
     }
     return {"crypto-output", std::move(out.data)};
+}
+
+// Independent producer for public text multisig configurations carried by ur:bytes.
+inline std::string TextSetup(unsigned threshold, const std::vector<const td::Keys*>& signers,
+                             const std::vector<td::Path>& paths)
+{
+    std::string text = "# Multisig setup file\nName: Multisig test\nPolicy: "
+        + std::to_string(threshold) + " of " + std::to_string(signers.size()) + "\nFormat: P2WSH\n\n";
+    for (size_t i = 0; i < signers.size(); ++i) {
+        auto path = td::PathText(paths[i]);
+        std::replace(path.begin(), path.end(), 'h', '\'');
+        text += "Derivation:" + path + "\n" + HexStr(signers[i]->RootFingerprint()) + ":"
+            + td::EncodePublic(signers[i]->PublicAt(paths[i]), Params().GetChainType() == ChainType::MAIN) + "\n";
+    }
+    return text;
 }
 
 inline std::vector<std::byte> Serialize(const PartiallySignedTransaction& psbt)

@@ -66,7 +66,7 @@ std::optional<QRMessage> SignRequest(Terminal& terminal, const Keys& keys, std::
                 return {};
             }
             if (!terminal.Confirm("Wallet setup needed", {"This appears to be a multisig transaction, but the request does not include enough wallet information to check the complete setup.", "",
-                "Show the wallet setup QR code (descriptor) in your wallet app's settings, then scan it here."},
+                "Show the wallet setup or signer-registration QR in your wallet app, then scan it here."},
                 "scan wallet setup")) return {};
             if (!LoadWallet(terminal, keys, loaded, scan())) return {};
             continue;

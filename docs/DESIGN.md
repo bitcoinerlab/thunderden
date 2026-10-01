@@ -122,10 +122,14 @@ every transaction still requires its own review and approval.
 
 ### Direct multisig setup
 
-The console can also load one public wallet setup from Sparrow's `crypto-output`
-QR. `wallet_qr.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
-or native SegWit. It is a small, bounded account importer, not a general descriptor
-language parser. Core remains the script engine.
+The console can also load one public wallet setup from a `crypto-output` QR.
+`wallet_qr.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
+or native SegWit. During an inline setup scan, it also accepts `ur:bytes` containing
+the public text multisig configuration described in [the protocol](PROTOCOL.md#text-multisig-setup).
+That format supplies an M-of-N threshold, `P2WSH`, and a derivation/fingerprint/xpub
+for each cosigner. Both codecs construct the same validated policy. This is a small,
+bounded account importer, not a general descriptor language parser. Core remains
+the script engine; no wallet-specific signing path is added.
 
 When no approved policy can add signatures, the transaction layer can reconstruct
 a standard sorted-multisig candidate directly from PSBT inputs. It validates the
@@ -141,7 +145,7 @@ discovery; it is not a second signing or descriptor engine.
 A discovered definition is only a candidate. The existing review and `REGISTER`
 approval must succeed before its HMAC is created or it becomes the loaded wallet.
 The confirmation explicitly says that this does not sign the transaction yet.
-Missing optional setup fields use the descriptor-scan fallback; invalid or
+Missing optional setup fields use the setup-scan fallback; invalid or
 conflicting supplied data is rejected. Multiple different new wallet definitions
 are not silently combined: the user supplies the intended setup QR instead.
 PSBT-derived account keys are put in canonical order so address-index-dependent

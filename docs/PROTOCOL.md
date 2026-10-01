@@ -15,7 +15,7 @@ Custom public-key exports may also use a case-sensitive static text QR.
 | Thunder Den command | `bytes` | Information, xpub retrieval, registration, address checks and policy-based signing |
 | Standard account key | `crypto-account` | One-way, script-typed public cosigner key and origin |
 | Custom public key | Plain text QR or `hdkey` | Public extended key and origin, without script-type assumptions |
-| Multisig setup | `crypto-output` | Import and locally approve a supported public multisig account |
+| Multisig setup | `crypto-output`, or `bytes` during inline setup | Import and locally approve a supported public multisig account |
 
 ## Human-operated exchange
 
@@ -36,8 +36,8 @@ paths. One match goes directly to review; several matches require selection.
 If none can add signatures, complete PSBT account xpubs/origins and input scripts
 can provide a supported multisig setup for local approval. This candidate cannot
 sign until the user approves it with `REGISTER`. Insufficient setup data asks for
-a descriptor QR; a wrong/missing local key has a separate message. Invalid or
-conflicting supplied metadata is rejected rather than repaired.
+a wallet setup or signer-registration QR; a wrong/missing local key has a separate
+message. Invalid or conflicting supplied metadata is rejected rather than repaired.
 The result is another `ur:crypto-psbt`, including when only partially signed.
 
 Every input needs valid previous-output data. Legacy/unclassified inputs require
@@ -106,9 +106,47 @@ omits child paths, `/0/*` receiving and `/1/*` change are explicitly shown and
 approved. Mainnet/test-network family is checked; the exact test network remains
 the user's local choice.
 
-Successful local registration retains one policy and its proof in RAM; no reply
-QR is required. Subsequent plain PSBTs can use that policy. Existing Thunder Den
-commands continue to carry their own policy and proof.
+### Text multisig setup
+
+During the inline setup scan requested by an incomplete multisig PSBT, `ur:bytes`
+may instead contain a CBOR byte string holding a public text configuration:
+
+```text
+# Multisig setup file
+Name: Example
+Policy: 2 of 3
+Format: P2WSH
+
+Derivation:m/48'/1'/0'/2'
+A1B2C3D4:tpub...
+Derivation:m/48'/1'/0'/2'
+11223344:tpub...
+Derivation:m/48'/1'/7'/2'
+55667788:tpub...
+```
+
+This format supports M-of-N native SegWit sorted multisig with `1 <= M <= N`
+and 2 through 20 keys. Each fingerprint/public-key line must have its own preceding
+`Derivation:` line with a hardened `m/48h/coinh/accounth/2h` path; apostrophes and
+`h` are equivalent. Public keys must use `xpub` on mainnet or `tpub` on test networks.
+Origins, key metadata, duplicates and ownership use the same policy validation as
+structured setup. Receiving/change branches are `/0/*` and `/1/*`.
+
+The entire CBOR packet is limited to 16 KiB and each text line to 512 bytes. Only
+printable ASCII, tabs and LF/CRLF line endings are accepted. Surrounding whitespace,
+blank lines and `#` comment lines are ignored. `Name:` is optional, limited to 256
+bytes and ignored for wallet identity. Repeated headers, unknown fields, missing
+origins, dangling derivations and a key count different from N are rejected.
+Only `Format: P2WSH` is supported by this text importer.
+
+The text format is wallet-independent. Its `ur:bytes` payload is interpreted as
+wallet setup only during the inline setup scan, not as a Thunder Den command.
+At the main menu, `ur:bytes` retains the command format below. Existing
+`ur:crypto-output` setup QRs can also be loaded before scanning a transaction.
+
+Successful local registration of either format retains one policy and its proof
+in RAM; no reply QR is required. Subsequent plain PSBTs can use that policy.
+Existing Thunder Den commands continue to carry their own policy and proof.
 
 ## Thunder Den commands
 

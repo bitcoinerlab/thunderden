@@ -393,21 +393,26 @@ for columns in (40, 80):
     output, _ = p.finish(0)
     assert b"EMPTY SIGNED" in output
 
-for accept_setup in (False, True):
-    p = Probe("workflow-inline", rows=40)
-    p.enter(b"Enter: scan wallet setup", b"\r")
-    p.wait(b"Check this multisig wallet")
-    if accept_setup:
-        approve_review(p, b"REGISTER")
-        p.wait(b"Review transaction")
-        approve_review(p)
-    else:
-        p.enter(b"Esc: Cancel", b"\x1b")
-    output, _ = p.finish(0)
-    assert (b"LOADED SIGNED" if accept_setup else b"EMPTY CANCELLED") in output
-    assert p.all_text.count(b"Wallet setup needed") == 1
-    if accept_setup:
-        assert b"this won't sign the transaction yet" in p.all_text
+for mode in ("workflow-inline", "workflow-inline-text"):
+    for accept_setup, sign in ((False, False), (True, False), (True, True)):
+        p = Probe(mode, rows=40)
+        p.enter(b"Enter: scan wallet setup", b"\r")
+        p.wait(b"Check this multisig wallet")
+        if accept_setup:
+            approve_review(p, b"REGISTER")
+            p.wait(b"Review transaction")
+            if sign:
+                approve_review(p)
+            else:
+                p.enter(b"Esc: Cancel", b"\x1b")
+        else:
+            p.enter(b"Esc: Cancel", b"\x1b")
+        output, _ = p.finish(0)
+        assert (b"LOADED" in output) == accept_setup
+        assert (b"SIGNED" in output) == sign
+        assert p.all_text.count(b"Wallet setup needed") == 1
+        if accept_setup:
+            assert b"this won't sign the transaction yet" in p.all_text
 
 for accept_setup, sign in ((False, False), (True, False), (True, True)):
     p = Probe("workflow-inferred", rows=40)
@@ -433,11 +438,20 @@ p.enter(b"Esc: Cancel", b"\x1b")
 output, _ = p.finish(0)
 assert b"EMPTY CANCELLED" in output and b"Wallet setup needed" not in p.all_text
 
-p = Probe("workflow-replace", rows=40)
-p.wait(b"This will replace the loaded multisig wallet.")
-p.enter(b"Esc: Cancel", b"\x1b")
+for mode in ("workflow-replace", "workflow-replace-text"):
+    for replace in (False, True):
+        p = Probe(mode, rows=40)
+        p.wait(b"This will replace the loaded multisig wallet.")
+        if replace:
+            approve_review(p, b"REGISTER")
+        else:
+            p.enter(b"Esc: Cancel", b"\x1b")
+        output, _ = p.finish(0)
+        assert (b"REPLACED" if replace else b"KEPT") in output
+
+p = Probe("workflow-replace-invalid-text", rows=40)
 output, _ = p.finish(0)
-assert b"KEPT" in output
+assert b"KEPT" in output and b"Check this multisig wallet" not in p.all_text
 
 for stop in ("warning", "review", "sign"):
     p = Probe("workflow-fee", rows=40)

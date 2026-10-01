@@ -198,6 +198,35 @@ The eleven native suites and the Sparrow account/signing checks passed after thi
 simplification. The updated boot probe passed on the `a56f61b` image, checking the
 public account QR, three-action menu and session restart in both BIOS and UEFI.
 
+### Inline text multisig setup
+
+Current source adds a wallet-independent text multisig configuration codec inside
+`ur:bytes`, alongside the existing `ur:crypto-output` setup importer. It is accepted
+during the inline setup scan when a multisig PSBT lacks enough account data.
+The schema is documented in [the protocol](PROTOCOL.md#text-multisig-setup).
+Both formats use the same policy validation, local key ownership check and typed
+`REGISTER` approval. The original PSBT remains loaded for separate `SIGN` approval.
+Main-menu `ur:bytes` continues to mean a Thunder Den command.
+
+All eleven native suites passed with
+`docker compose --progress quiet run --build --rm test`. New checks cover 1-of-2,
+2-of-2, 2-of-3, 3-of-5 and 20-of-20 policies on mainnet and testnet4, matching
+structured/text setup identities and receiving/change addresses. Compact
+two-input PSBTs without global xpubs are signed in successive cosigner passes;
+the completed transactions pass Core's signature/script verification. Animated
+registration QR transport, malformed text/CBOR, network/origin mismatches,
+duplicate keys, spoofed fingerprints and size limits are also checked.
+Pseudo-terminal tests cover both inline formats, cancellation at `REGISTER` and
+`SIGN`, successful replacement and preservation of the old wallet after cancelled
+or malformed replacement.
+
+The interoperability report motivating this addition used Keeper's current iOS
+app on testnet4: the Jade profile imported Thunder Den's account QR and created
+the multisig wallet, but its compact PSBT needed setup and its registration QR
+carried text inside `ur:bytes`. A complete physical signing/return round trip with
+the new importer remains to be tested. This addition is not in the published
+preview 5 image.
+
 ## Verified native behavior
 
 `docker compose run --build --rm test` runs eleven suites on Linux/amd64:

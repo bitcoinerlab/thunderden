@@ -3,8 +3,11 @@
 
 #include <chainparams.h>
 #include <crypto/common.h>
+#include <util/bip32.h>
 #include <util/strencodings.h>
+#include <algorithm>
 #include <bitset>
+#include <charconv>
 
 namespace td {
 namespace {
@@ -117,13 +120,82 @@ std::string ReadAccount(CborReader& in, unsigned script_type, bool mainnet)
     key.nChild = path.back();
     return "[" + HexStr(fingerprint) + PathText(path).substr(1) + "]" + EncodePublic(key, mainnet);
 }
+
+std::string_view Trim(std::string_view text)
+{
+    const auto first = text.find_first_not_of(" \t\r");
+    return first == text.npos ? std::string_view{} : text.substr(first, text.find_last_not_of(" \t\r") - first + 1);
+}
+
+unsigned KeyCount(std::string_view text)
+{
+    unsigned value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    Require(error == std::errc{} && end == text.data() + text.size() && value > 0 && value <= 20,
+        "Invalid multisig threshold or key count");
+    return value;
+}
+
+Policy ReadMultisigText(std::string_view text, bool mainnet)
+{
+    for (const unsigned char c : text) Require((c >= 0x20 && c <= 0x7e) || c == '\n' || c == '\r' || c == '\t',
+        "Invalid wallet setup text character");
+    unsigned threshold = 0, count = 0;
+    bool name = false, format = false;
+    Path origin;
+    std::vector<std::string> keys;
+    while (!text.empty()) {
+        const auto newline = text.find('\n');
+        auto line = text.substr(0, newline);
+        Require(line.size() <= 512, "Wallet setup line is too long");
+        text = newline == text.npos ? std::string_view{} : text.substr(newline + 1);
+        line = Trim(line);
+        if (line.empty() || line.front() == '#') continue;
+        const auto colon = line.find(':');
+        Require(colon != line.npos, "Expected a wallet setup field");
+        const auto field = Trim(line.substr(0, colon)), value = Trim(line.substr(colon + 1));
+        if (field == "Name") {
+            Require(!name && value.size() <= 256, "Invalid or repeated wallet name");
+            name = true; // Labels do not establish wallet identity or authorize keys.
+        } else if (field == "Policy") {
+            Require(!count, "Repeated multisig policy");
+            const auto separator = value.find(" of ");
+            Require(separator != value.npos, "Expected a multisig M of N policy");
+            threshold = KeyCount(value.substr(0, separator));
+            count = KeyCount(value.substr(separator + 4));
+        } else if (field == "Format") {
+            Require(!format && value == "P2WSH", "Expected one P2WSH wallet format");
+            format = true;
+        } else if (field == "Derivation") {
+            Require(origin.empty(), "Missing key after derivation");
+            std::string path(value);
+            std::replace(path.begin(), path.end(), 'h', '\'');
+            Require(value.starts_with("m/") && ParseHDKeypath(path, origin) && MultisigAccountPath(origin, 2, mainnet),
+                "Expected a standard native SegWit multisig account path");
+        } else {
+            Require(field.size() == 8 && IsHex(field), "Unknown wallet setup field or invalid fingerprint");
+            Require(!origin.empty() && keys.size() < 20, "Missing derivation or too many wallet keys");
+            keys.push_back("[" + HexStr(ParseHex(field)) + PathText(origin).substr(1) + "]" + std::string(value));
+            origin.clear();
+        }
+    }
+    Require(count && format && origin.empty() && keys.size() == count, "Incomplete multisig wallet setup");
+    return MultisigPolicy(2, threshold, std::move(keys), mainnet);
+}
 }
 
 Policy ImportMultisig(const QRMessage& message)
 {
-    Require(message.type == "crypto-output" && !message.cbor.empty() && message.cbor.size() <= MAX_WALLET_SETUP,
-        "Scan a multisig wallet setup QR from your wallet's settings");
+    Require((message.type == "crypto-output" || message.type == "bytes")
+        && !message.cbor.empty() && message.cbor.size() <= MAX_WALLET_SETUP,
+        "Scan a multisig wallet setup or signer-registration QR");
+    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
     CborReader in(message.cbor);
+    if (message.type == "bytes") {
+        const auto bytes = in.Bytes(MAX_WALLET_SETUP);
+        in.End();
+        return ReadMultisigText({reinterpret_cast<const char*>(bytes.data()), bytes.size()}, mainnet);
+    }
     const auto wrapper = in.Tag();
     Require(wrapper == 400 || wrapper == 401, "Expected legacy, nested or native SegWit multisig");
     unsigned script_type = wrapper == 401 ? 2 : 0;
@@ -133,7 +205,6 @@ Policy ImportMultisig(const QRMessage& message)
     std::bitset<11> seen;
     unsigned threshold = 0;
     std::vector<std::string> keys;
-    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
     for (size_t left = in.Map(2); left; --left) {
         if (Field(in, seen, 2) == 1) threshold = in.UInt(20);
         else {

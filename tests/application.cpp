@@ -360,6 +360,134 @@ void Multisig(const td::Keys& alice, bool vectors = false)
     else std::puts("PASS: multisig setup origins, three script types, both branches, approval and malformed setup rejection");
 }
 
+void TextMultisig(const td::Keys& alice)
+{
+    std::vector<std::unique_ptr<td::Keys>> others;
+    std::vector<const td::Keys*> all{&alice};
+    for (unsigned i = 1; i < 20; ++i) {
+        others.push_back(std::make_unique<td::Keys>(Bytes(MNEMONIC), Bytes("cosigner-" + std::to_string(i))));
+        all.push_back(others.back().get());
+    }
+    for (const auto network : {ChainType::MAIN, ChainType::TESTNET4}) {
+        SelectParams(network);
+        for (const auto& [threshold, count] : {std::pair{1U, 2U}, {2U, 2U}, {2U, 3U}, {3U, 5U}, {20U, 20U}}) {
+            std::vector<const td::Keys*> signers(all.begin(), all.begin() + count);
+            std::vector<td::Path> paths;
+            for (unsigned i = 0; i < count; ++i) paths.push_back(fixture::Path(2, i * 7));
+            const auto text = fixture::TextSetup(threshold, signers, paths);
+            const auto message = Message(Bytes(text));
+            const auto policy = td::ImportMultisig(message);
+            const auto structured = td::ImportMultisig(fixture::Setup(2, threshold, signers, paths));
+            Check(policy.ID() == structured.ID(), "Text setup changed the policy, key order or origins");
+            Check(Addresses(policy).write() == Addresses(structured).write(), "Text setup changed receiving/change addresses");
+            td::URSender sender(message, 100);
+            td::URReceiver receiver;
+            for (size_t i = 0; i < sender.Parts(); ++i) receiver.Receive(sender.Next());
+            Check(receiver.Result() && td::ImportMultisig(*receiver.Result()).ID() == policy.ID(),
+                "Animated bytes registration changed the wallet");
+
+            auto psbt = fixture::Spend({&policy, &policy}, true);
+            auto raw = fixture::Serialize(psbt);
+            auto choices = td::FindSigningWallets(raw, alice, nullptr);
+            Check(psbt.m_xpubs.empty() && choices.wallets.empty() && choices.needs_wallet && choices.multisig && !choices.setup,
+                "Compact PSBT did not require wallet setup");
+            for (unsigned i = 0; i < threshold; ++i) {
+                const auto proof = td::ApproveWallet(policy, *signers[i], [](const auto&, const auto&) { return true; });
+                td::ApprovedWallet loaded{policy, *proof};
+                choices = td::FindSigningWallets(raw, *signers[i], &loaded);
+                Check(choices.wallets.size() == 1 && choices.wallets[0].inputs == 2,
+                    "Compact PSBT did not match the approved wallet");
+                Check(choices.wallets[0].transaction->Review().fee_unverified, "Compact multi-input fee lost its warning");
+                const auto result = choices.wallets[0].transaction->Sign(*signers[i], [](const auto&) { return true; });
+                Check(result && result->added_signatures == 2 && result->complete == (i + 1 == threshold),
+                    "Text setup signing changed the threshold or signature count");
+                raw = result->psbt;
+            }
+            std::string error;
+            PartiallySignedTransaction signed_psbt;
+            Check(DecodeRawPSBT(signed_psbt, raw, error), "Cannot decode signed compact PSBT");
+            for (const auto& input : signed_psbt.inputs) Check(input.partial_sigs.size() == threshold, "Cosigner signatures were lost");
+            Check(FinalizePSBT(signed_psbt), "Signed compact PSBT did not finalize");
+            const auto txdata = PrecomputePSBTData(signed_psbt);
+            for (size_t i = 0; i < signed_psbt.inputs.size(); ++i)
+                Check(PSBTInputSignedAndVerified(signed_psbt, i, &txdata), "Invalid compact transaction signature");
+        }
+    }
+
+    const std::vector<const td::Keys*> signers{&alice, all[1]};
+    const std::vector<td::Path> paths{fixture::Path(2), fixture::Path(2, 7)};
+    const auto text = fixture::TextSetup(2, signers, paths);
+    const auto policy = td::ImportMultisig(Message(Bytes(text)));
+    auto spaced = text;
+    for (size_t pos = 0; (pos = spaced.find('\n', pos)) != spaced.npos; pos += 4) spaced.replace(pos, 1, " \t\r\n");
+    Check(td::ImportMultisig(Message(Bytes(spaced))).ID() == policy.ID(), "Whitespace or CRLF changed the wallet");
+    Check(td::ImportMultisig(Message(Bytes(std::string_view(text).substr(0, text.size() - 1)))).ID() == policy.ID(),
+        "Final newline was required");
+    auto unlabeled = text;
+    unlabeled.erase(unlabeled.find("Name:"), std::string("Name: Multisig test\n").size());
+    std::replace(unlabeled.begin(), unlabeled.end(), '\'', 'h');
+    const auto fingerprint = HexStr(alice.RootFingerprint());
+    auto uppercase = fingerprint;
+    for (auto& c : uppercase) if (c >= 'a' && c <= 'f') c -= 'a' - 'A';
+    unlabeled.replace(unlabeled.find(fingerprint), fingerprint.size(), uppercase);
+    Check(td::ImportMultisig(Message(Bytes(unlabeled))).ID() == policy.ID(), "Optional name, hardened notation or fingerprint case changed identity");
+    const auto reject_replace = [&](const std::string& from, const std::string& to) {
+        auto bad = text;
+        const auto pos = bad.find(from);
+        Check(pos != bad.npos, "No text fixture field to mutate");
+        bad.replace(pos, from.size(), to);
+        Reject([&] { td::ImportMultisig(Message(Bytes(bad))); });
+    };
+    reject_replace("2 of 2", "0 of 2");
+    reject_replace("2 of 2", "3 of 2");
+    reject_replace("2 of 2", "2 of 3");
+    reject_replace("2 of 2", "2 of 21");
+    reject_replace("2 of 2", "2 of 2 extra");
+    reject_replace("Policy: 2 of 2\n", "");
+    reject_replace("Policy: 2 of 2\n", "Policy: 2 of 2\nPolicy: 1 of 2\n");
+    reject_replace("Format: P2WSH\n", "");
+    reject_replace("Format: P2WSH", "Format: P2SH-P2WSH");
+    reject_replace("Format: P2WSH", "Format: P2WSH\nFormat: P2WSH");
+    reject_replace("Name: Multisig test", "Name: Multisig test\nName: Other");
+    reject_replace("Name: Multisig test", "Unknown: field");
+    reject_replace("Name: Multisig test", "Name: \033[2Jhidden");
+    reject_replace("Name: Multisig test", "Name: " + std::string(257, 'x'));
+    reject_replace("Derivation:m/48'/1'/0'/2'\n", "");
+    reject_replace("m/48'/1'/0'/2'", "m/48'/0'/0'/2'");
+    reject_replace("m/48'/1'/0'/2'", "m/48'/1'/0'/1'");
+    reject_replace("m/48'/1'/0'/2'", "m/48'/1'/0/2'");
+    reject_replace("Derivation:m/48'/1'/0'/2'", "Derivation:m/48'/1'/0'/2'\nDerivation:m/48'/1'/0'/2'");
+    reject_replace(HexStr(alice.RootFingerprint()) + ":", "1234567g:");
+    reject_replace("tpub", "tprv");
+    reject_replace(td::EncodePublic(alice.PublicAt(paths[0]), false), td::EncodePublic(alice.PublicAt({}), false));
+    Reject([&] { td::ImportMultisig(Message(Bytes(text + "Derivation:m/48'/1'/0'/2'\n"))); });
+    Reject([&] { td::ImportMultisig(Message(Bytes(text + "#" + std::string(512, 'x')))); });
+    Reject([&] { td::ImportMultisig(Message(std::vector<uint8_t>(td::MAX_WALLET_SETUP, 'x'))); });
+    Reject([&] { td::ImportMultisig(Message(Bytes(fixture::TextSetup(2, {&alice, &alice}, {paths[0], paths[0]})))); });
+    Reject([&] { td::ImportMultisig(Message(Bytes(fixture::TextSetup(1, {&alice}, {paths[0]})))); });
+    Reject([&] { td::ImportMultisig(Message(Bytes(""))); });
+    Reject([&] { td::ImportMultisig(Message(Envelope(policy, 2).data)); });
+    td::CborWriter wrong_type; wrong_type.Text(text);
+    Reject([&] { td::ImportMultisig({"bytes", wrong_type.data}); });
+    auto bad = Message(Bytes(text)); bad.cbor.push_back(0);
+    Reject([&] { td::ImportMultisig(bad); });
+    bad = Message(Bytes(text)); bad.cbor.pop_back();
+    Reject([&] { td::ImportMultisig(bad); });
+    bad = {"crypto-psbt", Message(Bytes(text)).cbor};
+    Reject([&] { td::ImportMultisig(bad); });
+    SelectParams(ChainType::MAIN);
+    Reject([&] { td::ImportMultisig(Message(Bytes(text))); });
+    SelectParams(ChainType::TESTNET4);
+    auto spoofed = fixture::TextSetup(2, {all[1], all[2]}, paths);
+    spoofed.replace(spoofed.find(HexStr(all[1]->RootFingerprint())), 8, HexStr(alice.RootFingerprint()));
+    const auto foreign = td::ImportMultisig(Message(Bytes(spoofed)));
+    Reject([&] { td::ApproveWallet(foreign, alice, [](const auto&, const auto&) -> bool {
+        throw std::runtime_error("Spoofed text setup reached approval");
+    }); });
+    SelectParams(ChainType::REGTEST);
+    std::puts("PASS: text bytes registration, M-of-N policies, compact signing, signature verification and malformed setup rejection");
+}
+
 void ExportVectors(const td::Keys& keys)
 {
     UniValue vectors(UniValue::VARR);
@@ -434,7 +562,7 @@ int main(int argc, char** argv)
             std::puts(result.write().c_str());
             return 0;
         }
-        Registration(keys); Signing(keys); CameraFrames(); Multisig(keys); PublicKeyImages(keys);
+        Registration(keys); Signing(keys); CameraFrames(); Multisig(keys); TextMultisig(keys); PublicKeyImages(keys);
         return 0;
     } catch (const std::exception& error) { std::fprintf(stderr, "%s\n", error.what()); return 1; }
 }

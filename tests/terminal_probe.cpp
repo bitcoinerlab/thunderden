@@ -14,12 +14,22 @@ int main(int argc, char** argv)
             ECC_Context context;
             SelectParams(ChainType::REGTEST);
             td::Keys alice(fixture::Bytes(fixture::WORDS), {}), bob(fixture::Bytes(fixture::WORDS), fixture::Bytes("cosigner"));
-            const auto setup = fixture::Setup(2, 2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)});
+            const auto setup = mode.ends_with("-text")
+                ? td::QRMessage{"bytes", td::CborBytes(fixture::Bytes(fixture::TextSetup(2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)})))}
+                : fixture::Setup(2, 2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)});
             std::optional<td::ApprovedWallet> loaded;
-            if (mode == "workflow-replace") {
+            if (mode.starts_with("workflow-replace")) {
                 auto old = td::ImportMultisig(fixture::Setup(0, 2, {&alice, &bob}, {fixture::Path(0), fixture::Path(0)}));
                 const auto id = old.ID();
                 loaded.emplace(td::ApprovedWallet{std::move(old), alice.RegistrationTag(id)});
+                if (mode == "workflow-replace-invalid-text") {
+                    auto bad = setup; bad.cbor.pop_back();
+                    try { td::LoadWallet(terminal, alice, loaded, bad); throw std::runtime_error("Invalid setup replaced wallet"); }
+                    catch (const std::invalid_argument&) {}
+                    td::Require(loaded->policy.ID() == id, "Invalid setup changed the loaded wallet");
+                    std::puts("KEPT");
+                    return 0;
+                }
                 const bool replaced = td::LoadWallet(terminal, alice, loaded, setup);
                 td::Require((loaded->policy.ID() == id) == !replaced, "Cancelled setup replaced the loaded wallet");
                 std::puts(replaced ? "REPLACED" : "KEPT");
@@ -27,7 +37,7 @@ int main(int argc, char** argv)
             }
             auto first = td::DefaultPolicy(alice, 84, 0), second = td::DefaultPolicy(alice, 84, 1);
             auto multisig = td::ImportMultisig(setup);
-            auto psbt = mode == "workflow-inline" || mode == "workflow-inferred" ? fixture::Spend({&multisig}, true)
+            auto psbt = mode.starts_with("workflow-inline") || mode == "workflow-inferred" ? fixture::Spend({&multisig}, true)
                 : fixture::Spend({&first, mode == "workflow-many" ? &second : &first}, mode == "workflow-fee");
             if (mode == "workflow-inferred") fixture::AccountKeys(psbt, {&multisig});
             auto foreign = td::DefaultPolicy(bob, 84, 0);
@@ -41,6 +51,7 @@ int main(int argc, char** argv)
             td::Require(scans <= 1, "Setup caused an unnecessary transaction rescan");
             if (mode == "workflow-inferred" || mode == "workflow-unmatched") td::Require(scans == 0, "Request made an unnecessary setup scan");
             if (response) {
+                td::Require(response->type == "crypto-psbt", "Signed reply lost the standard PSBT format");
                 const auto raw = td::UnwrapBytes(response->cbor);
                 PartiallySignedTransaction signed_psbt;
                 std::string error;
