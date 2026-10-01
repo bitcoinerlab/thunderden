@@ -11,13 +11,13 @@ with the text-setup development image; the report and scope are recorded below.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.5`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.5),
-with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
-write/read-back verification passed. Broader laptop/camera coverage and a fresh
+[`v0.0.1-preview.6`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6),
+with its checksum and installed-file inventory. BIOS/UEFI boot checks passed;
+USB write/read-back checks are recorded per image below. Broader laptop/camera coverage and a fresh
 full clean-build comparison remain outstanding.
 Current executable sizes refer to the latest recorded build below.
-Preview 5 includes direct multisig/compact-PSBT signing,
-SeedSigner-compatible account-key QRs and the three-action main menu.
+Preview 6 adds text multisig setup and main-scanner wallet preloading to the
+direct multisig/compact-PSBT signing and account-key QRs introduced in preview 5.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
@@ -33,7 +33,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,611,440-byte signer and an 88,176-byte scanner, with
+Buildroot executables are a 2,615,536-byte signer and an 88,176-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -525,6 +525,27 @@ release documentation to the identical application source and build inputs. All
 three assets were downloaded from GitHub and matched the original artifacts
 byte-for-byte; the downloaded image checksum passed.
 Broader laptop/camera coverage and a fresh full clean-build comparison remain open.
+
+The sixth published preview, `v0.0.1-preview.6`, uses an image built on 2026-10-01
+from application source commit `b153aaa23e940e856b4714fbdfb8732ab0733ef7`.
+It adds wallet-independent text multisig setup inside `ur:bytes` and main-scanner
+preloading with the existing registration approval and loaded-wallet indicator.
+The signer reports application version `0.0.1`. Its size is 67,108,864 bytes and
+SHA-256 is:
+
+```text
+295d0277baa8cc9bdd796017f25a9dd684f85698d2ce0c253f6e273f91633d94
+```
+
+All eleven native suites passed. The source copied into the image build matches
+the application source revision. Pinned-input, kernel/content, checksum and
+repeat-assembly checks passed. BIOS and UEFI QEMU boot checks passed at 1280x800,
+including public account QR decoding, result-review navigation, extra Enter,
+held Escape and logout/restart. Release documentation is added on top of the
+application source revision without changing application code or build inputs.
+The user's successful Keeper iOS/testnet4 signing report applies to the preceding
+inline-setup image recorded above; main-scanner preloading has automated coverage.
+The fresh full clean-build comparison and broader physical-device coverage remain open.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

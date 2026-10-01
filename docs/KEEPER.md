@@ -1,6 +1,7 @@
 # Use Bitcoin Keeper with Thunder Den
 
-Use Thunder Den **v0.0.1-preview.6 or later**. The user reported successful multisig
+Use [Thunder Den v0.0.1-preview.6](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6)
+or later. The user reported successful multisig
 signing with Keeper on iOS/testnet4 using the text-setup development image.
 The main-scanner preload option was added afterwards and has automated coverage.
 See [validation scope](STATUS.md#text-multisig-setup-and-keeper-integration).

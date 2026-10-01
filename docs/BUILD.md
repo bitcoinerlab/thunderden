@@ -2,9 +2,9 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.5/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.5/thunderden.img.sha256)
-from [v0.0.1-preview.5](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.5).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.6/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.6/thunderden.img.sha256)
+from [v0.0.1-preview.6](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6).
 The release also includes `installed-files.json` for reviewing the built system.
 
 The same 64 MiB image can be written from macOS, Linux or Windows. It boots
@@ -94,7 +94,8 @@ stays open until Enter starts a fresh session. Turn the laptop off completely wh
 finished rather than leaving it asleep.
 
 Ending the session also clears the loaded multisig setup. See the
-[Sparrow guide](SPARROW.md) for SeedSigner keystore setup and automatic signing.
+[Sparrow guide](SPARROW.md) for SeedSigner keystore setup and automatic signing,
+or the [Keeper guide](KEEPER.md) for Jade QR signing and wallet registration.
 
 ## Build or test: which command do I need?
 
