@@ -1,6 +1,7 @@
 #include "transaction.h"
 
 #include <chainparams.h>
+#include <crypto/common.h>
 #include <consensus/tx_check.h>
 #include <consensus/validation.h>
 #include <key_io.h>
@@ -8,6 +9,7 @@
 #include <script/interpreter.h>
 #include <script/solver.h>
 #include <streams.h>
+#include <util/strencodings.h>
 
 #include <algorithm>
 #include <set>
@@ -186,6 +188,12 @@ std::shared_ptr<const PSBTData> ReadPSBT(std::span<const std::byte> raw)
     std::string error;
     Require(DecodeRawPSBT(psbt, raw, error) && psbt.GetVersion() == 0, "Invalid PSBTv0");
     Require(psbt.inputs.size() <= 128 && psbt.outputs.size() <= 128, "Too many transaction inputs or outputs");
+    size_t account_keys = 0;
+    for (const auto& [origin, xpubs] : psbt.m_xpubs) {
+        Require(origin.path.size() <= 32, "Account origin is too deep");
+        account_keys += xpubs.size();
+        Require(account_keys <= 32, "Too many account keys in this PSBT");
+    }
     TxValidationState state;
     const CTransaction tx{*psbt.tx};
     Require(!tx.IsCoinBase() && CheckTransaction(tx, state), "Invalid unsigned transaction");
@@ -216,6 +224,113 @@ std::shared_ptr<const PSBTData> ReadPSBT(std::span<const std::byte> raw)
         Require(PSBTInputSignedAndVerified(psbt, i, &request->txdata), "Invalid finalized input");
     }
     return request;
+}
+
+void DiscoverMultisig(const PSBTData& request, const Keys& keys, const ApprovedWallet* loaded, SigningChoices& result)
+{
+    const auto fingerprint = keys.RootFingerprint();
+    const bool mainnet = Params().GetChainType() == ChainType::MAIN;
+    bool ambiguous = false;
+    for (size_t i = 0; i < request.psbt.inputs.size(); ++i) {
+        const auto& input = request.psbt.inputs[i];
+        if (PSBTInputSigned(input)) continue;
+        const auto& output = request.utxos[i].scriptPubKey;
+        if (loaded && Locate(loaded->policy, output, input)) continue;
+        const auto local_hint = [&](unsigned script_type) {
+            for (const auto& [pubkey, hint] : input.hd_keypaths) {
+                auto path = hint.path;
+                if (path.size() < 3 || path.size() > 6 || path[path.size() - 2] > 1 || path.back() >= 0x80000000U) continue;
+                path.resize(path.size() - 2);
+                if (MultisigAccountPath(path, script_type, mainnet)
+                    && std::equal(fingerprint.begin(), fingerprint.end(), hint.fingerprint)
+                    && keys.PublicAt(hint.path).pubkey == pubkey) return true;
+            }
+            return false;
+        };
+        auto script = output;
+        unsigned script_type = 0;
+        if (output.IsPayToScriptHash()) {
+            if (input.redeem_script.empty()) {
+                if (local_hint(0) || local_hint(1)) { result.multisig = true; result.needs_wallet = true; }
+                continue;
+            }
+            Require(GetScriptForDestination(ScriptHash(input.redeem_script)) == output, "Wrong redeem script");
+            script = input.redeem_script;
+            script_type = 1;
+        }
+        int version;
+        std::vector<unsigned char> program;
+        if (script.IsWitnessProgram(version, program)) {
+            if (version != 0 || program.size() != 32) continue;
+            if (input.witness_script.empty()) {
+                if (local_hint(output.IsPayToScriptHash() ? 1 : 2)) { result.multisig = true; result.needs_wallet = true; }
+                continue;
+            }
+            Require(GetScriptForDestination(WitnessV0ScriptHash(input.witness_script)) == script, "Wrong witness script");
+            script = input.witness_script;
+            if (!output.IsPayToScriptHash()) script_type = 2;
+        } else if (!output.IsPayToScriptHash()) continue;
+        else script_type = 0;
+        std::vector<std::vector<unsigned char>> solutions;
+        if (Solver(script, solutions) != TxoutType::MULTISIG) continue;
+        bool ours = false;
+        for (size_t n = 1; n + 1 < solutions.size(); ++n) {
+            const CPubKey pubkey(solutions[n]);
+            const auto hint = input.hd_keypaths.find(pubkey);
+            if (hint == input.hd_keypaths.end()) continue;
+            const auto& origin = hint->second;
+            if (origin.path.size() <= 32 && std::equal(fingerprint.begin(), fingerprint.end(), origin.fingerprint)
+                && keys.PublicAt(origin.path).pubkey == pubkey) ours = true;
+        }
+        if (!ours) continue;
+        result.multisig = true;
+        result.needs_wallet = true;
+        std::vector<std::string> account_keys;
+        std::optional<Position> position;
+        bool complete = true;
+        CPubKey previous;
+        for (size_t n = 1; n + 1 < solutions.size(); ++n) {
+            const CPubKey pubkey(solutions[n]);
+            Require(pubkey.IsFullyValid() && pubkey.IsCompressed() && (!previous.IsValid() || previous < pubkey),
+                "PSBT discovery requires distinct, sorted multisig keys");
+            previous = pubkey;
+            const auto hint = input.hd_keypaths.find(pubkey);
+            if (hint == input.hd_keypaths.end()) { complete = false; continue; }
+            auto origin = hint->second;
+            Require(origin.path.size() >= 3 && origin.path.size() <= 6, "Invalid multisig key path");
+            const Position child{origin.path[origin.path.size() - 2], origin.path.back()};
+            Require(child.branch <= 1 && child.index < 0x80000000U, "Invalid multisig receiving/change path");
+            Require(!position || *position == child, "Cosigners describe different address positions");
+            position = child;
+            origin.path.resize(origin.path.size() - 2);
+            Require(MultisigAccountPath(origin.path, script_type, mainnet), "Unsupported multisig account path");
+            const auto found = request.psbt.m_xpubs.find(origin);
+            if (found == request.psbt.m_xpubs.end()) { complete = false; continue; }
+            Require(found->second.size() == 1, "Ambiguous multisig account key");
+            const auto& account = *found->second.begin();
+            Require(ReadBE32(account.version) == (mainnet ? 0x0488B21EU : 0x043587CFU)
+                && account.nDepth == origin.path.size() && account.nChild == origin.path.back(), "Conflicting account key metadata");
+            if (origin.path.size() == 1) Require(std::equal(account.vchFingerprint, account.vchFingerprint + 4, origin.fingerprint),
+                "Conflicting parent fingerprint");
+            CExtPubKey branch, derived;
+            Require(account.Derive(branch, child.branch) && branch.Derive(derived, child.index)
+                && derived.pubkey == pubkey, "Account key does not derive the multisig input key");
+            account_keys.push_back("[" + HexStr(std::span(origin.fingerprint)) + PathText(origin.path).substr(1)
+                + "]" + EncodePublic(account, mainnet));
+        }
+        if (!complete) continue;
+        // Script key order changes at each index. Canonical account ordering
+        // gives one candidate identity for every input in the same sorted wallet.
+        std::sort(account_keys.begin(), account_keys.end());
+        auto policy = MultisigPolicy(script_type, solutions.front()[0], std::move(account_keys), mainnet);
+        Require(!policy.OwnedKeys(keys).empty() && policy.Script(position->branch, position->index) == output,
+            "Reconstructed wallet does not match this input");
+        if (result.setup && result.setup->ID() != policy.ID()) ambiguous = true;
+        else result.setup = std::move(policy);
+    }
+    // Multiple new wallets are not one unambiguous setup. Let the user supply
+    // the intended descriptor; a matching local key alone never authorizes it.
+    if (ambiguous) result.setup.reset();
 }
 }
 
@@ -396,7 +511,7 @@ SigningChoices FindSigningWallets(std::span<const std::byte> raw, const Keys& ke
 {
     const auto request = ReadPSBT(raw);
     const auto& psbt = request->psbt;
-    if (request->finalized) return {{}, false};
+    if (request->finalized) return {{}, false, false, {}};
     std::set<std::pair<unsigned, unsigned>> accounts;
     const auto fingerprint = keys.RootFingerprint();
     const auto coin = Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U;
@@ -430,6 +545,7 @@ SigningChoices FindSigningWallets(std::span<const std::byte> raw, const Keys& ke
     };
     for (const auto& [purpose, account] : accounts) add(DefaultPolicy(keys, purpose, account), Digest{});
     if (loaded) add(loaded->policy, loaded->proof);
+    if (result.wallets.empty()) DiscoverMultisig(*request, keys, loaded, result);
     return result;
 }
 }

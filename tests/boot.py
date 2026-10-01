@@ -78,7 +78,7 @@ with (args.output / "qemu.log").open("wb") as log:
         time.sleep(2)
         screenshot("menu.ppm")
         key("down")
-        key("ret")  # Share wallet setup.
+        key("ret")  # Share a public key.
         time.sleep(1)
         key("1")  # BIP84
         time.sleep(1)
@@ -97,12 +97,10 @@ with (args.output / "qemu.log").open("wb") as log:
         key("ret")  # Empty passphrase
         time.sleep(2)
         screenshot("review.ppm")
-        key("d")
-        time.sleep(0.3)
-        screenshot("details.ppm")
-        key("d")
-        time.sleep(0.3)
-        key("ret")  # Show the public descriptor directly.
+        for _ in range(8):
+            key("right")  # Read every required page; Next cannot accept the last one.
+        screenshot("review-last.ppm")
+        key("ret")  # Show the public account QR.
         time.sleep(3)
         screenshot("account.ppm")
         subprocess.run(["docker", "compose", "run", "--rm", "-v", f"{args.output.resolve()}:/captures:ro",
@@ -113,10 +111,6 @@ with (args.output / "qemu.log").open("wb") as log:
         key("left")
         time.sleep(0.3)
         screenshot("completed-review.ppm")
-        key("d")
-        time.sleep(0.3)
-        screenshot("completed-details.ppm")
-        key("d")
         for _ in range(4):
             key("right")
         key("ret")  # Show the same completed result, without re-entering the workflow.
@@ -132,11 +126,10 @@ with (args.output / "qemu.log").open("wb") as log:
         time.sleep(0.5)
         key("ret")  # Account zero. The existing recovery-word session must remain.
         time.sleep(1)
-        key("d")
-        for _ in range(4):
+        for _ in range(8):
             key("right")  # Read the expanded fixture; Next cannot approve its last page.
-        screenshot("details-last.ppm")
-        key("ret")  # Show the descriptor directly from the last details page.
+        screenshot("review-last-after-escape.ppm")
+        key("ret")  # Show the same public account from the last review page.
         time.sleep(2)
         screenshot("account-after-escape.ppm")
         subprocess.run(["docker", "compose", "run", "--rm", "-v", f"{args.output.resolve()}:/captures:ro",
@@ -146,7 +139,7 @@ with (args.output / "qemu.log").open("wb") as log:
         screenshot("completed-review-before-finish.ppm")
         key("esc")  # Finish from the revisited text, without cancelling a new request.
         time.sleep(0.5)
-        key("4")  # End the signer process and show the keyless completion screen.
+        key("3")  # End the signer process and show the keyless completion screen.
         time.sleep(1)
         screenshot("session-ended.ppm")
         key("ret")

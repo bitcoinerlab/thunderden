@@ -204,6 +204,32 @@ Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account)
     return Policy("", text, {key_text}, mainnet);
 }
 
+bool MultisigAccountPath(const Path& path, unsigned script_type, bool mainnet)
+{
+    // 0 is Sparrow's legacy layout; 1/2 are BIP48 nested/native SegWit.
+    if (script_type == 0) return path == Path{0x8000002dU};
+    return script_type <= 2 && path.size() == 4 && path[0] == 0x80000030U
+        && path[1] == (mainnet ? 0x80000000U : 0x80000001U)
+        && path[2] >= 0x80000000U && path[3] == (0x80000000U | script_type);
+}
+
+Policy MultisigPolicy(unsigned script_type, unsigned threshold, std::vector<std::string> keys, bool mainnet)
+{
+    Require(script_type <= 2 && keys.size() >= 2 && keys.size() <= (script_type == 0 ? 15 : 20)
+        && threshold && threshold <= keys.size(), "Invalid multisig type, threshold or key count");
+    const std::string wrappers[]{"sh(", "sh(wsh(", "wsh("};
+    const std::string names[]{"Legacy", "Nested SegWit", "Native SegWit"};
+    const auto name = names[script_type] + " multisig (" + std::to_string(threshold) + " of " + std::to_string(keys.size()) + ")";
+    auto text = wrappers[script_type] + "sortedmulti(" + std::to_string(threshold);
+    for (size_t i = 0; i < keys.size(); ++i) text += ",@" + std::to_string(i) + "/**";
+    text += script_type == 1 ? ")))" : "))";
+    Policy policy(name, text, std::move(keys), mainnet);
+    for (const auto& key : policy.KeyInformation()) Require(key.has_origin
+        && MultisigAccountPath(key.origin, script_type, mainnet)
+        && key.key.nDepth == key.origin.size() && key.key.nChild == key.origin.back(), "Inconsistent multisig account origin");
+    return policy;
+}
+
 Digest Policy::ID() const
 {
     DataStream stream;

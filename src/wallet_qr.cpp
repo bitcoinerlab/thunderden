@@ -8,15 +8,6 @@
 
 namespace td {
 namespace {
-// 0 is Sparrow's legacy layout; 1/2 are BIP48's nested/native script types.
-bool AccountPath(const Path& path, unsigned script_type, bool mainnet)
-{
-    if (script_type == 0) return path == Path{0x8000002dU};
-    return path.size() == 4 && path[0] == 0x80000030U
-        && path[1] == (mainnet ? 0x80000000U : 0x80000001U)
-        && path[2] >= 0x80000000U && path[3] == (0x80000000U | script_type);
-}
-
 std::vector<uint8_t> HDKeyCBOR(const Keys& keys, const Path& path, bool legacy_tags)
 {
     Require(path.size() <= 32, "Export path is too deep");
@@ -116,7 +107,7 @@ std::string ReadAccount(CborReader& in, unsigned script_type, bool mainnet)
         }
     }
     Require(seen[3] && seen[4] && seen[6] && network == unsigned(!mainnet), "Incomplete public key or wrong network");
-    Require(AccountPath(path, script_type, mainnet), "Expected the standard account path for this multisig type");
+    Require(MultisigAccountPath(path, script_type, mainnet), "Expected the standard account path for this multisig type");
     if (!seen[8]) {
         Require(path.size() == 1, "Missing parent fingerprint");
         std::copy(fingerprint.begin(), fingerprint.end(), key.vchFingerprint);
@@ -151,14 +142,8 @@ Policy ImportMultisig(const QRMessage& message)
         }
     }
     in.End();
-    Require(seen[1] && seen[2] && keys.size() >= 2 && threshold && threshold <= keys.size(), "Invalid multisig threshold or key count");
-    const std::string wrappers[]{"sh(", "sh(wsh(", "wsh("};
-    const std::string names[]{"Legacy", "Nested SegWit", "Native SegWit"};
-    const auto name = names[script_type] + " multisig (" + std::to_string(threshold) + " of " + std::to_string(keys.size()) + ")";
-    auto text = wrappers[script_type] + "sortedmulti(" + std::to_string(threshold);
-    for (size_t i = 0; i < keys.size(); ++i) text += ",@" + std::to_string(i) + "/**";
-    text += script_type == 1 ? ")))" : "))";
-    return Policy(name, text, std::move(keys), mainnet);
+    Require(seen[1] && seen[2], "Incomplete multisig setup");
+    return MultisigPolicy(script_type, threshold, std::move(keys), mainnet);
 }
 
 std::string PublicKeyText(const Keys& keys, const Path& path)
@@ -174,33 +159,31 @@ QRMessage PublicHDKey(const Keys& keys, const Path& path)
     return {"hdkey", HDKeyCBOR(keys, path, false)};
 }
 
-QRMessage PublicDescriptor(const Policy& policy, const Keys& keys)
-{
-    Require(policy.IsDefault(keys), "Descriptor export requires a standard local account");
-    // Full-text descriptors are valid too, but Sparrow expects a key list.
-    auto source = policy.Template();
-    source.replace(source.find("/**"), 3, "/<0;1>/*");
-    CborWriter out;
-    out.Map(2); out.UInt(1); out.Text(source);
-    out.UInt(2); out.Array(1); out.Tag(40303);
-    const auto key = HDKeyCBOR(keys, policy.KeyInformation()[0].origin, false);
-    out.data.insert(out.data.end(), key.begin(), key.end());
-    return {"output-descriptor", std::move(out.data)};
-}
-
 QRMessage PublicAccount(const Keys& keys, const Path& path)
 {
     const bool mainnet = Params().GetChainType() == ChainType::MAIN;
-    const auto script_type = path.size() == 4 ? path.back() & 0x7fffffffU : 0U;
-    Require(script_type <= 2 && AccountPath(path, script_type, mainnet), "Account export requires a standard multisig path");
-    // SeedSigner's deployed account format carries a script-typed cosigner key.
+    std::vector<unsigned> script_tags;
+    if (path.size() == 3) {
+        Require(path[1] == (mainnet ? 0x80000000U : 0x80000001U)
+            && path[2] >= 0x80000000U && path[2] <= 0x80000064U, "Account export requires a standard account path");
+        if (path[0] == 0x8000002cU) script_tags = {403}; // pkh
+        else if (path[0] == 0x80000031U) script_tags = {400, 404}; // sh(wpkh)
+        else if (path[0] == 0x80000054U) script_tags = {404}; // wpkh
+        else if (path[0] == 0x80000056U) script_tags = {409}; // tr
+        else throw std::invalid_argument("Unsupported account export path");
+    } else {
+        const auto script_type = path.size() == 4 ? path.back() & 0x7fffffffU : 0U;
+        Require(MultisigAccountPath(path, script_type, mainnet), "Account export requires a standard multisig path");
+        if (script_type != 2) script_tags.push_back(400); // sh
+        if (script_type != 0) script_tags.push_back(401); // wsh
+    }
+    // SeedSigner's deployed account format carries a script-typed account key.
     // Sparrow preserves its full origin in both airgapped/watch-only imports;
     // standalone hdkey follows a lossy UI path. This does not approve a quorum.
     CborWriter out;
     out.Map(2); out.UInt(1); out.UInt(ReadBE32(keys.RootFingerprint().data()));
     out.UInt(2); out.Array(1);
-    if (script_type != 2) out.Tag(400); // sh
-    if (script_type != 0) out.Tag(401); // wsh
+    for (const auto tag : script_tags) out.Tag(tag);
     out.Tag(303);
     const auto key = HDKeyCBOR(keys, path, true);
     out.data.insert(out.data.end(), key.begin(), key.end());

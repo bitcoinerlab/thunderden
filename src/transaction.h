@@ -88,5 +88,7 @@ struct SigningChoice {
 struct SigningChoices {
     std::vector<SigningChoice> wallets;
     bool needs_wallet{true};
+    bool multisig{false};
+    std::optional<Policy> setup; // Candidate only; never authorizes signing.
 };
 }

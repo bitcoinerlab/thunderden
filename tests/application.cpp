@@ -82,7 +82,6 @@ void Registration(const td::Keys& keys)
     }
     auto base = td::DefaultPolicy(keys, 84, 0);
     td::Keys cosigner(Bytes(MNEMONIC), Bytes("cosigner"));
-    Reject([&] { td::PublicDescriptor(base, cosigner); });
     const auto cosigner_key = td::DefaultPolicy(cosigner, 84, 0).KeyInformation()[0].text;
     td::Policy policy("Savings", "wsh(sortedmulti(2,@0/**,@1/**))", {base.KeyInformation()[0].text, cosigner_key}, false);
     auto root = Envelope(policy, 2);
@@ -336,6 +335,9 @@ void Multisig(const td::Keys& alice, bool vectors = false)
             row.pushKV("cbor", HexStr(qr.cbor)); row.pushKV("addresses", Addresses(policy));
             row.pushKV("psbt", HexStr(fixture::Serialize(fixture::Spend({&policy, &policy}))));
             row.pushKV("single_psbt", HexStr(fixture::Serialize(fixture::Spend({&policy}))));
+            auto with_accounts = fixture::Spend({&policy, &policy});
+            fixture::AccountKeys(with_accounts, {&policy});
+            row.pushKV("account_psbt", HexStr(fixture::Serialize(with_accounts)));
             rows.push_back(row);
         }
     }
@@ -351,7 +353,7 @@ void Multisig(const td::Keys& alice, bool vectors = false)
     Reject([&] { td::ApproveWallet(foreign, alice, [](const auto&, const auto&) -> bool {
         throw std::runtime_error("Unowned QR setup reached approval");
     }); });
-    for (const auto& path : std::vector<td::Path>{{}, {0x80000054U, 0x80000001U, 0x80000000U},
+    for (const auto& path : std::vector<td::Path>{{}, {0x80000007U, 0x80000001U, 0x80000000U},
             {0x80000030U, 0x80000000U, 0x80000000U, 0x80000002U}, {0x80000030U, 0x80000001U, 0, 0x80000002U}})
         Reject([&] { td::PublicAccount(alice, path); });
     if (vectors) std::puts(rows.write().c_str());
@@ -374,12 +376,12 @@ void ExportVectors(const td::Keys& keys)
             row.pushKV("path", td::PathText(info.origin));
             row.pushKV("public_key_text", td::PublicKeyText(keys, info.origin));
             row.pushKV("cbor", HexStr(td::PublicHDKey(keys, info.origin).cbor));
-            const auto exported = td::PublicDescriptor(policy, keys);
-            row.pushKV("descriptor_cbor", HexStr(exported.cbor));
+            const auto exported = td::PublicAccount(keys, info.origin);
+            row.pushKV("account_cbor", HexStr(exported.cbor));
             row.pushKV("descriptor", policy.DescriptorText());
             td::URSender sender(exported);
             Check(sender.Parts() == 1, "Standard account export no longer fits one QR");
-            row.pushKV("descriptor_ur", sender.Next());
+            row.pushKV("account_ur", sender.Next());
             UniValue addresses(UniValue::VARR);
             for (unsigned branch : {0, 1}) for (unsigned index : {0, 1, 7}) {
                 CTxDestination destination;
@@ -413,9 +415,14 @@ int main(int argc, char** argv)
             SelectParams(std::string_view(argv[2]) == "main" ? ChainType::MAIN : ChainType::REGTEST);
             Check(std::string_view(argv[5]) == "alice" || std::string_view(argv[5]) == "bob", "Unknown public fixture signer");
             td::Keys signer(Bytes(MNEMONIC), Bytes(std::string_view(argv[5]) == "bob" ? "cosigner" : ""));
-            auto policy = td::ImportMultisig({"crypto-output", ParseHex(argv[3])});
-            td::ApprovedWallet loaded{policy, *td::ApproveWallet(policy, signer, [](const auto&, const auto&) { return true; })};
             const auto psbt = ParseHex(argv[4]);
+            auto policy = [&] {
+                if (std::string_view(argv[3]) != "psbt") return td::ImportMultisig({"crypto-output", ParseHex(argv[3])});
+                auto discovered = td::FindSigningWallets(std::as_bytes(std::span(psbt)), signer, nullptr);
+                Check(discovered.setup.has_value(), "Sparrow PSBT did not provide a complete multisig setup");
+                return *discovered.setup;
+            }();
+            td::ApprovedWallet loaded{policy, *td::ApproveWallet(policy, signer, [](const auto&, const auto&) { return true; })};
             auto options = td::FindSigningWallets(std::as_bytes(std::span(psbt)), signer, &loaded);
             Check(options.wallets.size() == 1, "Sparrow PSBT did not match exactly one approved wallet");
             const auto signed_psbt = options.wallets[0].transaction->Sign(signer, [](const auto&) { return true; });

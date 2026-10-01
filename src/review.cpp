@@ -27,9 +27,8 @@ std::string NetworkName(ChainType network)
 ReviewLines PublicKeyReview(const Keys& keys, const Path& path)
 {
     return {
-        "An extended public key (xpub) helps your wallet app find addresses for this account and show their balances and transactions.",
-        "", "It contains no private keys and cannot spend your bitcoin on its own.",
-        "", "Share it only with a wallet app you trust. Anyone who has it may be able to follow this account's activity.",
+        "This public key lets your wallet app find addresses and follow this account's activity.",
+        "", "It contains no private keys. Anyone who has it may be able to follow this account's activity.",
         "", "Network: " + NetworkName(Params().GetChainType()),
         "Master fingerprint: " + HexStr(keys.RootFingerprint()), "Path: " + PathText(path),
     };
@@ -38,10 +37,10 @@ ReviewLines PublicKeyReview(const Keys& keys, const Path& path)
 std::string AccountType(unsigned purpose)
 {
     switch (purpose) {
-    case 44: return "Legacy (BIP44)";
-    case 49: return "Wrapped SegWit (BIP49)";
-    case 84: return "Native SegWit (BIP84)";
-    case 86: return "Taproot (BIP86)";
+    case 44: return "Legacy (P2PKH)";
+    case 49: return "Nested SegWit (P2SH-P2WPKH)";
+    case 84: return "Native SegWit (P2WPKH)";
+    case 86: return "Taproot (P2TR)";
     default: throw std::invalid_argument("Unsupported account type");
     }
 }

@@ -20,7 +20,7 @@ using namespace td;
 unsigned AccountNumber(Terminal& terminal)
 {
     const auto answer = terminal.Input("Choose an account",
-        {"Use the account number from your wallet app.", "The first account is number 0."}, "Account number 0-100 [0]: ", 3);
+        {"The first account is number 0."}, "Account number 0-100 [0]: ", 3);
     unsigned number = 0;
     if (!answer.empty()) {
         const auto* first = reinterpret_cast<const char*>(answer.data());
@@ -30,32 +30,28 @@ unsigned AccountNumber(Terminal& terminal)
     return number;
 }
 
-std::pair<unsigned, unsigned> Account(Terminal& terminal)
-{
-    const int choice = terminal.Menu("Choose an address type", {"Native SegWit (BIP84)", "Taproot (BIP86)",
-        "Wrapped SegWit (BIP49)", "Legacy (BIP44)"}, "Choose the address type used by your wallet app.");
-    constexpr unsigned purposes[]{84, 86, 49, 44};
-    return {purposes[choice], AccountNumber(terminal)};
-}
-
 enum class PublicKeyFormat { Account, Text, HDKey };
 
 std::pair<Path, PublicKeyFormat> PublicKeyChoice(Terminal& terminal)
 {
-    const int choice = terminal.Menu("Choose a public key", {"Native SegWit multisig * (BIP48)",
-        "Nested SegWit multisig (BIP48)", "Legacy multisig (P2SH)", "Enter a custom path (advanced)"},
-        "* Recommended for a new multisig wallet.");
-    if (choice == 2) return {{0x8000002dU}, PublicKeyFormat::Account};
-    if (choice < 2) return {{0x80000030U, Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U,
-        0x80000000U | AccountNumber(terminal), choice == 0 ? 0x80000002U : 0x80000001U}, PublicKeyFormat::Account};
-    const auto answer = terminal.Input("Enter a custom path", {"Enter the derivation path provided by your wallet app.",
-        Params().GetChainType() == ChainType::MAIN ? "For example: m/84h/0h/0h" : "For example: m/84h/1h/0h"}, "Path: ", 384);
+    const int choice = terminal.Menu("Choose a public key", {AccountType(84), AccountType(86), AccountType(49), AccountType(44),
+        "Native SegWit multisig (P2WSH)", "Nested SegWit multisig (P2SH-P2WSH)", "Legacy multisig (P2SH)",
+        "Enter a custom path (advanced)"}, "Add Thunder Den as a signer in your wallet app.");
+    const auto coin = Params().GetChainType() == ChainType::MAIN ? 0x80000000U : 0x80000001U;
+    if (choice < 4) {
+        constexpr unsigned purposes[]{84, 86, 49, 44};
+        return {{0x80000000U | purposes[choice], coin, 0x80000000U | AccountNumber(terminal)}, PublicKeyFormat::Account};
+    }
+    if (choice == 6) return {{0x8000002dU}, PublicKeyFormat::Account};
+    if (choice < 6) return {{0x80000030U, coin, 0x80000000U | AccountNumber(terminal),
+        choice == 4 ? 0x80000002U : 0x80000001U}, PublicKeyFormat::Account};
+    const auto answer = terminal.Input("Enter a custom path", {}, "Path: ", 384);
     std::string text(answer.begin(), answer.end());
     std::replace(text.begin(), text.end(), 'h', '\'');
     Path path;
     Require(ParseHDKeypath(text, path) && path.size() <= 32, "Invalid BIP32 path");
     const auto format = terminal.Menu("Choose a QR format", {"Public-key text", "HD key QR (hdkey)"},
-        "Choose the format requested by your wallet app. Neither format specifies an address type.");
+        "Choose the QR format requested by your wallet app.");
     return {std::move(path), format == 0 ? PublicKeyFormat::Text : PublicKeyFormat::HDKey};
 }
 
@@ -131,33 +127,24 @@ int main(int argc, char** argv)
         };
         while (true) {
             const int choice = terminal.Menu("What would you like to do?", {
-                "Scan a QR code", "Share a single-signature wallet", "Share a public key", "End session (clear keys)"},
-                loaded_wallet ? "Loaded wallet: " + loaded_wallet->policy.Name()
-                    : "Scan a transaction or wallet setup from your wallet app.", false);
-            if (choice == 3) return 0;
+                "Scan a QR code", "Share a public key (xpub)", "End session (clear keys)"},
+                "Scan a transaction or request from your wallet app.", false,
+                loaded_wallet ? "Loaded wallet: " + loaded_wallet->policy.Name() : "");
+            if (choice == 2) return 0;
             try {
                 if (choice == 1) {
-                    const auto [purpose, account] = Account(terminal);
-                    auto policy = td::DefaultPolicy(keys(), purpose, account);
-                    const auto& info = policy.KeyInformation()[0];
-                    const td::ReviewScreen review{"Public wallet setup", {
-                        "This shares the public information your wallet app needs to find your addresses and follow this account's activity.",
-                        "It contains no private keys. Only share it with a wallet app you trust.", "",
-                        "Network: " + td::NetworkName(Params().GetChainType()),
-                        "Account: " + std::to_string(account), "Address type: " + td::AccountType(purpose),
-                        "Path: " + td::PathText(info.origin), "Master fingerprint: " + HexStr(info.fingerprint)}, td::PolicyDetails(policy, keys())};
-                    if (terminal.Confirm("Share your wallet setup", review.summary, "show the QR code", review.details))
-                        td::ShowQR(terminal, td::PublicDescriptor(policy, keys()), &review);
-                } else if (choice == 2) {
                     const auto [path, format] = PublicKeyChoice(terminal);
                     auto lines = td::PublicKeyReview(keys(), path);
-                    lines.push_back(format == PublicKeyFormat::Account ? "QR format: Account (crypto-account)"
-                        : format == PublicKeyFormat::Text ? "QR format: Public-key text" : "QR format: HD key (hdkey)");
-                    if (format == PublicKeyFormat::Account) lines.push_back(std::string("Account type: ")
-                        + (path.size() == 1 ? "Legacy multisig" : path.back() == 0x80000001U ? "Nested SegWit multisig" : "Native SegWit multisig"));
-                    const td::ReviewScreen review{"Public key (xpub)", std::move(lines),
-                        {td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)}};
-                    if (terminal.Confirm("Share a public key (xpub)", review.summary, "show the QR code", review.details)) {
+                    if (format == PublicKeyFormat::Account) {
+                        lines.push_back("Address type: " + (path.size() == 3 ? td::AccountType(path[0] & 0x7fffffffU)
+                            : std::string(path.size() == 1 ? "Legacy multisig (P2SH)" : path.back() == 0x80000001U
+                                ? "Nested SegWit multisig (P2SH-P2WSH)" : "Native SegWit multisig (P2WSH)")));
+                        if (path.size() >= 3) lines.push_back("Account: " + std::to_string(path[2] & 0x7fffffffU));
+                    }
+                    lines.insert(lines.end(), {"", "Extended public key:",
+                        td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)});
+                    const td::ReviewScreen review{"Share a public key", std::move(lines), {}};
+                    if (terminal.Confirm(review.title, review.summary, "show the QR code")) {
                         if (format == PublicKeyFormat::Text) td::ShowQR(terminal, td::PublicKeyText(keys(), path), &review);
                         else td::ShowQR(terminal, format == PublicKeyFormat::Account ? td::PublicAccount(keys(), path)
                             : td::PublicHDKey(keys(), path), &review);

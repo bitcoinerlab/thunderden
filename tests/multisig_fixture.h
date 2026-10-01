@@ -52,6 +52,16 @@ inline std::vector<std::byte> Serialize(const PartiallySignedTransaction& psbt)
     return {stream.begin(), stream.end()};
 }
 
+inline void AccountKeys(PartiallySignedTransaction& psbt, const std::vector<const td::Policy*>& policies)
+{
+    for (const auto policy : policies) for (const auto& info : policy->KeyInformation()) {
+        KeyOriginInfo origin;
+        std::copy(info.fingerprint.begin(), info.fingerprint.end(), origin.fingerprint);
+        origin.path = info.origin;
+        psbt.m_xpubs[origin].insert(info.key);
+    }
+}
+
 inline PartiallySignedTransaction Spend(const std::vector<const td::Policy*>& policies, bool compact = false)
 {
     CMutableTransaction tx;

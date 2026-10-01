@@ -148,8 +148,49 @@ All eleven native suites passed with
 scanner's wallet-setup transport and rejection of oversized setup messages.
 
 A physical camera/signing round trip and boot-image checks for these source
-changes have not yet been recorded. The [current guide](SPARROW.md) requires a
-source build and keeps the earlier preview 4 walkthrough linked separately.
+updates have not yet been recorded. The earlier `a233f87` branch image passed
+BIOS/UEFI boot and image checks and was flashed with full read-back verification;
+the subsequent changes below require a new build. The [current guide](SPARROW.md)
+requires a source build and keeps the preview 4 walkthrough linked separately.
+
+### PSBT-first setup and menu updates
+
+Changes after `a233f87` reconstruct a candidate standard multisig policy when a
+PSBT contains complete global xpubs, origins and input scripts. Registration is
+still mandatory local approval, but does not require a second QR scan when that
+data is sufficient. The confirmation explicitly says REGISTER does not sign the
+transaction yet. Missing data falls back to setup QR scanning; conflicting
+metadata, scripts and account keys are rejected.
+
+The public-key menu now includes four single-signature shortcuts and the three
+multisig types, using script labels rather than BIP numbers. Recommendation hints
+were removed. The public-key review includes the full key without
+Details or an encoding field. Wrapped option labels and an orange header status
+keep navigation and loaded-wallet state usable on narrow screens.
+
+All eleven native suites passed again. The tests cover candidate approval without
+signing, cancellation at REGISTER and SIGN, no extra scan for a complete setup,
+missing-data fallback, different cosigner account numbers, conflicting global
+key metadata, changed scripts and false change. A mixed standard-account/multisig
+request keeps its remaining multisig wallet discoverable after the first pass.
+
+Headless Sparrow 2.5.5 checks passed 36 synthetic transaction round trips across
+the twelve-wallet matrix, including PSBT-first setup for both cosigners when
+global account data was included. Its account decoder also preserved script type,
+fingerprint, path and xpub for 38 single-key/multisig account exports on mainnet and
+regtest. These are software checks; the latest source still needs a new image and
+physical validation.
+
+The subsequent menu simplification removes standalone descriptor export and its
+encoder. The main menu now contains Scan, Share a public key and End session.
+Sparrow's guide uses one keystore/account-key import flow for single signature
+and multisig, with PSBT-first approval as the normal route and the descriptor-scan
+alternative last. Approved PSBT-derived wallets use the same orange Loaded wallet
+status as setup-QR registration. Existing Liana `GET_XPUB` commands do not rely
+on manual descriptor export.
+The eleven native suites and the Sparrow account/signing checks passed after this
+simplification. The boot probe now expects the public account QR and three-action
+menu; it needs a freshly built image before the next BIOS/UEFI run.
 
 ## Verified native behavior
 
@@ -228,9 +269,9 @@ native ARM64 test execution remains unverified.
   mnemonic, passphrase and network produce a new account. Failed exits remain stopped.
 - Eight main/test-network public HD-key encodings decoded/re-encoded by `urtypes`
   with updated registry tags and matching xpubs, origins and fingerprints. The
-  static public-key text retains that same information. Compact
-  `output-descriptor` maps reconstruct the complete reviewed receive/change descriptors.
-- Headless checks against the actual Sparrow 2.3.1 and 2.5.5 descriptor import code
+   static public-key text retains that same information. Standard account QRs
+   are decoded independently to check script type, network and full origins.
+- Historical preview 4 checks against the actual Sparrow 2.3.1 and 2.5.5 descriptor import code
   reproduce the null-key-list failure for the old, valid full-text encoding. The
   compact BIP44/49/84/86 exports import on mainnet and regtest; receiving/change
   addresses at indices 0, 1 and 7 match Bitcoin Core for every fixture. These checks

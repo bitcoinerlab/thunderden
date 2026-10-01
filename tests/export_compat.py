@@ -1,5 +1,4 @@
-"""Independent HD-key encoding, static public-key and compact descriptor checks."""
-import io
+"""Independent public HD-key, text and standard account QR checks."""
 import json
 import subprocess
 import sys
@@ -7,7 +6,6 @@ import sys
 sys.path.insert(0, "/opt/urtypes/src")
 from urtypes import RegistryType
 from urtypes.crypto import Account, HDKey, hd_key, keypath, coin_info
-from urtypes.cbor import decoder
 
 # HD-key v2 changes only these registry tags, not the key schema.
 hd_key.CRYPTO_HDKEY = RegistryType("hdkey", 40303)
@@ -29,24 +27,23 @@ for vector in vectors:
     if key.use_info is not None:
         assert key.use_info.type == 0 and key.use_info.network == 1
     assert key.to_cbor() == cbor
-    descriptor = decoder.Decoder(io.BytesIO(bytes.fromhex(vector["descriptor_cbor"]))).decode()
-    assert set(descriptor) == {1, 2} and len(descriptor[2]) == 1
-    assert descriptor[2][0].tag == 40303
-    nested = HDKey.from_data_item(descriptor[2][0])
-    assert nested.to_cbor() == cbor, "Descriptor key differs from the public HD-key encoder"
-    source = descriptor[1]
-    assert source.count("@0") == 1 and "/<0;1>/*" in source and "#" not in source
-    origin = nested.origin.source_fingerprint.hex() + "/" + nested.origin.path().replace("'", "h")
-    expanded = source.replace("@0", f"[{origin}]{nested.bip32_key()}")
-    assert expanded == vector["descriptor"].split("#")[0], "Compact export changed the reviewed descriptor"
-    assert len(vector["descriptor"].split("#")[1]) == 8
-print("PASS: eight static public-key and compact descriptor exports retain the reviewed keys and origins")
+print("PASS: eight public-key text/HD-key encodings retain the reviewed keys and origins")
 
 # crypto-account deliberately uses the deployed legacy registry used by
 # SeedSigner. Check the complete account wrapper with an independent codec.
 hd_key.CRYPTO_HDKEY = RegistryType("crypto-hdkey", 303)
 keypath.CRYPTO_KEYPATH = RegistryType("crypto-keypath", 304)
 coin_info.CRYPTO_COIN_INFO = RegistryType("crypto-coin-info", 305)
+for vector in vectors:
+    cbor = bytes.fromhex(vector["account_cbor"])
+    account = Account.from_cbor(cbor)
+    assert account.master_fingerprint.hex() == vector["fingerprint"]
+    assert len(account.output_descriptors) == 1
+    output = account.output_descriptors[0]
+    assert [expr.tag for expr in output.script_expressions] == {44: [403], 49: [400, 404], 84: [404], 86: [409]}[vector["purpose"]]
+    assert output.crypto_key.bip32_key() == vector["key"]
+    assert output.crypto_key.origin.path().replace("'", "h") == vector["path"][2:]
+    assert account.to_cbor() == cbor
 wallets = json.loads(subprocess.check_output([sys.argv[1], "--wallet-vectors"], text=True))
 for wallet in wallets:
     for expected, exported in zip(wallet["keys"], wallet["accounts"], strict=True):

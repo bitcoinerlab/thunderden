@@ -27,8 +27,11 @@ int main(int argc, char** argv)
             }
             auto first = td::DefaultPolicy(alice, 84, 0), second = td::DefaultPolicy(alice, 84, 1);
             auto multisig = td::ImportMultisig(setup);
-            auto psbt = mode == "workflow-inline" ? fixture::Spend({&multisig}, true)
+            auto psbt = mode == "workflow-inline" || mode == "workflow-inferred" ? fixture::Spend({&multisig}, true)
                 : fixture::Spend({&first, mode == "workflow-many" ? &second : &first}, mode == "workflow-fee");
+            if (mode == "workflow-inferred") fixture::AccountKeys(psbt, {&multisig});
+            auto foreign = td::DefaultPolicy(bob, 84, 0);
+            if (mode == "workflow-unmatched") psbt = fixture::Spend({&foreign});
             const auto bytes = fixture::Serialize(psbt);
             const td::QRMessage request{"crypto-psbt", td::CborBytes({reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()})};
             std::optional<td::ReviewScreen> completed;
@@ -36,6 +39,7 @@ int main(int argc, char** argv)
             auto response = td::SignRequest(terminal, alice, loaded, request, [&] { ++scans; return setup; },
                 [&](const auto& review) { return td::ApproveTransaction(terminal, review, completed); });
             td::Require(scans <= 1, "Setup caused an unnecessary transaction rescan");
+            if (mode == "workflow-inferred" || mode == "workflow-unmatched") td::Require(scans == 0, "Request made an unnecessary setup scan");
             if (response) {
                 const auto raw = td::UnwrapBytes(response->cbor);
                 PartiallySignedTransaction signed_psbt;
@@ -64,6 +68,13 @@ int main(int argc, char** argv)
         if (argc == 2 && std::string_view(argv[1]) == "menu") {
             const int choice = terminal.Menu("Choose an action", {"First action", "Second action", "Third action"});
             std::printf("%d\n", choice);
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "menu-loaded") {
+            const auto selected = terminal.Menu("Choose a public key", {"Native SegWit multisig (P2WSH)",
+                "Nested SegWit multisig (P2SH-P2WSH)", "Legacy multisig (P2SH)"}, {}, true,
+                "Loaded wallet: Native SegWit multisig (2 of 2)");
+            std::printf("%d\n", selected);
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "details") {

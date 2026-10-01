@@ -580,6 +580,96 @@ void CompactFees(const td::Keys& alice, const td::Keys& bob)
     Check(!tap_bound.Review().fee_unverified, "Taproot DEFAULT all-amount commitment was ignored");
     std::puts("PASS: compact single-input protection, legacy rejection and multi-input fee attack remains disclosed after consent");
 }
+
+void PSBTWalletSetup(const td::Keys& alice, const td::Keys& bob)
+{
+    td::Keys carol(Bytes(OTHER), Bytes("third"));
+    for (unsigned kind : {0, 1, 2}) for (size_t count : {2, 3}) {
+        std::vector<const td::Keys*> signers{&alice, &bob};
+        if (count == 3) signers.push_back(&carol);
+        std::vector<td::Path> paths;
+        for (size_t i = 0; i < count; ++i) paths.push_back(fixture::Path(kind, i * 7));
+        auto policy = td::ImportMultisig(fixture::Setup(kind, 2, signers, paths));
+        auto psbt = fixture::Spend({&policy, &policy}, kind != 0);
+        auto incomplete = td::FindSigningWallets(Serialize(psbt), alice, nullptr);
+        Check(incomplete.multisig && !incomplete.setup && incomplete.wallets.empty(), "Missing xpubs invented a wallet setup");
+        fixture::AccountKeys(psbt, {&policy});
+        const auto calls = signature_calls;
+        auto options = td::FindSigningWallets(Serialize(psbt), alice, nullptr);
+        Check(options.setup && options.wallets.empty() && options.needs_wallet, "Complete PSBT was not offered for wallet approval");
+        Check(signature_calls == calls, "Policy discovery signed the transaction");
+        for (unsigned branch : {0, 1}) for (unsigned index : {0, 1, 7, 1000})
+            Check(options.setup->Script(branch, index) == policy.Script(branch, index), "PSBT inference changed wallet addresses");
+        Reject([&] { td::ReviewedTransaction unauthorized(*options.setup, alice, td::Digest{}, Serialize(psbt)); });
+        Check(!td::ApproveWallet(*options.setup, alice, [](const auto&, const auto&) { return false; }), "Declined inferred setup authorized signing");
+        td::ApprovedWallet loaded{*options.setup, *td::ApproveWallet(*options.setup, alice, [](const auto&, const auto&) { return true; })};
+        auto ready = td::FindSigningWallets(Serialize(psbt), alice, &loaded);
+        Check(ready.wallets.size() == 1 && !ready.setup, "Approved PSBT setup requested approval again");
+        auto partial = ready.wallets[0].transaction->Sign(alice, [](const auto&) { return true; });
+        td::ReviewedTransaction other(policy, bob, bob.RegistrationTag(policy.ID()), partial->psbt);
+        Verify(*other.Sign(bob, [](const auto&) { return true; }));
+        const auto signed_calls = signature_calls;
+        Check(!td::FindSigningWallets(Serialize(psbt), carol, nullptr).setup || count == 3, "Wrong seed obtained a setup");
+        auto missing = psbt;
+        missing.m_xpubs.erase(missing.m_xpubs.begin());
+        Check(!td::FindSigningWallets(Serialize(missing), alice, nullptr).setup, "Missing cosigner origin was silently supplied");
+        missing = psbt;
+        for (auto& input : missing.inputs) {
+            if (kind == 0) input.redeem_script.clear();
+            else input.witness_script.clear();
+        }
+        auto missing_scripts = td::FindSigningWallets(Serialize(missing), alice, nullptr);
+        Check(missing_scripts.multisig && !missing_scripts.setup, "Missing script did not offer the wallet-setup fallback");
+        for (unsigned field : {0, 1, 2, 3}) {
+            auto altered = psbt;
+            auto& accounts = altered.m_xpubs.begin()->second;
+            auto key = *accounts.begin();
+            accounts.clear();
+            if (field == 0) key.chaincode.begin()[0] ^= 1;
+            if (field == 1) key.nChild ^= 1;
+            if (field == 2) key.nDepth += 1;
+            if (field == 3) key.version[0] ^= 1;
+            accounts.insert(key);
+            Reject([&] { td::FindSigningWallets(Serialize(altered), alice, nullptr); });
+        }
+        auto ambiguous_key = psbt;
+        auto extra = *ambiguous_key.m_xpubs.begin()->second.begin(); extra.chaincode.begin()[0] ^= 1;
+        ambiguous_key.m_xpubs.begin()->second.insert(extra);
+        Reject([&] { td::FindSigningWallets(Serialize(ambiguous_key), alice, nullptr); });
+        auto wrong_script = psbt;
+        if (kind == 0) wrong_script.inputs[0].redeem_script.push_back(OP_TRUE);
+        else wrong_script.inputs[0].witness_script.push_back(OP_TRUE);
+        Reject([&] { td::FindSigningWallets(Serialize(wrong_script), alice, nullptr); });
+        auto wrong_position = psbt;
+        auto bob_path = paths[1]; bob_path.insert(bob_path.end(), {0, 7});
+        wrong_position.inputs[0].hd_keypaths.at(bob.PublicAt(bob_path).pubkey).path[bob_path.size() - 2] = 1;
+        Reject([&] { td::FindSigningWallets(Serialize(wrong_position), alice, nullptr); });
+        Check(signed_calls > calls && signature_calls == signed_calls, "Invalid setup produced signatures");
+    }
+    auto single = td::DefaultPolicy(alice, 84, 0);
+    auto multisig = td::ImportMultisig(fixture::Setup(2, 2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)}));
+    auto mixed = fixture::Spend({&single, &multisig});
+    fixture::AccountKeys(mixed, {&single, &multisig});
+    auto first = td::FindSigningWallets(Serialize(mixed), alice, nullptr);
+    Check(first.wallets.size() == 1 && !first.setup, "Known account was blocked by a new wallet");
+    auto reply = first.wallets[0].transaction->Sign(alice, [](const auto&) { return true; });
+    auto next = td::FindSigningWallets(reply->psbt, alice, nullptr);
+    Check(next.setup && next.wallets.empty(), "Remaining multisig disappeared after a standard account pass");
+    auto another = td::ImportMultisig(fixture::Setup(2, 2, {&alice, &carol}, {fixture::Path(2, 1), fixture::Path(2, 2)}));
+    auto two_wallets = fixture::Spend({&multisig, &another});
+    fixture::AccountKeys(two_wallets, {&multisig, &another});
+    auto ambiguous = td::FindSigningWallets(Serialize(two_wallets), alice, nullptr);
+    Check(ambiguous.multisig && ambiguous.needs_wallet && !ambiguous.setup, "Two different wallets were approved as one setup");
+    auto false_change = fixture::Spend({&multisig});
+    fixture::AccountKeys(false_change, {&multisig});
+    false_change.tx->vout[0].scriptPubKey = another.Script(1, 5);
+    auto candidate = td::FindSigningWallets(Serialize(false_change), alice, nullptr);
+    Check(candidate.setup.has_value(), "Input wallet could not be reconstructed");
+    td::ReviewedTransaction visible(*candidate.setup, alice, alice.RegistrationTag(candidate.setup->ID()), Serialize(false_change));
+    Check(!visible.Review().outputs[0].position, "An output with a different cosigner was hidden as change");
+    Check(Contains(td::TransactionLines(visible.Review()), visible.Review().outputs[0].address), "Changed-cosigner destination missing from review");
+    std::puts("PASS: PSBT-first multisig approval, missing-data fallback, account metadata validation and mixed-policy continuation");
+}
 }
 
 int main()
@@ -595,6 +685,7 @@ int main()
         ExternalInputs(alice, bob, destination);
         Detection(alice, bob);
         CompactFees(alice, bob);
+        PSBTWalletSetup(alice, bob);
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Transaction test failed: %s\n", error.what());

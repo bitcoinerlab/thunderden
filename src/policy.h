@@ -45,6 +45,8 @@ public:
 };
 
 Policy DefaultPolicy(const Keys& keys, unsigned purpose, unsigned account);
+bool MultisigAccountPath(const Path& path, unsigned script_type, bool mainnet);
+Policy MultisigPolicy(unsigned script_type, unsigned threshold, std::vector<std::string> keys, bool mainnet);
 struct ApprovedWallet {
     Policy policy;
     Digest proof;

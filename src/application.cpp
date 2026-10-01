@@ -15,12 +15,18 @@ std::optional<Digest> ApproveWallet(const Policy& policy, const Keys& keys, cons
 
 bool LoadWallet(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded, const QRMessage& message)
 {
-    auto policy = ImportMultisig(message);
+    return LoadWallet(terminal, keys, loaded, ImportMultisig(message), false);
+}
+
+bool LoadWallet(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded, Policy policy, bool from_psbt)
+{
     const auto proof = ApproveWallet(policy, keys, [&](auto lines, const auto& details) {
         lines.insert(lines.begin(), {loaded ? "This will replace the loaded multisig wallet." : "Load this wallet for the current session.",
+            from_psbt ? "Its setup was included in the transaction request." : "Its setup was read from your wallet setup QR.",
             "Compare the cosigner keys with their devices or your trusted wallet backup.",
             "Receiving addresses use /0/*; change uses /1/*.", ""});
-        return terminal.Approve("Check this multisig wallet", lines, "REGISTER", details);
+        return terminal.Approve("Check this multisig wallet", lines, "REGISTER", details, false,
+            "Type REGISTER to approve this wallet (this won't sign the transaction yet).");
     });
     if (!proof) return false;
     loaded.emplace(ApprovedWallet{std::move(policy), *proof});
@@ -45,14 +51,22 @@ std::optional<QRMessage> SignRequest(Terminal& terminal, const Keys& keys, std::
     const auto bytes = UnwrapBytes(message.cbor);
     while (true) {
         auto options = FindSigningWallets(std::as_bytes(std::span(bytes)), keys, loaded ? &*loaded : nullptr);
+        if (options.setup) {
+            if (!LoadWallet(terminal, keys, loaded, std::move(*options.setup), true)) return {};
+            continue;
+        }
         if (options.wallets.empty()) {
             if (!options.needs_wallet) {
                 terminal.Notice("Nothing more to sign", {"This request is already finalized, or your signatures are already present for the matched wallets."});
                 return {};
             }
-            if (!terminal.Confirm("Load a multisig wallet?", {"No matching wallet was found.",
-                "For multisig, show the wallet setup QR in your wallet app's settings and scan it here.",
-                "For a single-signature wallet, check the network, recovery words and the key paths supplied by your wallet app."},
+            if (!options.multisig) {
+                terminal.Notice("No matching signing key", {"Thunder Den could not find a key from your recovery words that can sign this transaction.", "",
+                    "Check the network, recovery words and passphrase. Your wallet app must also include the correct key paths."});
+                return {};
+            }
+            if (!terminal.Confirm("Wallet setup needed", {"This appears to be a multisig transaction, but the request does not include enough wallet information to check the complete setup.", "",
+                "Show the wallet setup QR code (descriptor) in your wallet app's settings, then scan it here."},
                 "scan wallet setup")) return {};
             if (!LoadWallet(terminal, keys, loaded, scan())) return {};
             continue;

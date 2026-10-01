@@ -37,7 +37,7 @@ int main(int argc, char** argv)
         SelectParams(ChainType::REGTEST);
         const std::string mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         td::Keys keys(std::span(reinterpret_cast<const uint8_t*>(mnemonic.data()), mnemonic.size()), {});
-        const auto expected = td::PublicDescriptor(td::DefaultPolicy(keys, 84, 0), keys);
+        const auto expected = td::PublicAccount(keys, {0x80000054U, 0x80000001U, 0x80000000U});
         td::URSender encoder(expected);
         td::Require(encoder.Parts() == 1 && codes[0] == encoder.Next(),
             "Framebuffer QR differs from the expected public fixture account");

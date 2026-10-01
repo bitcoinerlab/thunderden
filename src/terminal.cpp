@@ -187,39 +187,63 @@ void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::str
 }
 
 int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction,
-    bool cancellable)
+    bool cancellable, std::string_view status)
 {
     Require(!choices.empty() && choices.size() <= 9, "Invalid menu");
-    size_t selected = 0, previous_selected = 0, previous_first = 0;
+    Printable(status);
+    size_t selected = 0, first = 0, previous_highlight = 0, previous_count = 0;
     std::optional<Layout> previous_view;
+    ReviewLines previous_lines;
     Flush();
     while (true) {
         const auto view = View();
         const auto instruction = Wrap({"Use the arrow keys to choose, then press Enter."}, view.width);
         const size_t available = view.height - instruction.size() - 1;
+        std::vector<ReviewLines> entries;
+        size_t entry_rows = 0;
+        for (const auto& choice : choices) {
+            entries.push_back(Wrap({choice}, view.width - 5));
+            entry_rows += entries.back().size();
+        }
         auto lines = introduction.empty() ? ReviewLines{} : Wrap({std::string(introduction), ""}, view.width);
-        if (lines.size() + choices.size() > available) lines.clear();
+        if (lines.size() + entry_rows > available) lines.clear();
         const size_t start = lines.size(), slots = available - start;
-        size_t first = previous_view && *previous_view == view ? previous_first : 0;
+        Require(entries[selected].size() <= slots, "Menu option does not fit this screen");
+        if (!previous_view || *previous_view != view) first = 0;
         if (selected < first) first = selected;
-        if (selected >= first + slots) first = selected - slots + 1;
-        const int highlight = start + selected - first;
-        for (size_t i = first; i < choices.size() && lines.size() < available; ++i) {
-            Require(choices[i].size() + 5 <= view.width, "Menu option does not fit");
-            lines.push_back(std::string(i == selected ? "> " : "  ") + std::to_string(i + 1) + ": " + choices[i]);
+        size_t visible = 0;
+        for (size_t i = first; i <= selected; ++i) visible += entries[i].size();
+        while (visible > slots) visible -= entries[first++].size();
+        size_t highlight = 0;
+        for (size_t i = first; i < choices.size(); ++i) {
+            if (lines.size() + entries[i].size() > available) break;
+            if (i == selected) highlight = lines.size();
+            for (size_t row = 0; row < entries[i].size(); ++row)
+                lines.push_back((row ? std::string(5, ' ') : std::string(i == selected ? "> " : "  ") + std::to_string(i + 1) + ": ")
+                    + entries[i][row]);
         }
         lines.emplace_back(""); lines.insert(lines.end(), instruction.begin(), instruction.end());
         if (!previous_view || *previous_view != view) {
             Draw(view, title, lines, std::string("Up/Down: Choose   Enter/1-") + std::to_string(choices.size())
                 + ": Select" + (cancellable ? "   Esc: Back" : ""), highlight);
-        } else if (first != previous_first) {
-            for (size_t i = 0; i < lines.size(); ++i) Row(view, i, lines[i], int(i) == highlight ? Tone::Selected : Tone::Plain);
-        } else if (selected != previous_selected) {
-            const size_t old_row = start + previous_selected - first;
-            Row(view, old_row, lines[old_row]);
-            Row(view, highlight, lines[highlight], Tone::Selected);
+            // Status occupies the otherwise blank header row, so it is not
+            // discarded when a small screen needs to scroll the menu options.
+            if (!status.empty()) {
+                auto label = std::string(status);
+                if (label.size() > view.width) label = label.substr(0, view.width - 3) + "...";
+                At(view.body - 1, view.left); Write("\033[33m" + label + "\033[0;37;40m");
+            }
+            for (size_t row = 1; row < entries[selected].size(); ++row) Row(view, highlight + row, lines[highlight + row], Tone::Selected);
+        } else {
+            for (size_t row = 0; row < std::max(lines.size(), previous_lines.size()); ++row) {
+                const bool active = row >= highlight && row < highlight + entries[selected].size();
+                const bool was_active = row >= previous_highlight && row < previous_highlight + previous_count;
+                if (row >= lines.size()) Row(view, row, "");
+                else if (row >= previous_lines.size() || lines[row] != previous_lines[row] || active != was_active)
+                    Row(view, row, lines[row], active ? Tone::Selected : Tone::Plain);
+            }
         }
-        previous_view = view; previous_first = first; previous_selected = selected;
+        previous_view = view; previous_lines = lines; previous_highlight = highlight; previous_count = entries[selected].size();
         const int key = Key();
         if ((key == 27 || key == 3) && cancellable) throw Cancelled{};
         if (key == KEY_UP && selected) --selected;
@@ -418,13 +442,15 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
     }
 }
 
-bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details, bool warning)
+bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details,
+    bool warning, std::string_view confirmation_note)
 {
     if (!Pages(title, lines, "continue", details, PageMode::Review, warning)) return false;
     try {
         const auto answer = Input(title, {"You have reached the end of this review.",
-            warning ? "The fee uses unverified input amounts. Confirm only if you accept this risk."
-                : "Confirm only if the details match what you intended."}, "Type " + std::string(confirmation) + " then Enter: ", 32,
+            confirmation_note.empty() ? warning ? "The fee uses unverified input amounts. Confirm only if you accept this risk."
+                : "Confirm only if the details match what you intended." : std::string(confirmation_note)},
+            "Type " + std::string(confirmation) + " then Enter: ", 32,
             nullptr, {}, {}, warning);
         return std::string_view(reinterpret_cast<const char*>(answer.data()), answer.size()) == confirmation;
     } catch (const Cancelled&) { return false; }

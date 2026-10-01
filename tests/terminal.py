@@ -197,6 +197,17 @@ for columns in (40, 80, 160):
     output, _ = p.finish(0)
     assert output.strip() == b"1", "Arrows selected the wrong menu item"
 
+for rows in (12, 24):
+    p = Probe("menu-loaded", rows=rows, columns=40)
+    p.wait(b"\x1b[33mLoaded wallet:")
+    p.send(b"\x1b[B")
+    p.wait(b"> 2: Nested SegWit multisig")
+    p.wait(b"(P2SH-P2WSH)")
+    assert p.all_text.count(b"\x1b[2J") == 1, "Wrapped-menu navigation cleared the screen"
+    p.send(b"\r")
+    output, _ = p.finish(0)
+    assert output.strip() == b"1"
+
 p = Probe("menu", rows=12, columns=40)
 p.wait(b"Enter/1-3: Select")
 for option in (2, 3):
@@ -394,7 +405,33 @@ for accept_setup in (False, True):
         p.enter(b"Esc: Cancel", b"\x1b")
     output, _ = p.finish(0)
     assert (b"LOADED SIGNED" if accept_setup else b"EMPTY CANCELLED") in output
-    assert p.all_text.count(b"Load a multisig wallet?") == 1
+    assert p.all_text.count(b"Wallet setup needed") == 1
+    if accept_setup:
+        assert b"this won't sign the transaction yet" in p.all_text
+
+for accept_setup, sign in ((False, False), (True, False), (True, True)):
+    p = Probe("workflow-inferred", rows=40)
+    p.wait(b"Its setup was included in the transaction request.")
+    if accept_setup:
+        approve_review(p, b"REGISTER")
+        p.wait(b"Review transaction")
+        if sign:
+            approve_review(p)
+        else:
+            p.enter(b"Esc: Cancel", b"\x1b")
+        assert b"this won't sign the transaction yet" in p.all_text
+    else:
+        p.enter(b"Esc: Cancel", b"\x1b")
+    output, _ = p.finish(0)
+    assert (b"LOADED" in output) == accept_setup
+    assert (b"SIGNED" in output) == sign
+    assert b"Wallet setup needed" not in p.all_text
+
+p = Probe("workflow-unmatched", rows=40)
+p.wait(b"No matching signing key")
+p.enter(b"Esc: Cancel", b"\x1b")
+output, _ = p.finish(0)
+assert b"EMPTY CANCELLED" in output and b"Wallet setup needed" not in p.all_text
 
 p = Probe("workflow-replace", rows=40)
 p.wait(b"This will replace the loaded multisig wallet.")
@@ -443,10 +480,18 @@ def mnemonic(p, words, choice=b"\r"):
         word(p, index, len(words), value)
 
 
-def account_export(p):
+def public_key_export(p):
     p.send(b"2")
     p.enter(b"Esc: Back", b"1")
     p.enter(b"Account number 0-100 [0]: ", b"\r")
+
+
+def export_review(p):
+    while True:
+        p.wait(b"Esc:")
+        if b"Enter: show the QR code" in p.all_text.rsplit(b"\x1b[2J", 1)[-1]:
+            return
+        p.send(b"\r")
 
 
 # Exercise the actual application with a controlling tty. The test container has
@@ -456,11 +501,10 @@ for choice, network, coin in [(b"\r", b"Bitcoin mainnet", 0), (b"2", b"Signet", 
     p = Probe(executable=sys.argv[2], controlling=True)
     p.enter(b"5: Legacy testnet3", choice)
     p.wait(network)
-    p.enter(b"4: End session (clear keys)", b"3")
-    p.enter(b"Enter a custom path (advanced)", b"4")
-    p.wait(f"For example: m/84h/{coin}h/0h".encode())
+    p.enter(b"3: End session (clear keys)", b"2")
+    p.enter(b"Enter a custom path (advanced)", b"8")
     p.enter(b"Path: ", b"\x1b")
-    p.enter(b"4: End session (clear keys)", b"4")
+    p.enter(b"3: End session (clear keys)", b"3")
     p.finish(0)
 
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
@@ -475,8 +519,8 @@ for key in (b"\x1b", b"\x03"):
     assert p.process.poll() is None, "Cancel key ended network selection"
 p.send(b"4")
 for attempt in range(2):
-    p.wait(b"4: End session (clear keys)")
-    account_export(p)
+    p.wait(b"3: End session (clear keys)")
+    public_key_export(p)
     if attempt == 0:
         mnemonic(p, ["abandon"] * 12)
         p.wait(b"These words do not make a valid recovery phrase.")
@@ -484,54 +528,59 @@ for attempt in range(2):
         for index, value in enumerate(MNEMONIC, 1):
             word(p, index, 12, value)
         p.enter(b"Passphrase: ", b"\r")
-    p.wait(b"Press Enter to show the QR code.")
+    export_review(p)
     p.spaced(b"Press Enter to show the QR code.")
     assert b"Repeat passphrase: " not in p.all_text, "Empty passphrase required confirmation"
     p.send(b"\r")
     p.enter(b"framebuffer display is required", b"n")
-p.wait(b"4: End session (clear keys)")
+p.wait(b"3: End session (clear keys)")
 for key in (b"\x1b", b"\x03"):
     p.send(b"2")
     p.wait(b"Esc: Back")
     p.send(key)
-    p.wait(b"4: End session (clear keys)")
+    p.wait(b"3: End session (clear keys)")
     # Autorepeat continues after the next screen has flushed queued input.
     for _ in range(5):
         p.send(key)
         time.sleep(0.02)
     assert p.process.poll() is None, "Repeated cancellation ended the loaded session"
-account_export(p)
-p.wait(b"Press Enter to show the QR code.")  # Same keys, without re-entering the phrase.
+public_key_export(p)
+export_review(p)  # Same keys, without re-entering the phrase.
 p.send(b"q")
-p.wait(b"4: End session (clear keys)")
-p.send(b"3")  # The third shortcut now shares a public key; exit is last.
-p.enter(b"Enter a custom path (advanced)", b"4")
+p.wait(b"3: End session (clear keys)")
+p.send(b"2")
+p.enter(b"Enter a custom path (advanced)", b"8")
 p.enter(b"Path: ", b"m/84h/1h/0h\r")
 p.enter(b"HD key QR (hdkey)", b"1")
-p.wait(b"Press Enter to show the QR code.")
-assert b"Path: m/84h/1h/0h" in p.all_text.rsplit(b"\x1b[2J", 1)[-1], "Public-key path was changed"
+export_review(p)
+assert b"Path: m/84h/1h/0h" in p.all_text, "Public-key path was changed"
 p.send(b"q")
-p.wait(b"4: End session (clear keys)")
-for choice, path, account_type in [(b"1", b"m/48h/1h/7h/2h", b"Native SegWit multisig"),
-                                   (b"2", b"m/48h/1h/7h/1h", b"Nested SegWit multisig"),
-                                   (b"3", b"m/45h", b"Legacy multisig")]:
-    p.send(b"3")
+p.wait(b"3: End session (clear keys)")
+for choice, path, account_type in [(b"1", b"m/84h/1h/7h", b"Native SegWit (P2WPKH)"),
+                                   (b"2", b"m/86h/1h/7h", b"Taproot (P2TR)"),
+                                   (b"3", b"m/49h/1h/7h", b"Nested SegWit (P2SH-P2WPKH)"),
+                                   (b"4", b"m/44h/1h/7h", b"Legacy (P2PKH)"),
+                                   (b"5", b"m/48h/1h/7h/2h", b"Native SegWit multisig (P2WSH)"),
+                                   (b"6", b"m/48h/1h/7h/1h", b"Nested SegWit multisig (P2SH-P2WSH)"),
+                                   (b"7", b"m/45h", b"Legacy multisig (P2SH)")]:
+    p.send(b"2")
     p.enter(b"Enter a custom path (advanced)", choice)
-    if choice != b"3":
+    if choice != b"7":
         p.enter(b"Account number 0-100 [0]: ", b"7\r")
-    p.wait(b"QR format: Account (crypto-account)")
-    p.wait(b"Account type: " + account_type)
-    p.enter(b"Press Enter to show the QR code.", b"q")
+    export_review(p)
+    assert b"Address type: " + account_type in p.all_text
+    assert b"Extended public key:" in p.all_text and b"QR format:" not in p.all_text
+    p.send(b"q")
     assert b"Path: " + path in p.all_text
-    p.wait(b"4: End session (clear keys)")
-p.send(b"3")
-p.enter(b"Enter a custom path (advanced)", b"4")
+    p.wait(b"3: End session (clear keys)")
+p.send(b"2")
+p.enter(b"Enter a custom path (advanced)", b"8")
 p.enter(b"Path: ", b"m/7h/3/9\r")
 p.enter(b"HD key QR (hdkey)", b"2")
-p.wait(b"QR format: HD key (hdkey)")
-p.enter(b"Press Enter to show the QR code.", b"q")
-p.wait(b"4: End session (clear keys)")
-p.send(b"4")
+export_review(p)
+p.send(b"q")
+p.wait(b"3: End session (clear keys)")
+p.send(b"3")
 p.finish(0)
 assert p.all_text.count(b"Your recovery phrase") == 1
 assert b"abandon abandon" not in p.all_text
@@ -641,8 +690,8 @@ print("PASS: hidden recovery words, opt-in visibility, rejected replacements, ov
 # A mistyped passphrase can be retried without entering the words again.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
 p.enter(b"5: Legacy testnet3", b"4")
-p.wait(b"4: End session (clear keys)")
-account_export(p)
+p.wait(b"3: End session (clear keys)")
+public_key_export(p)
 mnemonic(p, MNEMONIC)
 p.enter(b"Passphrase: ", b" A Case  \r")
 p.enter(b"Repeat passphrase: ", b" A Case\r")
@@ -668,10 +717,10 @@ p.wait(b"Repeat passphrase: ")
 p.spaced(b"Repeat passphrase:")
 confirmation_start = len(p.all_text)
 p.send(b" A Case  \r")
-p.wait(b"Press Enter to show the QR code.")
+export_review(p)
 p.send(b"q")
-p.wait(b"4: End session (clear keys)")
-p.send(b"4")
+p.wait(b"3: End session (clear keys)")
+p.send(b"3")
 p.finish(0)
 assert p.all_text.count(b"Your recovery phrase") == 1
 assert b" A Case" not in p.all_text[confirmation_start:], "Confirmation inherited the visible state"
@@ -700,17 +749,17 @@ with tempfile.TemporaryDirectory() as temporary:
         pids.append(pid)
         p.send(network)
         p.wait(b"Regtest" if network == b"4" else b"Testnet4")
-        p.wait(b"4: End session (clear keys)")
-        account_export(p)
+        p.wait(b"3: End session (clear keys)")
+        public_key_export(p)
         mnemonic(p, words)
         p.enter(b"Passphrase: ", passphrase + b"\r")
         if passphrase:
             p.enter(b"Repeat passphrase: ", passphrase + b"\r")
-        p.wait(b"Press Enter to show the QR code.")
+        export_review(p)
         fingerprints.append(re.findall(rb"Master fingerprint: ([0-9a-f]{8})", p.all_text)[-1])
         p.send(b"q")
-        p.wait(b"4: End session (clear keys)")
-        p.send(b"4")
+        p.wait(b"3: End session (clear keys)")
+        p.send(b"3")
         p.wait(b"Session ended")
         p.wait(b"Thunder Den has cleared the recovery words")
         p.wait(b"Press Enter to start a new session.")

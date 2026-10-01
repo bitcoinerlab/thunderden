@@ -61,7 +61,7 @@ Enter launches another fresh signer at network selection; each new session needs
 recovery input when first used. EOF stops the launcher. This cleanup clears managed
 secret buffers; it does not guarantee erasure of every trace in physical memory.
 
-Only menu option **4** ends the session. Esc and Ctrl-C cancel operations but do
+Only menu option **3** ends the session. Esc and Ctrl-C cancel operations but do
 nothing at network selection, the main menu or the completion screen, so held
 cancellation keys cannot clear a session or start another one.
 
@@ -126,6 +126,26 @@ The console can also load one public wallet setup from Sparrow's `crypto-output`
 QR. `wallet_qr.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
 or native SegWit. It is a small, bounded account importer, not a general descriptor
 language parser. Core remains the script engine.
+
+When no approved policy can add signatures, the transaction layer can reconstruct
+a standard sorted-multisig candidate directly from PSBT inputs. It validates the
+redeem/witness-script hashes, threshold and sorted compressed child keys, then
+maps every participating child key to a global account xpub through its exact
+origin. Global xpubs are limited to 32 with origins at most 32 steps deep.
+Relevant account versions, depth and child metadata must agree; each account
+must derive the child key at the same receiving/change position. The local
+account is rederived from the seed, and the complete constructed script must
+match the input. The same `MultisigPolicy` constructor serves QR import and PSBT
+discovery; it is not a second signing or descriptor engine.
+
+A discovered definition is only a candidate. The existing review and `REGISTER`
+approval must succeed before its HMAC is created or it becomes the loaded wallet.
+The confirmation explicitly says that this does not sign the transaction yet.
+Missing optional setup fields use the descriptor-scan fallback; invalid or
+conflicting supplied data is rejected. Multiple different new wallet definitions
+are not silently combined: the user supplies the intended setup QR instead.
+PSBT-derived account keys are put in canonical order so address-index-dependent
+sorting does not create different candidate identities for one wallet.
 
 The importer requires complete public key origins: Sparrow's `m/45h` legacy
 layout or the corresponding hardened BIP48 account path. Each cosigner may use a
@@ -201,7 +221,8 @@ that have nothing to add. No transaction signature is made during detection.
 One match goes directly to review. Multiple matches produce a chooser, then the
 same review. Each pass signs one policy and preserves existing signatures; it
 never falls back silently to another policy. Missing multisig setup can be loaded
-inline while retaining an owned copy of the original PSBT. Setup approval and
+from the PSBT's complete verified data or a setup QR while retaining an owned
+copy of the original PSBT. Setup approval and
 transaction approval remain separate. See the [multi-account example](SPARROW.md#transactions-using-more-than-one-wallet).
 
 The immutable review exposes wallet identity, network, input outpoints and amounts,
@@ -234,7 +255,9 @@ The local interface wraps full addresses/scripts onto review pages. Every requir
 review page must be traversed before a separate typed `SIGN` confirmation is
 accepted. Queued input is discarded at screen/approval boundaries, and terminal
 resizing aborts the review. Registration uses a separate `REGISTER` confirmation.
-Public exports use a short summary with optional details and Enter to show the QR. A sentence
+Public-key exports show the
+complete key, origin and standard address type in the required review, with no
+Details toggle or encoding label. A sentence
 above the controls explains when to press Enter, separated from the review by
 a blank line. Recovery words and passphrases start hidden, with one asterisk per
 character in the visible part of the field. The visibility status follows the
@@ -249,8 +272,8 @@ Single-page reviews omit the pager; multi-page counters appear at the right of
 the bottom divider, separately from the actions. `d` opens details and returns
 to the same summary page without approving the operation. For signing and
 registration, Details contain only technical information; their final Enter
-returns to the required review and cannot authorize the operation. Public export
-and address-confirmation Details include the short summary context. Esc cancels
+returns to the required review and cannot authorize the operation. Address-confirmation
+Details include the short summary context. Esc cancels
 an unapproved operation from either view. Both views share one navigation loop.
 
 Completed results retain their public review and exact QR reply in memory until
@@ -272,6 +295,10 @@ comes from the renderer; wallet-provided text is still printable ASCII only.
 Menus, inputs and reviews prepare their body rows using their own layout.
 The renderer draws those rows without rewrapping them or starting another
 interactive screen. Text validation is separate from wrapping.
+Long menu labels wrap within their numbered option on narrow screens. The main
+menu's orange loaded-wallet status uses the otherwise blank header row, so it
+remains visible even when the options scroll. An overlong status is visibly
+shortened with an ellipsis; the complete wallet definition stays in the review.
 
 GRUB uses the firmware's automatic graphics mode. Before loading keys or dropping
 privileges, the signer selects a built-in Terminus font when the screen is large
@@ -284,12 +311,17 @@ for complete instructions. QR modules remain black on white with a quiet border.
 ## QR exchange
 
 The [protocol](PROTOCOL.md) uses UR v2, including animated fountain-coded messages.
-Standard PSBT exchange uses `crypto-psbt`; single-signature wallet exports use
-`output-descriptor`. Standard public-key shortcuts use SeedSigner's
+Standard PSBT exchange uses `crypto-psbt`. Standard public-key shortcuts use SeedSigner's
 `crypto-account` format: a master fingerprint and one script-typed public account
 key. This is a cosigner export, not a complete multisig configuration. It uses
 the deployed legacy registry tags and shares the HD-key encoder with modern
-`hdkey` and compact `output-descriptor` exports.
+`hdkey` exports.
+
+The main menu has three actions: scan a QR, share a public key and end the session.
+There is no standalone descriptor export. Sparrow can assemble both single-key
+and multisig wallets from account-key QRs, and Liana retrieves keys through its
+commands. Descriptors remain the internal wallet model and are visible in policy
+Details; a multisig setup descriptor can still be scanned when needed.
 
 Sparrow's airgapped and watch-only importers preserve the key and its origin
 through `crypto-account`. Sparrow 2.3.1/2.5.5 can decode standalone `ur:hdkey`, but
@@ -301,7 +333,8 @@ This is an interoperability choice, not a different derivation or signing rule.
 Standard shortcuts have no format prompt. Custom paths cannot reliably identify
 an account type, so the advanced flow asks for a path and offers only public-key
 text or modern `ur:hdkey`. It never invents a script type for an arbitrary path.
-The review shows the chosen encoding and complete path. Liana obtains xpubs through
+The advanced menu selects the encoding; the public-key review shows the complete
+key and path. Liana obtains xpubs through
 `GET_XPUB` command replies, independently of these manual exports.
 
 Incoming `crypto-output` carries the bounded multisig setup described above.

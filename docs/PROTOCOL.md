@@ -13,7 +13,6 @@ Custom public-key exports may also use a case-sensitive static text QR.
 | --- | --- | --- |
 | Plain PSBT | `crypto-psbt` | Standard transaction exchange with a verified matching account or approved wallet |
 | Thunder Den command | `bytes` | Information, xpub retrieval, registration, address checks and policy-based signing |
-| Public descriptor | `output-descriptor` | One-way export of a complete public wallet descriptor |
 | Standard account key | `crypto-account` | One-way, script-typed public cosigner key and origin |
 | Custom public key | Plain text QR or `hdkey` | Public extended key and origin, without script-type assumptions |
 | Multisig setup | `crypto-output` | Import and locally approve a supported public multisig account |
@@ -34,6 +33,11 @@ plain PSBT, derivation hints suggest BIP44/49/84/86 accounts. The application bu
 the exact default policies from the seed and verifies script matches; it can also
 match the session's approved multisig wallet. Hints cannot authorize arbitrary
 paths. One match goes directly to review; several matches require selection.
+If none can add signatures, complete PSBT account xpubs/origins and input scripts
+can provide a supported multisig setup for local approval. This candidate cannot
+sign until the user approves it with `REGISTER`. Insufficient setup data asks for
+a descriptor QR; a wrong/missing local key has a separate message. Invalid or
+conflicting supplied metadata is rejected rather than repaired.
 The result is another `ur:crypto-psbt`, including when only partially signed.
 
 Every input needs valid previous-output data. Legacy/unclassified inputs require
@@ -56,19 +60,12 @@ in [implementation status](STATUS.md#sparrow-integration).
 
 ## Public exports
 
-**Share a single-signature wallet** produces `ur:output-descriptor` for a standard
-BIP44/49/84/86 account. Map field 1 (`source`) contains a placeholder descriptor,
-such as `tr(@0/<0;1>/*)`, and field 2 (`keys`) contains its tagged public `hdkey`.
-The receive/change suffix stays in `source`, which has no textual checksum.
-The complete checksummed descriptor remains available in the device's Details.
-This is the compact form of
-[BCR-2023-010](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2023-010-output-descriptor.md).
-The standard also permits full text without `keys`, but Sparrow's importer assumes
-that the key list is present. The compact form avoids that compatibility bug.
-**Share a public key** uses `ur:crypto-account` for the three standard multisig
-shortcuts. Field 1 is the master fingerprint (uint32); field 2 is a one-element
-array containing the script-typed public HD key. Legacy uses tag 400 (`sh`), nested
-uses 400 then 401 (`sh`/`wsh`), and native uses 401 (`wsh`). The nested key uses
+**Share a public key (xpub)** uses `ur:crypto-account` for the four standard single-key
+and three standard multisig shortcuts. Field 1 is the master fingerprint (uint32);
+field 2 is a one-element array containing the script-typed public HD key. Single-key
+accounts use tags 403 (`pkh`), 400/404 (`sh`/`wpkh`), 404 (`wpkh`) or 409 (`tr`).
+Legacy multisig uses tag 400 (`sh`), nested uses 400 then 401 (`sh`/`wsh`), and native
+uses 401 (`wsh`). The nested key uses
 legacy tag 303, with origin tag 304 and optional coin-info tag 305. It contains
 the public key, chain code, complete origin/depth and parent fingerprint. These
 are SeedSigner-compatible account-key exports, without a threshold or other
@@ -80,14 +77,14 @@ an address type. Text preserves Base58 case; public root keys use
 `[fingerprint]xpub...`. Neither path exports private keys. See the
 [format rationale](DESIGN.md#qr-exchange).
 
-The single-signature descriptor uses the current Blockchain Commons registry: `output-descriptor` (40308),
-`hdkey` (40303), nested `keypath` (40304) and `coin-info` (40305). The outer UR type
-already identifies its CBOR object, so the top-level tag is omitted. Private-key
-fields are never emitted. The nested HD-key encoding is independent of the
-standard account-key and advanced public-key QRs.
+The advanced HD-key QR uses the modern registry: `hdkey` (40303), nested `keypath`
+(40304) and `coin-info` (40305). Its outer UR type identifies the object, so the
+top-level tag is omitted. No export contains private-key fields.
 
-The user sees a short summary with optional details and presses Enter to show the
-QR. Public-key exports are not registration instructions.
+The user reviews the complete public key and origin, then presses Enter to show
+the QR. Public-key exports are not registration instructions. Standalone
+descriptor QR export has been removed; complete descriptors remain in policy
+Details and incoming multisig setup is supported below.
 
 ## Direct multisig setup import
 

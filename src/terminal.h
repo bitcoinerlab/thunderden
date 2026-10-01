@@ -46,11 +46,12 @@ public:
     void SetNetwork(std::string_view network) { network_ = network; }
     void Screen(std::string_view title, const ReviewLines& lines, std::string_view footer);
     int Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction = {},
-        bool cancellable = true);
+        bool cancellable = true, std::string_view status = {});
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
         size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false);
     SecretBytes Mnemonic();
-    bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {}, bool warning = false);
+    bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {},
+        bool warning = false, std::string_view confirmation_note = {});
     bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {}, bool warning = false);
     bool Revisit(const ReviewScreen& review);
     void Notice(std::string_view title, const ReviewLines& lines);

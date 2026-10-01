@@ -8,7 +8,7 @@ codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
 before you use it. Its own signer and scanner code, build scripts, boot settings
-and image checks total only around 4,400 lines. We keep that code clear, with
+and image checks total only around 4,600 lines. We keep that code clear, with
 few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
