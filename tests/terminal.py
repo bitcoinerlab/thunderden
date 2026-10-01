@@ -414,6 +414,22 @@ for mode in ("workflow-inline", "workflow-inline-text"):
         if accept_setup:
             assert b"this won't sign the transaction yet" in p.all_text
 
+for mode in ("workflow-preload", "workflow-preload-text"):
+    for accept_setup in (False, True):
+        p = Probe(mode, rows=40)
+        p.wait(b"Check this multisig wallet")
+        if accept_setup:
+            approve_review(p, b"REGISTER")
+            p.wait(b"\x1b[33mLoaded wallet: Native SegWit multisig (2 of 2)")
+            p.send(b"1")
+            p.wait(b"Review transaction")
+            approve_review(p)
+        else:
+            p.enter(b"Esc: Cancel", b"\x1b")
+        output, _ = p.finish(0)
+        assert (b"LOADED SIGNED" if accept_setup else b"EMPTY CANCELLED") in output
+        assert b"Wallet setup needed" not in p.all_text
+
 for accept_setup, sign in ((False, False), (True, False), (True, True)):
     p = Probe("workflow-inferred", rows=40)
     p.wait(b"Its setup was included in the transaction request.")

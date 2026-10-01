@@ -15,7 +15,7 @@ Custom public-key exports may also use a case-sensitive static text QR.
 | Thunder Den command | `bytes` | Information, xpub retrieval, registration, address checks and policy-based signing |
 | Standard account key | `crypto-account` | One-way, script-typed public cosigner key and origin |
 | Custom public key | Plain text QR or `hdkey` | Public extended key and origin, without script-type assumptions |
-| Multisig setup | `crypto-output`, or `bytes` during inline setup | Import and locally approve a supported public multisig account |
+| Multisig setup | `crypto-output`, or text configuration inside `bytes` | Import and locally approve a supported public multisig account |
 
 ## Human-operated exchange
 
@@ -108,8 +108,8 @@ the user's local choice.
 
 ### Text multisig setup
 
-During the inline setup scan requested by an incomplete multisig PSBT, `ur:bytes`
-may instead contain a CBOR byte string holding a public text configuration:
+From the main scanner or during the inline setup scan requested by an incomplete
+multisig PSBT, `ur:bytes` may contain a CBOR byte string holding a public text configuration:
 
 ```text
 # Multisig setup file
@@ -139,10 +139,12 @@ bytes and ignored for wallet identity. Repeated headers, unknown fields, missing
 origins, dangling derivations and a key count different from N are rejected.
 Only `Format: P2WSH` is supported by this text importer.
 
-The text format is wallet-independent. Its `ur:bytes` payload is interpreted as
-wallet setup only during the inline setup scan, not as a Thunder Den command.
-At the main menu, `ur:bytes` retains the command format below. Existing
-`ur:crypto-output` setup QRs can also be loaded before scanning a transaction.
+The text format is wallet-independent. The main scanner recognizes a leading
+comment or `Name`, `Policy`, `Format` or `Derivation` text header, after whitespace.
+This only selects the importer: the entire setup must pass validation and local
+approval. Binary CBOR Thunder Den commands retain the command format below.
+Both setup formats can be loaded before scanning a transaction; the main menu
+then shows **Loaded wallet** for the approved session policy.
 
 Successful local registration of either format retains one policy and its proof
 in RAM; no reply QR is required. Subsequent plain PSBTs can use that policy.

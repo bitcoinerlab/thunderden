@@ -18,6 +18,16 @@ int main(int argc, char** argv)
                 ? td::QRMessage{"bytes", td::CborBytes(fixture::Bytes(fixture::TextSetup(2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)})))}
                 : fixture::Setup(2, 2, {&alice, &bob}, {fixture::Path(2), fixture::Path(2, 7)});
             std::optional<td::ApprovedWallet> loaded;
+            if (mode.starts_with("workflow-preload")) {
+                td::Require(td::IsMultisigSetup(setup), "Main scanner missed wallet setup");
+                if (!td::LoadWallet(terminal, alice, loaded, setup)) {
+                    td::Require(!loaded, "Declined preload retained a wallet");
+                    std::puts("EMPTY CANCELLED");
+                    return 0;
+                }
+                terminal.Menu("What would you like to do?", {"Scan a QR code"}, {}, false,
+                    "Loaded wallet: " + loaded->policy.Name());
+            }
             if (mode.starts_with("workflow-replace")) {
                 auto old = td::ImportMultisig(fixture::Setup(0, 2, {&alice, &bob}, {fixture::Path(0), fixture::Path(0)}));
                 const auto id = old.ID();
@@ -37,7 +47,8 @@ int main(int argc, char** argv)
             }
             auto first = td::DefaultPolicy(alice, 84, 0), second = td::DefaultPolicy(alice, 84, 1);
             auto multisig = td::ImportMultisig(setup);
-            auto psbt = mode.starts_with("workflow-inline") || mode == "workflow-inferred" ? fixture::Spend({&multisig}, true)
+            auto psbt = mode.starts_with("workflow-inline") || mode.starts_with("workflow-preload") || mode == "workflow-inferred"
+                ? fixture::Spend({&multisig}, true)
                 : fixture::Spend({&first, mode == "workflow-many" ? &second : &first}, mode == "workflow-fee");
             if (mode == "workflow-inferred") fixture::AccountKeys(psbt, {&multisig});
             auto foreign = td::DefaultPolicy(bob, 84, 0);
@@ -49,7 +60,8 @@ int main(int argc, char** argv)
             auto response = td::SignRequest(terminal, alice, loaded, request, [&] { ++scans; return setup; },
                 [&](const auto& review) { return td::ApproveTransaction(terminal, review, completed); });
             td::Require(scans <= 1, "Setup caused an unnecessary transaction rescan");
-            if (mode == "workflow-inferred" || mode == "workflow-unmatched") td::Require(scans == 0, "Request made an unnecessary setup scan");
+            if (mode == "workflow-inferred" || mode == "workflow-unmatched" || mode.starts_with("workflow-preload"))
+                td::Require(scans == 0, "Request made an unnecessary setup scan");
             if (response) {
                 td::Require(response->type == "crypto-psbt", "Signed reply lost the standard PSBT format");
                 const auto raw = td::UnwrapBytes(response->cbor);

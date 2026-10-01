@@ -184,6 +184,27 @@ Policy ReadMultisigText(std::string_view text, bool mainnet)
 }
 }
 
+bool IsMultisigSetup(const QRMessage& message)
+{
+    if (message.type == "crypto-output") return true;
+    if (message.type != "bytes" || message.cbor.empty() || message.cbor.size() > MAX_WALLET_SETUP) return false;
+    CborReader in(message.cbor);
+    const auto bytes = in.Bytes(MAX_WALLET_SETUP);
+    in.End();
+    std::string_view text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    const auto first = text.find_first_not_of(" \t\r\n");
+    if (first == text.npos) return false;
+    text.remove_prefix(first);
+    // Classify only. The full importer must validate before any wallet approval.
+    // Thunder Den commands start with a binary CBOR array, never a text header.
+    if (text.front() == '#') return true;
+    const auto line = text.substr(0, text.find('\n'));
+    const auto colon = line.find(':');
+    if (colon == line.npos) return false;
+    const auto field = Trim(line.substr(0, colon));
+    return field == "Name" || field == "Policy" || field == "Format" || field == "Derivation";
+}
+
 Policy ImportMultisig(const QRMessage& message)
 {
     Require((message.type == "crypto-output" || message.type == "bytes")

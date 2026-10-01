@@ -6,6 +6,8 @@ using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
 device and its image approved for release. The earlier BIP44 single-signature
 workflow was also user-tested on a physical computer.
+The [Keeper Jade QR multisig workflow](KEEPER.md) was user-tested on iOS/testnet4
+with the text-setup development image; the report and scope are recorded below.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
@@ -51,6 +53,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
 - [x] Record a user-tested Sparrow single-signature BIP44 QR workflow.
 - [x] Record real-device Sparrow multisig testing and release approval.
+- [x] Record user-tested Keeper Jade QR multisig signing on iOS/testnet4.
 - [x] Publish a development USB image with its checksum and installed-file inventory.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 - [ ] Complete verification of a release image built from the final source revision.
@@ -198,15 +201,17 @@ The eleven native suites and the Sparrow account/signing checks passed after thi
 simplification. The updated boot probe passed on the `a56f61b` image, checking the
 public account QR, three-action menu and session restart in both BIOS and UEFI.
 
-### Inline text multisig setup
+## Text multisig setup and Keeper integration
 
 Current source adds a wallet-independent text multisig configuration codec inside
 `ur:bytes`, alongside the existing `ur:crypto-output` setup importer. It is accepted
-during the inline setup scan when a multisig PSBT lacks enough account data.
+from the main scanner or during inline setup when a multisig PSBT lacks enough account data.
 The schema is documented in [the protocol](PROTOCOL.md#text-multisig-setup).
 Both formats use the same policy validation, local key ownership check and typed
 `REGISTER` approval. The original PSBT remains loaded for separate `SIGN` approval.
-Main-menu `ur:bytes` continues to mean a Thunder Den command.
+The main scanner recognizes text setup headers separately from binary CBOR commands;
+recognition never bypasses the full importer or local approval. Preloading a
+wallet displays **Loaded wallet** and avoids another setup scan for matching PSBTs.
 
 All eleven native suites passed with
 `docker compose --progress quiet run --build --rm test`. New checks cover 1-of-2,
@@ -219,13 +224,24 @@ duplicate keys, spoofed fingerprints and size limits are also checked.
 Pseudo-terminal tests cover both inline formats, cancellation at `REGISTER` and
 `SIGN`, successful replacement and preservation of the old wallet after cancelled
 or malformed replacement.
+Additional checks cover main-scanner format recognition, preservation of command
+routing, preloading either setup format, the orange loaded-wallet status and
+signing without another setup scan.
 
-The interoperability report motivating this addition used Keeper's current iOS
-app on testnet4: the Jade profile imported Thunder Den's account QR and created
-the multisig wallet, but its compact PSBT needed setup and its registration QR
-carried text inside `ur:bytes`. A complete physical signing/return round trip with
-the new importer remains to be tested. This addition is not in the published
-preview 5 image.
+On 2026-10-01, the user reported successful multisig signing with Keeper's current
+iOS app on testnet4 using the Jade QR profile. The tested development image matches
+application source `576453f` and has SHA-256
+`84176b3d53cdab4f79f87a36ed0115a234dc2a5782b23534a13f5387fdd193d7`.
+Thunder Den's `ur:crypto-account` imported through Jade; the user scanned the PSBT
+first, then tapped **Vault details** in Keeper to display the text registration QR
+when Thunder Den requested setup. After `REGISTER`, the retained PSBT could be
+reviewed and signed. The device model, exact installed Keeper/iOS versions and
+broadcast outcome were not separately recorded.
+
+The main-scanner preload addition follows that physical test and has separate
+automated coverage; it was not part of the tested development image. See the
+[Keeper guide](KEEPER.md) for both workflows. Neither text setup route is present
+in the published preview 5 image.
 
 ## Verified native behavior
 

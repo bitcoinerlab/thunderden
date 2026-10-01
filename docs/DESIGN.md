@@ -124,12 +124,17 @@ every transaction still requires its own review and approval.
 
 The console can also load one public wallet setup from a `crypto-output` QR.
 `wallet_qr.cpp` accepts sorted multisig inside legacy P2SH, nested SegWit
-or native SegWit. During an inline setup scan, it also accepts `ur:bytes` containing
+or native SegWit. It also accepts `ur:bytes` containing
 the public text multisig configuration described in [the protocol](PROTOCOL.md#text-multisig-setup).
 That format supplies an M-of-N threshold, `P2WSH`, and a derivation/fingerprint/xpub
 for each cosigner. Both codecs construct the same validated policy. This is a small,
 bounded account importer, not a general descriptor language parser. Core remains
 the script engine; no wallet-specific signing path is added.
+
+The main scanner recognizes text configuration headers separately from binary
+CBOR commands and then invokes the same full importer and approval gate as an
+inline setup scan. An approved setup displays the existing **Loaded wallet**
+status and can match later PSBTs in the same session.
 
 When no approved policy can add signatures, the transaction layer can reconstruct
 a standard sorted-multisig candidate directly from PSBT inputs. It validates the

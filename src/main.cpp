@@ -159,7 +159,7 @@ int main(int argc, char** argv)
                     };
                     if (message.type == "crypto-psbt") {
                         response = td::SignRequest(terminal, keys(), loaded_wallet, message, [&] { return Scan(terminal); }, approve);
-                    } else if (message.type == "crypto-output") {
+                    } else if (td::IsMultisigSetup(message)) {
                         LoadWallet(terminal, keys(), loaded_wallet, message);
                     } else {
                         auto result = td::HandleQRRequest(message, keys(), {

@@ -16,7 +16,7 @@ designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key
 derivation, descriptor handling and transaction signing.
 
 **Status: Under active development. Use at your own risk.** The signer is usable
-with [Sparrow](#use-with-sparrow) and [our Liana fork](#use-with-liana).
+with [Sparrow](#use-with-sparrow), [Keeper](#use-with-keeper) and [our Liana fork](#use-with-liana).
 See [implementation status](docs/STATUS.md) for completed checks and remaining work.
 
 ## Download and boot
@@ -73,8 +73,21 @@ for single-signature and sorted-multisig wallets. In Sparrow, choose
 
 Share the public key, create the wallet in Sparrow, then scan its transaction QR
 on Thunder Den. Multisig setup can be approved directly from a complete PSBT.
-The latest image was user-tested with Sparrow multisig on a real device. See the
+The preview 5 image was user-tested with Sparrow multisig on a real device. See the
 [Sparrow guide](docs/SPARROW.md) for the steps and validation scope.
+
+## Use with Keeper
+
+In [Bitcoin Keeper](https://bitcoinkeeper.app/), select **Jade → QR** for Thunder Den.
+Its standard account QR imports through that profile. For multisig signing, scan
+Keeper's PSBT first; when Thunder Den requests wallet setup, tap **Vault details**
+on Keeper's signing screen and scan its registration QR. Review and approve with
+`REGISTER`, then continue to transaction review and `SIGN`.
+
+Preview 6 also lets you scan that registration QR directly from Thunder Den's main
+menu. After approval, **Loaded wallet** appears for the session. The inline flow
+was user-tested on iOS/testnet4. See the [Keeper guide](docs/KEEPER.md) for the steps,
+supported formats and validation scope.
 
 ## Use with Liana
 

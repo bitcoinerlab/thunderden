@@ -376,8 +376,11 @@ void TextMultisig(const td::Keys& alice)
             for (unsigned i = 0; i < count; ++i) paths.push_back(fixture::Path(2, i * 7));
             const auto text = fixture::TextSetup(threshold, signers, paths);
             const auto message = Message(Bytes(text));
+            Check(td::IsMultisigSetup(message), "Main scanner did not recognize text setup");
             const auto policy = td::ImportMultisig(message);
-            const auto structured = td::ImportMultisig(fixture::Setup(2, threshold, signers, paths));
+            const auto setup = fixture::Setup(2, threshold, signers, paths);
+            Check(td::IsMultisigSetup(setup), "Main scanner did not recognize structured setup");
+            const auto structured = td::ImportMultisig(setup);
             Check(policy.ID() == structured.ID(), "Text setup changed the policy, key order or origins");
             Check(Addresses(policy).write() == Addresses(structured).write(), "Text setup changed receiving/change addresses");
             td::URSender sender(message, 100);
@@ -418,6 +421,17 @@ void TextMultisig(const td::Keys& alice)
     const std::vector<td::Path> paths{fixture::Path(2), fixture::Path(2, 7)};
     const auto text = fixture::TextSetup(2, signers, paths);
     const auto policy = td::ImportMultisig(Message(Bytes(text)));
+    for (const auto prefix : {"Name : Test\n", "Policy: 2 of 2\n", "Format: P2WSH\n", "Derivation:m/48'/1'/0'/2'\n", "# comment\n"})
+        Check(td::IsMultisigSetup(Message(Bytes(std::string(" \r\n\t") + prefix))), "Text setup header was not recognized");
+    for (unsigned operation = 0; operation <= 4; ++operation)
+        Check(!td::IsMultisigSetup(Message(Envelope(policy, operation).data)), "Command was routed to text setup");
+    for (const auto raw : {"", " \n\t", "wsh(sortedmulti(2,...))", "{\"Policy\":2}", "psbt\xff"})
+        Check(!td::IsMultisigSetup(Message(Bytes(raw))), "Unrecognized bytes were routed to wallet setup");
+    Check(!td::IsMultisigSetup({"crypto-psbt", Message(Bytes(text)).cbor}), "PSBT was routed to wallet setup");
+    Check(!td::IsMultisigSetup(Message(std::vector<uint8_t>(td::MAX_WALLET_SETUP, '#'))), "Oversized text setup was recognized");
+    const auto incomplete = Message(Bytes("Policy: 2 of 2\n"));
+    Check(td::IsMultisigSetup(incomplete), "Incomplete text setup was misclassified");
+    Reject([&] { td::ImportMultisig(incomplete); });
     auto spaced = text;
     for (size_t pos = 0; (pos = spaced.find('\n', pos)) != spaced.npos; pos += 4) spaced.replace(pos, 1, " \t\r\n");
     Check(td::ImportMultisig(Message(Bytes(spaced))).ID() == policy.ID(), "Whitespace or CRLF changed the wallet");
