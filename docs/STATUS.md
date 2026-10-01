@@ -545,6 +545,11 @@ held Escape and logout/restart. Release documentation is added on top of the
 application source revision without changing application code or build inputs.
 The user's successful Keeper iOS/testnet4 signing report applies to the preceding
 inline-setup image recorded above; main-scanner preloading has automated coverage.
+The release tag points to `f1ea515c81b2ef98b379e0521dc178fa40274802`. All three
+GitHub assets were downloaded and matched the original build artifacts byte-for-byte;
+the downloaded image checksum passed and public asset URLs returned HTTP 200.
+The release image was written to USB serial `55630D9D`; all 67,108,864 bytes matched
+on read-back, and the drive was safely powered off.
 The fresh full clean-build comparison and broader physical-device coverage remain open.
 
 Transaction fixtures use synthetic previous transactions and Core script
