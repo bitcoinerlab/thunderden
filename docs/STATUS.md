@@ -9,12 +9,12 @@ workflow was also user-tested on a physical computer.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.4`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.4),
+[`v0.0.1-preview.5`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.5),
 with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
-write/read-back verification passed. Broader laptop/camera coverage and final
-release verification remain outstanding.
+write/read-back verification passed. Broader laptop/camera coverage and a fresh
+full clean-build comparison remain outstanding.
 Current executable sizes refer to the latest recorded build below.
-The tested preview 5 candidate includes direct multisig/compact-PSBT signing,
+Preview 5 includes direct multisig/compact-PSBT signing,
 SeedSigner-compatible account-key QRs and the three-action main menu.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
@@ -456,7 +456,8 @@ inventory were downloaded from GitHub and matched the original artifacts.
 Broader laptop/camera coverage and Sparrow multisig validation remain open; the
 full clean-build comparison has not been repeated for this image.
 
-The preview 5 candidate was built on 2026-10-01 from application source commit
+The fifth published preview, `v0.0.1-preview.5`, uses an image built on 2026-10-01
+from application source commit
 `a56f61bbc9e26131d0d67802b57b1ee515f93451`. It includes the three-action menu,
 SeedSigner-compatible account-key exports, PSBT-first multisig approval,
 automatic account matching and compact SegWit fee-assurance review. The signer
@@ -474,6 +475,10 @@ checksum and repeat-assembly checks passed. BIOS and UEFI boot checks passed at
 Enter, held Escape and logout/restart. The exact image was written to USB serial
 `55630D9D`, all image bytes matched on read-back, and the drive was safely powered
 off. The user approved it for release following their real-device Sparrow test.
+The release tag points to `ada3dbc1059b3aff07158e3a9dc5d41d62cad1c6`, which adds
+release documentation to the identical application source and build inputs. All
+three assets were downloaded from GitHub and matched the original artifacts
+byte-for-byte; the downloaded image checksum passed.
 Broader laptop/camera coverage and a fresh full clean-build comparison remain open.
 
 Transaction fixtures use synthetic previous transactions and Core script
