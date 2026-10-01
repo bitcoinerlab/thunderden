@@ -16,7 +16,7 @@ designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key
 derivation, descriptor handling and transaction signing.
 
 **Status: Under active development. Use at your own risk.** The signer is usable
-with [Sparrow single-sig BIP44](#use-with-sparrow) and [our Liana fork](#use-with-liana).
+with [Sparrow](#use-with-sparrow) and [our Liana fork](#use-with-liana).
 See [implementation status](docs/STATUS.md) for completed checks and remaining work.
 
 ## Download and boot
@@ -67,13 +67,14 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 
 ## Use with Sparrow
 
-The published preview has a user-tested **Legacy (BIP44), account 0** workflow with
-[Sparrow](https://sparrowwallet.com/). Current source builds also support direct
-multisig setup, automatic account matching and compact SegWit PSBT review.
+[Sparrow](https://sparrowwallet.com/) exchanges QR codes directly with Thunder Den
+for single-signature and sorted-multisig wallets. In Sparrow, choose
+**Airgapped Hardware Wallet → SeedSigner** for Thunder Den's keystore.
 
-Sparrow exchanges QR codes directly with Thunder Den. It holds public wallet
-information; Thunder Den reviews and signs transactions. See the
-[Sparrow guide](docs/SPARROW.md) for setup, build requirements and validation scope.
+Share the public key, create the wallet in Sparrow, then scan its transaction QR
+on Thunder Den. Multisig setup can be approved directly from a complete PSBT.
+The latest image was user-tested with Sparrow multisig on a real device. See the
+[Sparrow guide](docs/SPARROW.md) for the steps and validation scope.
 
 ## Use with Liana
 

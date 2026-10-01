@@ -1,10 +1,11 @@
 # Implementation status
 
-As of 2026-09-30, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-01, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
-upstream. The [Sparrow single-signature BIP44 workflow](SPARROW.md) has also been
-user-tested on a physical computer.
+upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
+device and its image approved for release. The earlier BIP44 single-signature
+workflow was also user-tested on a physical computer.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
@@ -13,8 +14,8 @@ with its checksum and installed-file inventory. BIOS/UEFI boot checks and USB
 write/read-back verification passed. Broader laptop/camera coverage and final
 release verification remain outstanding.
 Current executable sizes refer to the latest recorded build below.
-Current source also includes the direct multisig/compact-PSBT work described
-below. Those changes are not in the published preview 4 image.
+The tested preview 5 candidate includes direct multisig/compact-PSBT signing,
+SeedSigner-compatible account-key QRs and the three-action main menu.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
@@ -30,7 +31,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,566,384-byte signer and an 88,176-byte scanner, with
+Buildroot executables are a 2,611,440-byte signer and an 88,176-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -49,6 +50,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Publish the browser QR bridge on npm.
 - [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
 - [x] Record a user-tested Sparrow single-signature BIP44 QR workflow.
+- [x] Record real-device Sparrow multisig testing and release approval.
 - [x] Publish a development USB image with its checksum and installed-file inventory.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
 - [ ] Complete verification of a release image built from the final source revision.
@@ -90,8 +92,14 @@ still need recorded validation.
 
 On 2026-09-29, the user reported a successful physical single-signature
 **Legacy (BIP44), account 0** workflow: public descriptor import, receiving and
-the Sparrow/Thunder Den QR signing round trip. See the [walkthrough](SPARROW.md).
-A Sparrow multisig walkthrough is planned separately.
+the Sparrow/Thunder Den QR signing round trip. The historical steps are in the
+[preview 4 guide](https://github.com/bitcoinerlab/thunderden/blob/v0.0.1-preview.4/docs/SPARROW.md).
+
+On 2026-10-01, the user approved the `a56f61b` image for release following their
+real-device Sparrow multisig test. Its setup uses the SeedSigner-compatible QR
+flow documented in the [current guide](SPARROW.md). The device model, physical
+test's Sparrow version, threshold and script type were not separately recorded.
+The automated three-script-type matrix is documented below.
 
 In preview 4, Sparrow's BIP84/SegWit QR export omitted full previous transactions
 and was rejected. BIP44 retained that data. The newer source accepts compact
@@ -109,7 +117,7 @@ Legacy/unclassified inputs still require full previous transactions. Fee warning
 for compact inputs remain visible through approval and result review.
 The first implementation used static `[fingerprint/path]xpub` exports. Standard
 shortcuts now use SeedSigner-compatible `crypto-account`; custom paths offer text
-or modern `hdkey`. Full wallet descriptor and command formats retain their meanings.
+or modern `hdkey`. Existing Thunder Den command formats retain their meanings.
 The independent `urtypes` codec verifies the account wrapper, script tags, network
 and full key origin. Headless Sparrow 2.5.5 checks decoded 30 account-key exports
 across the three types and both networks without changing any xpub or origin.
@@ -147,11 +155,10 @@ All eleven native suites passed with
 `docker compose --progress quiet run --build --rm test`, including the confined
 scanner's wallet-setup transport and rejection of oversized setup messages.
 
-A physical camera/signing round trip and boot-image checks for these source
-updates have not yet been recorded. The earlier `a233f87` branch image passed
-BIOS/UEFI boot and image checks and was flashed with full read-back verification;
-the subsequent changes below require a new build. The [current guide](SPARROW.md)
-requires a source build and keeps the preview 4 walkthrough linked separately.
+The earlier `a233f87` branch image passed BIOS/UEFI boot and image checks and was
+flashed with full read-back verification. The final `a56f61b` image includes the
+subsequent updates below, passed the image and boot checks, and was approved
+after the user's real-device test. The current guide targets preview 5 and later.
 
 ### PSBT-first setup and menu updates
 
@@ -178,8 +185,7 @@ Headless Sparrow 2.5.5 checks passed 36 synthetic transaction round trips across
 the twelve-wallet matrix, including PSBT-first setup for both cosigners when
 global account data was included. Its account decoder also preserved script type,
 fingerprint, path and xpub for 38 single-key/multisig account exports on mainnet and
-regtest. These are software checks; the latest source still needs a new image and
-physical validation.
+regtest. These software checks complement the user's real-device multisig test.
 
 The subsequent menu simplification removes standalone descriptor export and its
 encoder. The main menu now contains Scan, Share a public key and End session.
@@ -189,8 +195,8 @@ alternative last. Approved PSBT-derived wallets use the same orange Loaded walle
 status as setup-QR registration. Existing Liana `GET_XPUB` commands do not rely
 on manual descriptor export.
 The eleven native suites and the Sparrow account/signing checks passed after this
-simplification. The boot probe now expects the public account QR and three-action
-menu; it needs a freshly built image before the next BIOS/UEFI run.
+simplification. The updated boot probe passed on the `a56f61b` image, checking the
+public account QR, three-action menu and session restart in both BIOS and UEFI.
 
 ## Verified native behavior
 
@@ -449,6 +455,26 @@ before the user's physical BIP44 Sparrow test. The uploaded image, checksum and
 inventory were downloaded from GitHub and matched the original artifacts.
 Broader laptop/camera coverage and Sparrow multisig validation remain open; the
 full clean-build comparison has not been repeated for this image.
+
+The preview 5 candidate was built on 2026-10-01 from application source commit
+`a56f61bbc9e26131d0d67802b57b1ee515f93451`. It includes the three-action menu,
+SeedSigner-compatible account-key exports, PSBT-first multisig approval,
+automatic account matching and compact SegWit fee-assurance review. The signer
+reports application version `0.0.1`. Its size is 67,108,864 bytes and SHA-256 is:
+
+```text
+aa372406709cdb920d989179ac6950b295490253344ca1a5b01c0c879355a047
+```
+
+All eleven native suites passed. The independent export codec and headless
+Sparrow 2.5.5 account/address/signing matrix passed. The source copied into the
+build matches the application source revision. Pinned-input, kernel/content,
+checksum and repeat-assembly checks passed. BIOS and UEFI boot checks passed at
+1280x800, including public account QR decoding, result-review navigation, extra
+Enter, held Escape and logout/restart. The exact image was written to USB serial
+`55630D9D`, all image bytes matched on read-back, and the drive was safely powered
+off. The user approved it for release following their real-device Sparrow test.
+Broader laptop/camera coverage and a fresh full clean-build comparison remain open.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

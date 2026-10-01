@@ -1,14 +1,19 @@
 # Use Sparrow with Thunder Den
 
-This guide describes the **current source build**, not the published
-`v0.0.1-preview.4` image. [Build the current source](BUILD.md#1-build-the-image)
-to use the new public-key and PSBT-first signing flows. Use fresh test words and
-test coins while validating them.
+Use [Thunder Den v0.0.1-preview.5](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.5)
+or later. The released image was approved following the user's real-device
+Sparrow multisig test. Automated checks use Sparrow 2.5.5; see
+[validation status](STATUS.md#sparrow-integration) for the recorded scope.
+Use fresh test words and test coins while validating your own setup.
 
-The older [preview 4 BIP44/account 0 guide](https://github.com/bitcoinerlab/thunderden/blob/v0.0.1-preview.4/docs/SPARROW.md)
-was user-tested on a physical computer. The current flow has software checks
-using Sparrow 2.5.5; its physical camera round trip is still to be recorded. See
-[validation status](STATUS.md#sparrow-integration).
+## Use the SeedSigner keystore profile in Sparrow
+
+**For each Thunder Den keystore, choose Airgapped Hardware Wallet → SeedSigner →
+Scan in Sparrow. Use this SeedSigner profile for both single-signature and
+multisig wallets.**
+
+SeedSigner is Sparrow's compatible keystore profile for Thunder Den's account
+QRs. You can label the imported keystore **Thunder Den** afterwards.
 
 Choose the same Bitcoin network in both applications. Enter recovery words and
 the optional passphrase only on Thunder Den. Finish recovery input before
@@ -22,8 +27,8 @@ import route; see the note below.
 1. In Sparrow, create a wallet. Choose **Policy Type: Multi Signature**, the
    required signatures (for example, **2 of 2**) and the script type.
 2. For Thunder Den's keystore, choose **Airgapped Hardware Wallet → SeedSigner →
-   Scan**. SeedSigner is the compatible import profile; you can label the
-   keystore **Thunder Den** afterwards.
+   Scan**. Open **SeedSigner** in the airgapped-wallet list, then click its
+   **Scan** button to import Thunder Den's QR.
 3. On Thunder Den, choose **Share a public key (xpub)** and the matching shortcut:
 
    | Sparrow script type | Thunder Den shortcut | Public-key path |
@@ -44,7 +49,8 @@ import route; see the note below.
 ### Single signature: the same import, one key
 
 Choose **Policy Type: Single Signature** and the script type, then follow steps
-2–4 with one of these Thunder Den shortcuts:
+2–4, including **Airgapped Hardware Wallet → SeedSigner → Scan**, with one of
+these Thunder Den shortcuts:
 
 - **Native SegWit (P2WPKH)**
 - **Taproot (P2TR)**
@@ -55,10 +61,8 @@ Click **Apply** after importing that one key. Standard single-signature accounts
 do not need wallet registration; their transactions go straight to review when
 one account matches.
 
-Both setups use the same public-key export and keystore import. Sparrow holds
-public information; Thunder Den provides the signatures. Its **xpub / Watch Only
-→ camera** route can also import the standard account QR with its fingerprint,
-path and script type.
+Both setups use the same public-key export and **SeedSigner keystore import**.
+Sparrow holds public information; Thunder Den provides the signatures.
 
 ## Receive and sign directly
 
