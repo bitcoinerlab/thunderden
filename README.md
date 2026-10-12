@@ -94,17 +94,16 @@ supported formats and validation scope.
 Thunder Den is currently usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana).
 The integration has **not yet been submitted to upstream Liana**.
 
-Build and run the GUI from that fork using its
-[build instructions](https://github.com/bitcoinerlab/wizardsardine-liana/blob/master/doc/BUILD.md#building-the-project).
-The integration has been built and tested with Rust 1.88. Choose **Bitcoin Core
-or Electrum** as the wallet backend. Thunder Den support for Liana Connect is
-disabled until its server supports Thunder Den registration tokens.
+Build and run the GUI using the [pinned installation guide](docs/LIANA.md), which
+identifies the Liana, async-hwi and bridge versions and preserves their lockfiles.
+Choose **Bitcoin Core or Electrum** as the wallet backend. Thunder Den support for
+Liana Connect is disabled until its server supports Thunder Den registration tokens.
 
 On the same computer as Liana, start the [QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge)
 with Node.js 22 or later:
 
 ```sh
-npx @bitcoinerlab/thunderden-qr-bridge
+npx @bitcoinerlab/thunderden-qr-bridge@0.1.2
 ```
 
 Choose the same Bitcoin network in Thunder Den and Liana, then open Liana's

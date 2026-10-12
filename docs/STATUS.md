@@ -63,14 +63,15 @@ and bootloader configuration. `build/image.py` assembles the hybrid disk image.
 
 ## Liana integration
 
-The [Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana) includes
-Thunder Den support on `master` at commit `85e7681f`. It uses
-[our async-hwi fork](https://github.com/bitcoinerlab/wizardsardine-async-hwi), pinned
-to commit `dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34`. The
-[QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge) is available as
-`@bitcoinerlab/thunderden-qr-bridge@0.1.2`, published from commit `59a6aa3`.
-The bridge's current Git checkout includes later connection-caching and interface
-improvements through commit `1ac684c`; those changes are not yet published on npm.
+The [pinned installation guide](LIANA.md) records the source/package combination:
+Liana [`85e7681f`](https://github.com/bitcoinerlab/wizardsardine-liana/tree/85e7681fc0aec8ab3fcfb11b47cb5b32d3cac63d),
+with async-hwi pinned in both its manifest and lockfile to
+[`dbbd1a7d`](https://github.com/bitcoinerlab/wizardsardine-async-hwi/tree/dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34),
+and `@bitcoinerlab/thunderden-qr-bridge@0.1.2`, published from
+[`59a6aa3`](https://github.com/bitcoinerlab/thunderden-qr-bridge/tree/59a6aa35cbfc4b97f0ea99d64fae62a33e49e68d).
+Later bridge connection-caching and interface improvements through `1ac684c` are
+not part of that npm package. The guide includes its archive checksum and locked
+build commands; future upgrades require an updated verification record.
 
 Regular desktop Liana can retrieve public keys, register wallets, verify addresses
 and sign PSBTs through the bridge. Bitcoin Core, including Liana-managed Core,

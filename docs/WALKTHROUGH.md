@@ -23,8 +23,11 @@ Bitcoin Core node or create a Core wallet.
 ## Before you start
 
 You need Docker with Compose to build the boot image. On the online computer,
-you need Node.js 22 or newer with npm, curl and a built `hwi` binary from the
-[Thunder Den-enabled async-hwi branch](https://github.com/bitcoinerlab/wizardsardine-async-hwi/tree/thunderden-qr).
+you need Node.js 22 or newer with npm, curl and a built `hwi` binary from
+async-hwi revision `dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34`. Follow the
+[pinned CLI build instructions](LIANA.md#cli-for-the-walkthrough); they use the
+checked-in lockfile. The bridge version and archive checksum are recorded in
+the same [version manifest](LIANA.md#version-manifest).
 Run the shell commands in Bash or zsh. Disconnect other hardware wallets and
 stop their simulators for this walkthrough, so the CLI selects Thunder Den.
 
@@ -71,7 +74,7 @@ main menu for now. Start its scanner only when the bridge is showing a request.
 In another terminal on the online computer, start the published bridge:
 
 ```sh
-npx @bitcoinerlab/thunderden-qr-bridge
+npx @bitcoinerlab/thunderden-qr-bridge@0.1.2
 ```
 
 The bridge opens a browser page on the online computer. Leave the bridge running
