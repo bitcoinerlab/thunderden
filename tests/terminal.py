@@ -40,6 +40,7 @@ class Probe:
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
         self.saved = termios.tcgetattr(slave)
         self.controlling = controlling
+        self.executable = executable
 
         def session():
             os.setsid()
@@ -54,7 +55,10 @@ class Probe:
 
     def wait(self, text):
         deadline = time.monotonic() + 5
-        while text not in self.screen:
+        # Plain expectations may cross independently styled key labels. Explicit
+        # escape-sequence expectations still check the exact rendered styling.
+        pattern = re.compile(re.escape(text) if b"\x1b" in text else rb"(?:\x1b\[[0-9;]*m)*".join(re.escape(bytes([c])) for c in text))
+        while not pattern.search(self.screen):
             assert time.monotonic() < deadline, (text, self.screen)
             if select.select([self.master], [], [], 0.1)[0]:
                 try:
@@ -65,8 +69,9 @@ class Probe:
                     raise
                 self.screen += data
                 self.all_text += data
-        assert text in self.screen, (text, self.screen)
-        self.screen = self.screen.split(text, 1)[1]
+        match = pattern.search(self.screen)
+        assert match, (text, self.screen)
+        self.screen = self.screen[match.end():]
 
     def send(self, text):
         os.write(self.master, text)
@@ -78,9 +83,12 @@ class Probe:
     def rows(self):
         # Inspect positioned text in the current screen; these tests use ASCII
         # fixtures only. Ignore color/line-clear sequences, not cursor positions.
-        screen = self.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        screen = re.sub(rb"\x1b\[[0-9;]*m", b"", self.all_text.rsplit(b"\x1b[2J", 1)[-1])
         return {int(row): text for row, text in re.findall(
-            rb"\x1b\[(\d+);\d+H(?:\x1b\[[0-9;]*[mK])*([^\x1b\r\n]*)", screen)}
+             rb"\x1b\[(\d+);\d+H(?:\x1b\[[0-9;]*[mK])*([^\x1b\r\n]*)", screen)}
+
+    def plain(self):
+        return re.sub(rb"\x1b\[[0-9;]*m", b"", self.all_text)
 
     def spaced(self, prefix):
         rows = self.rows()
@@ -161,7 +169,7 @@ p.wait(b"Secret: ")
 p.spaced(b"Secret:")
 assert p.rows()[2] == b"THUNDER DEN", "Missing top margin"
 assert list(p.rows().values()).index(b"Enter public test data") < list(p.rows().values()).index(b"Your passphrase is hidden as you type.")
-assert p.rows()[9] == b"Press TAB if you want to see what you are entering.", "TAB hint must follow the status on its own line"
+assert p.rows()[9] == b"Press Tab if you want to see what you are entering.", "Tab hint must follow the status on its own line"
 assert b"Press Enter to continue." not in p.all_text, "Redundant instruction in a text input"
 p.send(b" A Case  X\x7f \r")
 p.finish_secret(b" A Case   ")
@@ -236,7 +244,7 @@ assert b"A Case" not in p.all_text
 p.send(b"\t")
 p.wait(b"Your passphrase is visible as you type.")
 p.wait(b" A Case ")
-assert p.rows()[6] == b"Enter public test data" and p.rows()[9] == b"Press TAB to hide it.", "Visibility toggle overwrote the introduction"
+assert p.rows()[6] == b"Enter public test data" and p.rows()[9] == b"Press Tab to hide it.", "Visibility toggle overwrote the introduction"
 for visible in (False, True, False, True):
     p.send(b"\t")
     p.wait(b"Your passphrase is visible" if visible else b"Your passphrase is hidden")
@@ -370,7 +378,7 @@ def approve_review(p, word=b"SIGN"):
         p.wait(b"Esc:")
         last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
         p.send(b"\r")
-        if b"Enter: continue" in last:
+        if b"Enter: continue" in re.sub(rb"\x1b\[[0-9;]*m", b"", last):
             break
     p.enter(b"Type " + word + b" then Enter: ", word + b"\r")
 
@@ -505,9 +513,299 @@ def word(p, index, count, value):
 
 
 def mnemonic(p, words, choice=b"\r"):
+    if p.executable:
+        p.enter(b"2: Read with camera (OCR)", b"1")
     p.enter(b"1: 12 words", choice)
     for index, value in enumerate(words, 1):
         word(p, index, len(words), value)
+
+
+def ocr_ready(p):
+    p.wait(b"T: Type words manually")
+    p.wait(b"Esc: Back")
+
+
+def ocr_select(p, index):
+    p.send(b"\x1b[B" * (index - 1))
+    p.wait(f"\x1b[30;43m> {index}: ".encode())
+    ocr_ready(p)
+
+
+def ocr_row(p, pattern):
+    # Positioned output, including incremental redraws: locate the latest actual
+    # word/picker text rather than relying on a full-screen clear between frames.
+    text = p.all_text.replace(b"\x1b[33m", b"").replace(b"\x1b[0;37;40m", b"")
+    matches = re.findall(rb"\x1b\[(\d+);\d+H(?:\x1b\[[0-9;]*[mK])*" + pattern, text)
+    assert matches, (pattern, p.all_text)
+    return int(matches[-1])
+
+
+p = Probe("ocr-good", rows=40)
+ocr_ready(p)
+assert b"Checksum matches - \x1b[1;33mPress C to continue" in p.all_text
+for label in (b"A: Insert above", b"B: Insert below", b"R: Capture again", b"T: Type words manually"):
+    assert label in p.plain(), ("Missing explicit action", label)
+assert b"\x1b[33mEnter\x1b[0;37;40m: Edit word" in p.all_text
+assert "\x1b[33m↑ ↓\x1b[0;37;40m: Select word".encode() in p.all_text
+assert not re.search(rb"Word \d+/\d+", p.all_text), "Redundant word-position strip remained"
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-weak", rows=40)
+ocr_ready(p)
+assert b"12: about ?" in p.all_text and b"\x1b[1;33mPress C to continue" in p.all_text
+for removed in (b"unreadable", b"OCR:", b"abovt", b"Numbering unclear", b"Checksum suggestion", b"Check paper", b"Compare every word"):
+    assert removed not in p.all_text, ("Obsolete OCR detail remained", removed)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-missing", rows=40)
+ocr_ready(p)
+assert b"12: [Enter word]" in p.all_text and b"Press C to continue" not in p.all_text
+ocr_select(p, 12)
+p.send(b"\r")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"about\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-good", rows=40)
+ocr_ready(p)
+ocr_select(p, 12)
+p.send(b"\r")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"\x7f\x1b")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+assert p.all_text.count(b"\x1b[2J") == 2, "Inline editing/navigation cleared the screen between entry and exit"
+assert b"\x1b[30;43m> 12: " in p.all_text, "Selected word lost menu-style highlighting"
+
+p = Probe("ocr-edit", rows=40)
+ocr_ready(p)
+assert b"Press C to continue" not in p.all_text, "Invalid checksum showed an enabled continuation"
+p.send(b"c")
+p.wait(b"Fill missing words or fix the checksum.")
+ocr_ready(p)
+ocr_select(p, 12)
+p.send(b"\r")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"abstractx\r")
+p.wait(b"Enter a BIP39 word (max 8 letters).")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"\x7f" * 9 + b"about\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-short", rows=40)
+ocr_ready(p)
+assert b"Review recovery words (11)" in p.all_text and b"Invalid count:" in p.all_text
+ocr_select(p, 11)
+p.send(b"a")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"\x1b")
+p.wait(b"Review recovery words (11)")
+ocr_ready(p)
+p.send(b"a")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"abandon\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-short", rows=40)
+ocr_ready(p)
+p.send(b"b")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"abandon\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-good", rows=40)
+ocr_ready(p)
+ocr_select(p, 12)
+p.send(b"\r")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"abour\x1b[D\x1b[3~t\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-full", rows=40)
+ocr_ready(p)
+p.send(b"a")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"\x1b")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(["abandon"] * 23 + ["art"]).encode())
+
+p = Probe("ocr-header", rows=40)
+ocr_ready(p)
+assert b"Review recovery words (30)" in p.all_text and b"Too many words: delete extra text." in p.all_text
+assert b"Press C to continue" not in p.all_text
+p.send(b"a")
+p.wait(b"At most 30 slots. Remove extras first.")
+ocr_ready(p)
+for _ in range(6):
+    p.send(b"d")
+    p.enter(b"Enter: Remove word  Esc: Keep word", b"\r")
+    ocr_ready(p)
+assert b"Review recovery words (24)" in p.all_text and b"\x1b[1;33mPress C to continue" in p.all_text
+p.send(b"c")
+p.finish_secret(" ".join(["abandon"] * 23 + ["art"]).encode())
+
+p = Probe("ocr-header", rows=12, columns=40)
+ocr_ready(p)
+ocr_select(p, 30)
+p.send(b"\r")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"\x1b")
+ocr_ready(p)
+p.send(b"r")
+output, _ = p.finish(0)
+assert b"RECAPTURE" in output
+
+p = Probe("ocr-one", rows=12, columns=40)
+ocr_ready(p)
+p.send(b"d")
+p.enter(b"Enter: Remove word  Esc: Keep word", b"\r")
+p.wait(b"No words yet.")
+ocr_ready(p)
+p.send(b"b")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"\x1b")
+p.wait(b"No words yet.")
+ocr_ready(p)
+p.send(b"r")
+output, _ = p.finish(0)
+assert b"RECAPTURE" in output
+
+p = Probe("ocr-extra", rows=40)
+ocr_ready(p)
+assert b"Review recovery words (13)" in p.all_text and b"Invalid count:" in p.all_text
+p.send(b"\x7f")  # Backspace must not remove a word outside editing.
+ocr_ready(p)
+p.send(b"d")
+p.wait(b"Remove word 1?")
+p.enter(b"Enter: Remove word  Esc: Keep word", b"\x1b")
+ocr_ready(p)
+p.send(b"\x1b[3~")  # Forward Delete / Supr is an alias for D.
+p.enter(b"Enter: Remove word  Esc: Keep word", b"\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-suggestions", rows=12, columns=40)
+ocr_ready(p)
+ocr_select(p, 12)
+p.send(b"\r")
+p.wait(b"\x1b[30;43m> 12: [ability]")
+p.wait(b"Enter: Save word  Esc: Cancel edit")
+p.wait(b"\x1b[?25h")
+assert b"\x1b[33mType to replace this word.\x1b[0;37;40m" in p.all_text
+assert b"Left/Right" not in p.all_text, "Editor added an unwanted character-edit hint"
+p.send(b"\x1b[B" * 5)
+p.wait(b"| \x1b[30;43m> about")
+p.wait(b"Enter: Use word  Esc: Cancel edit")
+p.wait(b"\x1b[?25l")
+assert b"\x1b[33mChoose a suggestion.\x1b[0;37;40m" in p.all_text
+anchor = ocr_row(p, rb"> 12: \[ability\]")
+assert ocr_row(p, rb"    Suggestions \(3-5 of 5\)") == anchor + 1, "Picker heading detached from its word"
+assert ocr_row(p, rb"\| \x1b\[30;43m> about") == anchor + 4, "Scrolled picker moved away from the active word"
+assert ocr_row(p, "↑ ↓: Choose or return to edit".encode()) > anchor + 4, "Controls overlapped the inline picker"
+p.send(b"\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+assert p.all_text.count(b"\x1b[2J") == 2, "Scrolling word/suggestion lists cleared the screen between entry and exit"
+
+p = Probe("ocr-picker-middle", rows=24, columns=80)
+ocr_ready(p)
+ocr_select(p, 4)
+edit_start = len(p.all_text)
+p.send(b"\r")
+p.wait(b"Enter: Save word  Esc: Cancel edit")
+p.send(b"\x1b[B")
+p.wait(b"| \x1b[30;43m> ability")
+p.wait(b"Enter: Use word  Esc: Cancel edit")
+anchor = ocr_row(p, rb"> 4: \[ability\]")
+assert ocr_row(p, rb"    Suggestions \(1-3 of 5\)") == anchor + 1
+assert ocr_row(p, rb"\| \x1b\[30;43m> ability") == anchor + 2
+assert ocr_row(p, rb"  5: abandon") == anchor + 5, "Following words did not flow around the attached picker"
+assert b"Press C to continue" not in p.all_text[edit_start:], "Editing advertised the inactive continuation shortcut"
+p.send(b"\x1b")
+ocr_ready(p)
+p.send(b"r")
+output, _ = p.finish(0)
+assert b"RECAPTURE" in output
+
+p = Probe("ocr-suggestions", rows=24)
+ocr_ready(p)
+ocr_select(p, 12)
+p.send(b"\r")
+p.enter(b"Enter: Save word  Esc: Cancel edit", b"abou")
+p.wait(b"> 12: [abou]")
+p.wait(b"Enter: Save word  Esc: Cancel edit")
+p.send(b"\x1b[B\x1b[B")
+p.wait(b"| \x1b[30;43m> absent")
+p.wait(b"Enter: Use word  Esc: Cancel edit")
+p.send(b"\x1b[A\x1b[A")
+p.wait(b"\x1b[30;43m> 12: [abou]")
+p.wait(b"Enter: Save word  Esc: Cancel edit")
+p.wait(b"\x1b[?25h")
+p.send(b"t\r")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+for action in (b"r", b"t"):
+    p = Probe("ocr-good", rows=40)
+    ocr_ready(p)
+    p.send(action)
+    if action == b"t":
+        mnemonic(p, MNEMONIC)
+        p.finish_secret(" ".join(MNEMONIC).encode())
+    else:
+        output, _ = p.finish(0)
+        assert b"RECAPTURE" in output
+
+p = Probe("ocr-good", rows=40)
+ocr_ready(p)
+p.send(b"t")
+p.enter(b"1: 12 words", b"\x1b")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-good", rows=12, columns=40)
+ocr_ready(p)
+p.send(b"c")
+p.wait(b"\x1b[30;43m> 3: ")
+ocr_ready(p)
+assert p.process.poll() is None, "Unseen words were accepted on a small screen"
+assert b"Checksum matches - \x1b[1;33mPress C to continue" in p.all_text
+p.send(b"\x1b[B" * 12)
+p.wait(b"\x1b[30;43m> 12: ")
+ocr_ready(p)
+p.send(b"c")
+p.finish_secret(" ".join(MNEMONIC).encode())
+
+p = Probe("ocr-full", rows=24, columns=80)
+ocr_ready(p)
+p.send(b"c")
+p.wait(b"\x1b[30;43m> 16: ")
+p.wait(b"24: art")
+ocr_ready(p)
+assert p.process.poll() is None, "Continue skipped undisplayed recovery words"
+p.send(b"c")
+p.finish_secret(" ".join(["abandon"] * 23 + ["art"]).encode())
+
+p = Probe("ocr-good", rows=40)
+ocr_ready(p)
+p.send(b"\x1b")
+output, _ = p.finish(2)
+assert not output
+
+p = Probe("ocr-method", rows=40)
+p.enter(b"2: Read with camera (OCR)", b"2")
+p.enter(b"Press Enter to continue.", b"\r")
+p.enter(b"2: Type with keyboard", b"2")
+mnemonic(p, MNEMONIC)
+p.finish_secret(" ".join(MNEMONIC).encode())
+print("PASS: persistent OCR editor, scrolling suggestions, inline edit/insert/delete, invalid counts/checksum, recapture and retained manual fallback")
 
 
 def public_key_export(p):
@@ -517,9 +815,11 @@ def public_key_export(p):
 
 
 def export_review(p):
+    # Wait for the new review, not a trailing Esc control from the preceding menu.
+    p.wait(b"\x1b[1;37mShare a public key\x1b[0;37;40m")
     while True:
         p.wait(b"Esc:")
-        if b"Enter: show the QR code" in p.all_text.rsplit(b"\x1b[2J", 1)[-1]:
+        if b"Enter: show the QR code" in p.plain().rsplit(b"\x1b[2J", 1)[-1]:
             return
         p.send(b"\r")
 

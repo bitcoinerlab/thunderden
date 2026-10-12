@@ -31,6 +31,8 @@
 
 namespace {
 void Check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+volatile sig_atomic_t seed_capture = 0;
+void CaptureSeed(int) { seed_capture = 1; }
 void Header(std::array<uint32_t, 5> header)
 {
     Check(write(1, header.data(), sizeof(header)) == sizeof(header), "Test header write failed");
@@ -75,6 +77,29 @@ int Worker(const std::string& mode)
     if (mode == "progress") { Header({1, 1, 1, 101, 1}); return 0; }
     if (mode == "command") { Header({99, 0, 0, 0, 4}); return 0; }
     if (mode == "wallet-oversize") { Header({5, 0, 0, 0, td::MAX_WALLET_SETUP + 1}); return 0; }
+    if (mode == "seed-oversize") { Header({6, 0, 0, 0, 8193}); return 0; }
+    if (mode == "seed-progress") { Header({1, 2, 2, 1, 4}); return 0; }
+    if (mode == "seed-unrequested") { td::SendSeedScanResult(std::array<uint8_t, 1>{0x80}); return 0; }
+    if (mode == "seed-frame-unrequested") { Header({7, 2, 2, 0, 20}); return 0; }
+    if (mode == "seed" || mode == "seed-early" || mode == "seed-frame-bad" || mode == "seed-exit") {
+        struct sigaction action{}; action.sa_handler = CaptureSeed; action.sa_flags = SA_RESTART;
+        sigemptyset(&action.sa_mask);
+        Check(sigaction(SIGUSR1, &action, nullptr) == 0, "Capture handler failed");
+        td::ConfineScanner();
+        td::SendPreview(std::array<uint8_t, 4>{}, 2, 2, 0);
+        while (!seed_capture) usleep(1000);
+        if (mode == "seed-early") { td::SendSeedScanResult(std::array<uint8_t, 1>{0x80}); return 0; }
+        if (mode == "seed-frame-bad") {
+            Header({7, 2, 2, 0, 20});
+            const std::array<uint32_t, 5> bad{UINT32_MAX, 0, 1, 1, 0};
+            Check(write(1, bad.data(), sizeof(bad)) == sizeof(bad), "Bad frame write failed"); return 0;
+        }
+        td::SendSeedFrame(std::array<uint8_t, 4>{1, 2, 3, 4}, 2, 2, {0, 0, 2, 2});
+        if (mode == "seed-exit") return 0;
+        Check(td::ReceiveSeedArea(2, 2) == td::CaptureArea{1, 0, 1, 2}, "Selected area changed across pipe");
+        td::SendSeedScanResult(std::array<uint8_t, 1>{0x80});
+        return 0;
+    }
     if (mode == "bad-failure-code") { Header({4, 0, 0, UINT32_MAX, 0}); return 0; }
     if (mode == "bad-failure-zero") { Header({4, 0, 0, 0, 0}); return 0; }
     if (mode == "bad-failure-geometry") { Header({4, 1, 0, 1, 0}); return 0; }
@@ -229,7 +254,7 @@ void Parent(const std::string& executable)
     try {
         const auto path = [&](const std::string& mode) {
             const auto link = root / mode;
-            std::filesystem::create_symlink(executable, link);
+            if (!std::filesystem::is_symlink(link)) std::filesystem::create_symlink(executable, link);
             return link.string();
         };
         for (const auto mode : {"decode", "limit", "bytewise", "mjpeg", "wallet"}) {
@@ -249,7 +274,50 @@ void Parent(const std::string& executable)
             }
             Check(complete, "Worker failed to return a result");
         }
-        for (const auto mode : {"oversize", "wallet-oversize", "geometry", "progress", "command", "truncated", "partial-header",
+        {
+            td::ScanProcess process(path("seed"), true);
+            bool captured = false, selected = false, complete = false;
+            for (int i = 0; i < 100 && !complete; ++i) {
+                if (auto update = process.Poll()) {
+                    if (update->seed) {
+                        Check(selected && *update->seed == td::SecretBytes{0x80} && !update->message, "OCR packet crossed QR boundary");
+                        complete = true;
+                    } else if (update->area) {
+                        Check(captured && update->gray == std::vector<uint8_t>({1, 2, 3, 4}), "Captured frame changed");
+                        bool invalid = false;
+                        try { process.ReadSeedArea({2, 0, 1, 1}); } catch (const std::invalid_argument&) { invalid = true; }
+                        Check(invalid, "Out-of-frame crop accepted");
+                        process.ReadSeedArea({1, 0, 1, 2}); selected = true;
+                    } else {
+                        Check(!captured && update->gray.size() == 4 && update->progress == 0, "Unexpected OCR preview");
+                        process.CaptureSeed(); captured = true;
+                    }
+                }
+            }
+            Check(complete, "OCR capture command/result failed");
+        }
+        for (const auto mode : {"seed-oversize", "seed-unrequested", "seed-progress", "seed-frame-unrequested", "decode"}) {
+            td::ScanProcess process(path(mode), true);
+            bool rejected = false;
+            for (int i = 0; i < 100 && !rejected; ++i) {
+                try { process.Poll(); } catch (const std::invalid_argument&) { rejected = true; }
+            }
+            Check(rejected, "Unsolicited, oversized or QR data accepted as OCR");
+        }
+        for (const auto mode : {"seed-early", "seed-frame-bad", "seed-exit"}) {
+            td::ScanProcess process(path(mode), true);
+            bool captured = false, rejected = false;
+            for (int i = 0; i < 100 && !rejected; ++i) {
+                try {
+                    if (auto update = process.Poll()) {
+                        if (update->area) { usleep(50000); process.ReadSeedArea({0, 0, 2, 2}); }
+                        else if (!captured && !update->gray.empty()) { process.CaptureSeed(); captured = true; }
+                    }
+                } catch (const std::invalid_argument&) { rejected = true; }
+            }
+            Check(rejected, "Early result, invalid area or exited worker was accepted");
+        }
+        for (const auto mode : {"oversize", "wallet-oversize", "seed-unrequested", "seed-frame-unrequested", "geometry", "progress", "command", "truncated", "partial-header",
                 "bad-failure-code", "bad-failure-zero", "bad-failure-geometry", "bad-failure-payload"}) {
             bool rejected = false;
             td::ScanProcess process(path(mode));

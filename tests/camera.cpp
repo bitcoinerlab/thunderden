@@ -253,10 +253,84 @@ int main()
             framebuffer[marker] = 17;
             display.Preview(black, 2, 2, 0.5);
             Check(framebuffer[marker] == 25, "Clearing the display did not invalidate the preview caption");
+            const auto caption_height = display.Caption({"Enter: Capture   Esc: Cancel"});
+            const size_t key_pixel = ((HEIGHT - caption_height + 8) * WIDTH + 16) * 4;
+            const size_t action_pixel = key_pixel + 7 * 8 * 4;
+            Check(framebuffer[key_pixel] == 26 && framebuffer[key_pixel + 1] == 147 && framebuffer[key_pixel + 2] == 247,
+                "Framebuffer action key was not orange");
+            Check(framebuffer[action_pixel] == 239 && framebuffer[action_pixel + 1] == 239, "Action description was highlighted like a key");
+            const auto arrows = td::ControlGlyphs("Arrows");
+            Check(arrows.size() == 7 && arrows[0].character == U'←' && arrows[6].character == U'↓', "Arrow instructions have wrong cell widths");
+            for (const auto& row : td::WrapControls("Arrows: Adjust corner   Tab: Switch corner", 36))
+                Check(row.size() <= 36, "Control wrapping counted UTF-8 bytes as cells");
+            for (const auto text : {"\033[31mEsc", "↑"}) {
+                bool rejected = false;
+                try { td::ControlGlyphs(text); } catch (const std::invalid_argument&) { rejected = true; }
+                Check(rejected, "Control formatter accepted arbitrary escape/Unicode input");
+            }
         }
         close(master);
         Check(display_mode == KD_TEXT, "Display did not return to text mode");
         std::puts("PASS: live preview updates without erasing an unchanged controls banner");
+
+        for (bool cancel : {false, true}) for (const auto initial : {td::CaptureArea{80, 60, 160, 120}, {40, 30, 120, 80}}) {
+            Check(openpty(&master, &slave, nullptr, nullptr, nullptr) == 0, "Cannot open selection tty");
+            unsigned step = 0, previous_x = 0, previous_y = 0;
+            const std::vector<uint8_t> frame(WIDTH * HEIGHT, 210);
+            display_input = [&](pollfd* descriptors, int timeout) {
+                if (timeout == 30) return __real_poll(descriptors, 1, 0);
+                bool dimmed = false, bright = false, border = false;
+                unsigned handle_x = 0, handle_y = 0, handle_pixels = 0;
+                for (size_t i = 0; i < framebuffer.size(); i += 4) {
+                    dimmed |= framebuffer[i] == 70 && framebuffer[i + 1] == 70;
+                    bright |= framebuffer[i] == 210 && framebuffer[i + 1] == 210;
+                    border |= framebuffer[i] == 26 && framebuffer[i + 1] == 147 && framebuffer[i + 2] == 247;
+                    if (framebuffer[i] == 255 && framebuffer[i + 1] == 255 && framebuffer[i + 2] == 255) {
+                        handle_x += (i / 4) % WIDTH; handle_y += (i / 4) / WIDTH; ++handle_pixels;
+                    }
+                }
+                Check(dimmed && bright && border, "Area selection did not show dimming and an orange border");
+                Check(handle_pixels > 0, "Active corner has no visible handle");
+                handle_x /= handle_pixels; handle_y /= handle_pixels;
+                if (!step) Check(handle_x < WIDTH / 2, "Selection did not start at the top-left corner");
+                if (step == 3) Check(handle_x > previous_x + 20 && handle_y > previous_y + 20, "Tab did not highlight the bottom-right corner");
+                if (step == 6) Check(handle_x + 20 < previous_x && handle_y + 20 < previous_y, "Tab did not return to the top-left corner");
+                const size_t caption_pixel = (HEIGHT - 1) * WIDTH * 4;
+                if (step == 3 || step == 6) Check(framebuffer[caption_pixel] == 17, "Changing corners redrew an unchanged caption");
+                if (step == 2 || step == 5) framebuffer[caption_pixel] = 17;
+                previous_x = handle_x; previous_y = handle_y;
+                const std::array<const char*, 8> keys{"\033[C", "\033[B", "\t", "\033[D", "\033[A", "\t", "\033[C", "\r"};
+                Check(step < keys.size(), "Area selector did not finish");
+                const std::string key = cancel ? "\033" : keys[step]; ++step;
+                Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send area key");
+                return __real_poll(descriptors, 1, 1000);
+            };
+            {
+                td::Terminal terminal(slave); td::Display display(terminal);
+                try {
+                    const auto area = display.SelectArea(terminal, frame, WIDTH, HEIGHT, initial);
+                    Check(!cancel && area == td::CaptureArea{initial.x + 8, initial.y + 2, initial.width - 12, initial.height - 4},
+                        "Corner adjustment moved the opposite corner or ignored the new initial area");
+                } catch (const td::Cancelled&) { Check(cancel, "Selection unexpectedly cancelled"); }
+            }
+            Check(std::all_of(frame.begin(), frame.end(), [](auto pixel) { return pixel == 210; }), "Selection modified the frozen image");
+            close(master); display_input = {};
+        }
+        td::CaptureArea area{10, 10, 100, 100};
+        td::AdjustCaptureCorner(area, -1000, 1000, false, 320, 240);
+        Check(area == td::CaptureArea{0, 78, 110, 32}, "Top-left adjustment escaped bounds or moved the bottom-right corner");
+        td::AdjustCaptureCorner(area, 1000, 1000, true, 320, 240);
+        Check(area == td::CaptureArea{0, 78, 320, 162}, "Bottom-right adjustment escaped bounds or moved the top-left corner");
+        td::AdjustCaptureCorner(area, -1000, -1000, true, 320, 240);
+        Check(area == td::CaptureArea{0, 78, 32, 32}, "Bottom-right corner crossed the minimum size");
+        td::AdjustCaptureCorner(area, 1000, 1000, false, 320, 240);
+        Check(area == td::CaptureArea{0, 78, 32, 32}, "Top-left corner crossed the minimum size");
+        area = {3, 4, 10, 12};
+        td::AdjustCaptureCorner(area, 1000, 1000, false, 320, 240);
+        Check(area == td::CaptureArea{3, 4, 10, 12}, "Small detector hint was inverted");
+        td::AdjustCaptureCorner(area, 2, 3, true, 320, 240);
+        Check(area == td::CaptureArea{3, 4, 12, 15}, "Small detector hint could not be enlarged");
+        std::puts("PASS: frozen-area corners, Tab focus, dimming, bounds and cancellation");
 
         for (const size_t bytes : {8, 1200}) for (const bool revisitable : {false, true}) {
             winsize size{24, 80, 0, 0};

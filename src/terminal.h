@@ -1,11 +1,14 @@
 #pragma once
 #include "review.h"
+#include "controls.h"
 #include <chrono>
 #include <termios.h>
 
 namespace td {
 struct Cancelled {};
-enum NavigationKey { KEY_UP = 256, KEY_DOWN, KEY_RIGHT, KEY_LEFT };
+enum NavigationKey { KEY_UP = 256, KEY_DOWN, KEY_RIGHT, KEY_LEFT, KEY_DELETE };
+struct SeedDraft;
+enum class SeedAction { Use, Recapture, Manual };
 struct SecretInput {
     unsigned word_number{0}; // One-based recovery-word position; zero for passphrases.
     bool visible{false};
@@ -20,18 +23,19 @@ class Terminal {
     int pending_key_{};
     std::chrono::steady_clock::time_point last_cancel_{};
     void Write(std::string_view text);
+    void WriteControls(const std::vector<ControlGlyph>& glyphs);
     int ReadKey(int timeout_ms);
     struct Layout {
         size_t columns, rows, width, left, body, height;
         bool operator==(const Layout&) const = default;
     };
     Layout View() const;
-    enum class Tone { Plain, Selected, Error };
+    enum class Tone { Plain, Selected, Error, Controls };
     enum class PageMode { Review, Confirm, Completed, Error, Idle };
     void At(size_t row, size_t column);
     void Row(const Layout& view, size_t index, std::string_view text, Tone tone = Tone::Plain);
     void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
-        std::string_view footer, int selected = -1, std::string_view pager = {}, bool warning = false);
+        std::string_view footer, int selected = -1, std::string_view pager = {}, bool warning = false, size_t controls_from = SIZE_MAX);
     bool Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
         const ReviewLines& details, PageMode mode, bool warning = false);
 public:
@@ -50,6 +54,7 @@ public:
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
         size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false);
     SecretBytes Mnemonic();
+    SeedAction EditSeedWords(SeedDraft& draft, size_t& selected);
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {},
         bool warning = false, std::string_view confirmation_note = {});
     bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {}, bool warning = false);

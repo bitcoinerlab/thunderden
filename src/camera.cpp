@@ -32,8 +32,9 @@ std::vector<uint8_t> Grayscale(std::span<const uint8_t> frame, unsigned width,
     return result;
 }
 
-Camera::Camera()
+Camera::Camera(unsigned preferred_width, unsigned preferred_height)
 {
+    Require(preferred_width && preferred_width <= 1920 && preferred_height && preferred_height <= 1080, "Invalid capture size");
     bool denied = false;
     for (unsigned index = 0; index < 32; ++index) {
         const auto path = "/dev/video" + std::to_string(index);
@@ -45,8 +46,8 @@ Camera::Camera()
         v4l2_capability cap{};
         v4l2_format format{};
         format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        format.fmt.pix.width = 640;
-        format.fmt.pix.height = 480;
+        format.fmt.pix.width = preferred_width;
+        format.fmt.pix.height = preferred_height;
         format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB24;
         format.fmt.pix.field = V4L2_FIELD_ANY;
         if (v4l2_ioctl(fd, VIDIOC_QUERYCAP, &cap) != 0

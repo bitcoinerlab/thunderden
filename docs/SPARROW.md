@@ -1,8 +1,8 @@
 # Use Sparrow with Thunder Den
 
 Use [Thunder Den v0.0.1-preview.5](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.5)
-or later. The released image was approved following the user's real-device
-Sparrow multisig test. Automated checks use Sparrow 2.5.5; see
+or later. This guide covers the account-key and sorted-multisig QR workflows.
+Independent software checks have used Sparrow 2.5.5; see
 [validation status](STATUS.md#sparrow-integration) for the recorded scope.
 Use fresh test words and test coins while validating your own setup.
 

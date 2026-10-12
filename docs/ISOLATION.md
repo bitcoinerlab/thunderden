@@ -31,15 +31,26 @@ but still present in the installed version. Isolation is **defense in depth**:
 an extra barrier against a decoder compromise, alongside input validation and
 local approval.
 
-## Two programs with separate responsibilities
+## Signer and scanning workers with separate responsibilities
 
-The application uses two Linux processes: running programs with separate memory.
+The signer and its active scanning worker use separate Linux processes and memory.
 
 - **Scanner (`thunderden-scanner`):** opens the camera, converts its images, reads
   QR codes and assembles animated QR messages. It receives no recovery words or
   private keys.
 - **Signer (`thunderden-signer`):** holds the keys, validates wallet definitions
   and transactions, renders the review, accepts keyboard approval and signs.
+- **Experimental OCR worker (`thunderden-ocr`):** on `feature/seed-ocr`, reads a
+  paper recovery phrase before key derivation. Unlike the QR worker, it necessarily
+  sees the photographed words. It receives no signer memory, passphrase or private
+  keys, and returns only a bounded proposal for local review. It exits before
+  editing begins. The [OCR guide](OCR.md) documents this additional input boundary.
+  CTC vocabulary ranking also runs inside this worker. The signer accepts at most
+  five distinct, validated BIP39 candidates per token; confidence flags are
+  untrusted suggestions, never authorization. Attached numeric prefixes also carry
+  a prefix width and word offset; the signer validates their bounds and consistency
+  with the raw prefix before using them as label-position evidence. Missing or
+  unreadable slots require local correction before the phrase can pass validation.
 
 ```text
 camera -> scanner -> limited data channel -> signer -> local review and approval
@@ -48,10 +59,15 @@ camera -> scanner -> limited data channel -> signer -> local review and approval
 
 Each scan starts a fresh scanner executable, without a copy of the signer's key
 memory or access to its keyboard and screen connections. The scanner sends
-camera previews, completed request data or fixed failure codes through a pipe:
-a one-way channel between the programs. The signer checks each record's type and
+camera previews, completed request data or fixed failure codes through an output
+pipe. The signer checks each record's type and
 size before allocating memory, then validates requests through its normal wallet
 and transaction checks. Scanner output always remains untrusted.
+The OCR worker additionally accepts one 16-byte crop rectangle through a separate
+input pipe, connected in place of keyboard input. Both ends validate it against
+the frozen frame. Frozen-frame messages are accepted only after capture, and
+word results only after local area confirmation. This control channel carries
+coordinates, not keys or approval.
 
 This channel has no way to approve a transaction. Camera previews appear only
 during scanning. Before review begins, the signer terminates the scanner and waits
@@ -87,8 +103,16 @@ The image's Linux kernel has networking disabled entirely. Landlock enforcement
 uses the kernel API directly. If the required protection is unavailable, the
 scanner refuses to scan.
 
-Only the scanner loads ZBar, libv4l and JPEG decoding libraries. Its executable
-contains no key-session, signing, keyboard or screen-rendering implementation.
+Image decoding libraries stay in the scanning workers, outside the signer.
+The QR worker uses ZBar/libv4l/JPEG; the OCR worker uses libv4l/JPEG and a CPU-only
+OpenCV subset. Neither executable contains key-session, signing, keyboard or
+screen-rendering implementations. The OCR worker loads pinned local models before
+confinement and uses the same 256 MiB address-space and filesystem/process limits.
+OCR startup, frame preparation and selected-area recognition have separate
+60-second deadlines, not renewed by preview traffic once capture is requested.
+The local rectangle-selection step is untimed and cancellable. Capture is
+requested by a signal; recognition starts after the crop message. Worker-to-parent
+traffic cannot approve a seed.
 The image includes only the required BusyBox startup/shutdown helpers, and image
 checks reject executables that grant extra user or group privileges.
 

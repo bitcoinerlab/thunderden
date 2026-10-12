@@ -85,3 +85,14 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["strip", "--strip-unneeded", "-o", stripped, scanner], check=True)
     print(f"Stripped scanner: {stripped.stat().st_size} bytes", flush=True)
 print("PASS: image decoders absent from signer closure; key/signing/UI implementations absent from scanner", flush=True)
+
+ocr = application.with_name("thunderden-ocr")
+ocr_symbols = subprocess.check_output(["nm", "-C", "--defined-only", ocr], text=True)
+for absent in ("td::Keys::", "SignPSBTInput", "td::Terminal::", "td::Display::"):
+    assert absent not in ocr_symbols, absent
+ocr_closure = subprocess.check_output(["ldd", ocr], text=True)
+ocr_loaded = set(re.findall(r'^\s*(\S+) =>', ocr_closure, re.M))
+assert "not found" not in ocr_closure
+assert ocr_loaded <= allowed | {"libopencv_core.so.413", "libopencv_imgproc.so.413", "libopencv_dnn.so.413"}, ocr_closure
+assert not any("opencv" in lib or "onnx" in lib for lib in loaded | scanner_loaded)
+print("PASS: CPU OCR libraries confined to the separate OCR executable", flush=True)

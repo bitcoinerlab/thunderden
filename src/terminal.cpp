@@ -91,19 +91,35 @@ int Terminal::ReadKey(int timeout_ms)
     return key;
 }
 
+void Terminal::WriteControls(const std::vector<ControlGlyph>& glyphs)
+{
+    bool accent = false;
+    std::string text = "\033[0;37;40m";
+    for (const auto glyph : glyphs) {
+        if (glyph.accent != accent) { accent = glyph.accent; text += accent ? "\033[33m" : "\033[0;37;40m"; }
+        const auto arrow = ArrowText(glyph.character);
+        if (!arrow.empty()) text += arrow;
+        else text += char(glyph.character);
+    }
+    Write(text + "\033[0;37;40m");
+}
+
 int Terminal::Key(int timeout_ms)
 {
     int key = ReadKey(timeout_ms);
     if (key == 27) {
         const int prefix = ReadKey(30);
         if (prefix == '[' || prefix == 'O') {
+            int first = 0;
             // Consume one bounded escape sequence, never its bytes as input text.
             for (unsigned i = 0; i < 8; ++i) {
                 const int part = ReadKey(30);
                 if (!part) return 0;
+                if (!i) first = part;
                 if (i == 0 && prefix == '[' && part == '[') { ReadKey(30); return 0; } // Linux F1-F5.
                 if (part >= '@' && part <= '~') {
                     if (i == 0 && part >= 'A' && part <= 'D') { last_cancel_ = {}; return KEY_UP + part - 'A'; }
+                    if (i == 1 && prefix == '[' && first == '3' && part == '~') { last_cancel_ = {}; return KEY_DELETE; }
                     return 0;
                 }
             }
@@ -142,8 +158,11 @@ void Terminal::At(size_t row, size_t column)
 
 void Terminal::Row(const Layout& view, size_t index, std::string_view text, Tone tone)
 {
-    Require(index < view.height && text.size() <= view.width, "Text row does not fit");
+    Require(index < view.height && (tone == Tone::Controls ? ControlGlyphs(text).size() : text.size()) <= view.width, "Text row does not fit");
     Printable(text);
+    if (tone == Tone::Controls) {
+        At(view.body + index, view.left); Write("\033[2K"); WriteControls(ControlGlyphs(text)); return;
+    }
     // Only public screen text uses this combined write. Secret input is rendered
     // directly from its secure buffer, never copied into a screen cache.
     Write("\033[" + std::to_string(view.body + index) + ";" + std::to_string(view.left) + "H\033[2K"
@@ -152,12 +171,12 @@ void Terminal::Row(const Layout& view, size_t index, std::string_view text, Tone
 }
 
 void Terminal::Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
-    std::string_view footer, int selected, std::string_view pager, bool warning)
+    std::string_view footer, int selected, std::string_view pager, bool warning, size_t controls_from)
 {
     // Navigation prepares body rows and owns the layout. Drawing never reads keys
     // or repaginates a review; every emitted field is still checked as plain text.
     for (const auto text : {title, std::string_view(network_), pager}) Printable(text);
-    const auto safe_footer = Wrap({std::string(footer)}, view.width);
+    const auto safe_footer = WrapControls(footer, view.width);
     Require(title.size() <= view.width && rows.size() <= view.height && safe_footer.size() <= 2,
         "The text does not fit this screen.");
     Require(pager.size() + 2 <= view.width, "Page counter does not fit");
@@ -170,20 +189,20 @@ void Terminal::Draw(const Layout& view, std::string_view title, const ReviewLine
     At(view.body - 3, view.left); Write("\033[90m"); Write(std::string(view.width, '-'));
     At(view.body - 2, view.left); Write(warning ? "\033[0;31;40m" : "\033[1;37m");
     Write(title); Write("\033[0;37;40m");
-    for (size_t i = 0; i < rows.size(); ++i) Row(view, i, rows[i], int(i) == selected ? Tone::Selected : Tone::Plain);
+    for (size_t i = 0; i < rows.size(); ++i) Row(view, i, rows[i], int(i) == selected ? Tone::Selected : i >= controls_from ? Tone::Controls : Tone::Plain);
     At(view.rows - 2, view.left); Write("\033[90m"); Write(std::string(view.width, '-'));
     if (!pager.empty()) {
         At(view.rows - 2, view.left + view.width - pager.size() - 2);
         Write(" " + std::string(pager) + " ");
     }
-    for (size_t i = 0; i < safe_footer.size(); ++i) { At(view.rows - 1 + i, view.left); Write(safe_footer[i]); }
+    for (size_t i = 0; i < safe_footer.size(); ++i) { At(view.rows - 1 + i, view.left); WriteControls(safe_footer[i]); }
     Write("\033[0;37;40m");
 }
 
 void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::string_view footer)
 {
     const auto view = View();
-    Draw(view, title, Wrap(lines, view.width), footer);
+    Draw(view, title, Wrap(lines, view.width), footer, -1, {}, false, 0);
 }
 
 int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction,
@@ -225,7 +244,7 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
         lines.emplace_back(""); lines.insert(lines.end(), instruction.begin(), instruction.end());
         if (!previous_view || *previous_view != view) {
             Draw(view, title, lines, std::string("Up/Down: Choose   Enter/1-") + std::to_string(choices.size())
-                + ": Select" + (cancellable ? "   Esc: Back" : ""), highlight);
+                + ": Select" + (cancellable ? "   Esc: Back" : ""), highlight, {}, false, lines.size() - instruction.size());
             // Status occupies the otherwise blank header row, so it is not
             // discarded when a small screen needs to scroll the menu options.
             if (!status.empty()) {
@@ -240,7 +259,7 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
                 const bool was_active = row >= previous_highlight && row < previous_highlight + previous_count;
                 if (row >= lines.size()) Row(view, row, "");
                 else if (row >= previous_lines.size() || lines[row] != previous_lines[row] || active != was_active)
-                    Row(view, row, lines[row], active ? Tone::Selected : Tone::Plain);
+                    Row(view, row, lines[row], active ? Tone::Selected : row >= lines.size() - instruction.size() ? Tone::Controls : Tone::Plain);
             }
         }
         previous_view = view; previous_lines = lines; previous_highlight = highlight; previous_count = entries[selected].size();
@@ -293,14 +312,15 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
         Draw(view, title, lines, word ? std::string("Enter: Next   Backspace: Edit")
             + (secret->word_number > 1 ? "   Up: Previous word" : "") + "   Esc: Cancel" : "Enter: Continue   Esc: Cancel", -1, {}, warning);
         if (!error.empty()) for (size_t i = 0; i < text.size(); ++i) Row(view, i, text[i], Tone::Error);
+        for (size_t i = 0; i < hint.size(); ++i) Row(view, hint_row + i, hint[i], Tone::Controls);
         input_row = view.body + lines.size();
         Flush();
     };
     const auto render = [&]() {
         // Keep editing on one row. Long entries show their tail; the secure
         // buffer retains every byte, including leading/trailing spaces.
-        const size_t count = std::min(result.size(), view.width - prompt.size() - 2);
-        At(input_row, view.left); Write("\033[2K"); Write(prompt);
+        const size_t count = std::min(result.size(), view.width - ControlGlyphs(prompt).size() - 2);
+        At(input_row, view.left); Write("\033[2K"); WriteControls(ControlGlyphs(prompt));
         Write(count < result.size() ? "<" : " ");
         if (secret && !secret->visible) Write(std::string(count, '*'));
         else if (count) Write({reinterpret_cast<const char*>(result.data() + result.size() - count), count});
@@ -316,7 +336,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
         if (key == 9 && secret) {
             secret->visible = !secret->visible;
             const auto& hint = secret->visible ? visible_hint : hidden_hint;
-            for (size_t i = 0; i < hint_rows; ++i) Row(view, hint_row + i, i < hint.size() ? hint[i] : "");
+            for (size_t i = 0; i < hint_rows; ++i) Row(view, hint_row + i, i < hint.size() ? hint[i] : "", Tone::Controls);
         } else {
             const bool previous = word && key == KEY_UP && secret->word_number > 1;
             if (key == '\r' || key == '\n' || previous) {
@@ -422,7 +442,7 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
             + (page ? "  Left/b: Back" : "") + (details.empty() ? "" : detailed ? "  d: Summary" : "  d: Details")
             + (mode == PageMode::Idle ? "" : mode == PageMode::Completed ? "  Esc: Finish" : "  Esc: Cancel");
         Flush();
-        Draw(view, title, visible, footer, -1, pager, warning);
+        Draw(view, title, visible, footer, -1, pager, warning, end - first + 1);
         if (mode == PageMode::Error || (warning && mode == PageMode::Confirm))
             for (size_t i = 0; i < end - first; ++i) Row(view, i, visible[i], Tone::Error);
         const int key = Key();

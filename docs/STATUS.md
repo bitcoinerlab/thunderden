@@ -1,565 +1,143 @@
-# Implementation status
+# Project status
 
-As of 2026-10-01, the signer, QR bridge and regular desktop Liana integration are
-implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
-using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
-upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
-device and its image approved for release. The earlier BIP44 single-signature
-workflow was also user-tested on a physical computer.
-The [Keeper Jade QR multisig workflow](KEEPER.md) was user-tested on iOS/testnet4
-with the text-setup development image; the report and scope are recorded below.
+Thunder Den is under active development. The latest published USB image is
+[`v0.0.1-preview.6`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6).
+The `feature/seed-ocr` branch adds experimental camera-assisted recovery entry;
+that feature is not included in preview 6.
 
-The QR bridge is published on npm as version `0.1.2`. The latest USB image is
-published as the development preview
-[`v0.0.1-preview.6`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6),
-with its checksum and installed-file inventory. BIOS/UEFI boot checks passed;
-USB write/read-back checks are recorded per image below. Broader laptop/camera coverage and a fresh
-full clean-build comparison remain outstanding.
-Current executable sizes refer to the latest recorded build below.
-Preview 6 adds text multisig setup and main-scanner wallet preloading to the
-direct multisig/compact-PSBT signing and account-key QRs introduced in preview 5.
+This page describes current capabilities and verification scope. Release-specific
+artifacts, checksums and changes belong in the [release notes](https://github.com/bitcoinerlab/thunderden/releases).
 
-The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
-exports and wallet-independent commands. Physical camera measurements remain
-separate from the automated checks below.
+## Capabilities
 
-## Architecture
+| Area | Implemented behavior |
+| --- | --- |
+| Recovery input | English BIP39, 12/15/18/21/24 words; printable ASCII passphrase |
+| Key sessions | Keys stay in RAM until logout or reboot |
+| Wallets | Standard single-signature accounts, sorted multisig and supported Miniscript policies |
+| Registration | Local wallet review, key-ownership checks and typed `REGISTER` approval |
+| Signing | Immutable PSBT review, explicit `SIGN`, signature preservation and partial signing |
+| Fees | Verified or explicitly qualified fee accounting for compact SegWit/Taproot requests |
+| Transport | UR v2 PSBTs, account exports and wallet-independent QR commands |
+| Boot | 64 MiB x86-64 BIOS/UEFI image, running without network or disk-storage support |
+| Experimental OCR | Isolated CPU recognition, BIP39-ranked suggestions and a local word editor |
 
-Native code links pinned, unmodified Bitcoin Core libraries for keys, descriptors,
-Miniscript, PSBT review and signing. Recovery input uses English words and printable
-ASCII passphrases. OpenSSL libcrypto provides PBKDF2 and constant-time comparison.
+The implementation uses pinned, unmodified Bitcoin Core libraries for key,
+descriptor, Miniscript and transaction operations. It does not run a Bitcoin
+daemon or node database. See [design](DESIGN.md), [fees](FEES.md),
+[protocol](PROTOCOL.md) and [isolation](ISOLATION.md) for exact boundaries.
 
-The signing path runs in-process without a daemon, RPC server or node database.
-Core's RNG, allocation, logging support and shared MuSig helpers remain linked
-dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
-runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,615,536-byte signer and an 88,176-byte scanner, with
-shared libraries installed separately. The hybrid disk image is 64 MiB. See
-[Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
+## Wallet integrations
 
-## Milestones
+### Sparrow integration
 
-- [x] Verify reuse of Core BIP32/key code without its node/wallet engines.
-- [x] Implement English/ASCII BIP39 and in-memory key sessions as a native library.
-- [x] Implement native policy validation, wallet IDs and HMAC authorization.
-- [x] Implement immutable native transaction review and approval-gated signing.
-- [x] Implement the local interface and UR v2 transport.
-- [x] Integrate the kernel, bootloader and hybrid image with deterministic disk metadata.
-- [x] Verify BIOS/UEFI boot, local account review and framebuffer QR export in QEMU.
-- [x] Isolate the scanner from keys and local approval; verify privilege restrictions.
-- [x] Compare complete clean builds using separate rebuilt builders and volumes.
-- [x] Record a matching image hash from an Apple Silicon build.
-- [x] Publish the browser QR bridge on npm.
-- [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
-- [x] Record a user-tested Sparrow single-signature BIP44 QR workflow.
-- [x] Record real-device Sparrow multisig testing and release approval.
-- [x] Record user-tested Keeper Jade QR multisig signing on iOS/testnet4.
-- [x] Publish a development USB image with its checksum and installed-file inventory.
-- [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
-- [ ] Complete verification of a release image built from the final source revision.
+Sparrow uses the **SeedSigner** keystore profile for Thunder Den's account QRs.
+The workflow supports single signature and standard sorted multisig, with
+PSBT-derived registration when sufficient setup data is included. Otherwise it
+requests a separate setup QR. See the [Sparrow guide](SPARROW.md).
 
-`platform/` defines the Buildroot application package, runtime launch, kernel
-and bootloader configuration. `build/image.py` assembles the hybrid disk image.
+Independent software checks have covered Sparrow 2.5.5 account import,
+descriptor/address agreement and synthetic signing round trips across legacy,
+nested SegWit and native SegWit multisig. Earlier descriptor-import checks also
+covered Sparrow 2.3.1. These results do not certify every coordinator version,
+physical camera or broadcast path.
 
-## Liana integration
+### Text multisig setup and Keeper integration
 
-The [Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana) includes
-Thunder Den support on `master` at commit `85e7681f`. It uses
-[our async-hwi fork](https://github.com/bitcoinerlab/wizardsardine-async-hwi), pinned
-to commit `dbbd1a7d29ddda504eb62b5f9d750d7c4ef21d34`. The
-[QR bridge](https://github.com/bitcoinerlab/thunderden-qr-bridge) is available as
-`@bitcoinerlab/thunderden-qr-bridge@0.1.2`, published from commit `59a6aa3`.
-The bridge's current Git checkout includes later connection-caching and interface
-improvements through commit `1ac684c`; those changes are not yet published on npm.
+Keeper uses its **Jade → QR** profile. Standard account QRs and P2WSH text
+multisig setup inside `ur:bytes` are supported. Setup can be scanned from the main
+menu or requested during signing. `REGISTER` remains separate from `SIGN`.
+See the [Keeper guide](KEEPER.md).
 
-Regular desktop Liana can retrieve public keys, register wallets, verify addresses
-and sign PSBTs through the bridge. Bitcoin Core, including Liana-managed Core,
-and Electrum are supported. The integration has not been submitted upstream and
-is not included in standard Liana releases.
+Native coverage includes structured/text setup equivalence, supported thresholds,
+network/origin validation, malformed input, cancellation, wallet replacement,
+preloading and successive cosigner passes. Version-specific coordinator behavior
+and physical QR transfer require integration testing beyond those fixtures.
 
-The fork built successfully against the pinned GitHub dependency with Rust 1.88.
-All 35 GUI tests and 148 Connect-library tests passed, along with formatting,
-strict Clippy and translation checks. Local interoperability checks covered
-registration, address verification and both primary and recovery spending paths
-for P2WSH and Taproot Miniscript wallets. Bitcoin Core verified every input in
-those synthetic signing fixtures. Bridge/browser checks covered QR exchange,
-cancellation and client disconnection using a simulated camera.
+### Liana integration
 
-Liana Connect support for Thunder Den is disabled. Proposed client-side token
-upload and reload handling is present, but needs an agreed and deployed server
-API before it can be enabled. Liana Business end-to-end support is separate work.
-Physical laptop/camera compatibility and a complete physical Liana signing flow
-still need recorded validation.
+Thunder Den support is available in the
+[Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana), using the
+[async-hwi fork](https://github.com/bitcoinerlab/wizardsardine-async-hwi) and
+[`@bitcoinerlab/thunderden-qr-bridge`](https://github.com/bitcoinerlab/thunderden-qr-bridge).
+The regular desktop integration supports Bitcoin Core and Electrum backends.
+It has not been submitted upstream and is not included in standard Liana releases.
 
-## Sparrow integration
+Software checks cover key retrieval, registration, address verification and
+primary/recovery spending for P2WSH and Taproot Miniscript. Liana Connect support
+is disabled pending a compatible registration-token server API; Liana Business
+end-to-end support is separate work.
 
-On 2026-09-29, the user reported a successful physical single-signature
-**Legacy (BIP44), account 0** workflow: public descriptor import, receiving and
-the Sparrow/Thunder Den QR signing round trip. The historical steps are in the
-[preview 4 guide](https://github.com/bitcoinerlab/thunderden/blob/v0.0.1-preview.4/docs/SPARROW.md).
+## Experimental camera entry
 
-On 2026-10-01, the user approved the `a56f61b` image for release following their
-real-device Sparrow multisig test. Its setup uses the SeedSigner-compatible QR
-flow documented in the [current guide](SPARROW.md). The device model, physical
-test's Sparrow version, threshold and script type were not separately recorded.
-The automated three-script-type matrix is documented below.
+The [OCR guide](OCR.md) describes capture, correction and supported writing
+formats. The feature includes a 30-slot editable draft, probability-ranked
+BIP39 suggestions and a checksum search bounded to 64 retained combinations.
+Only a valid BIP39 phrase can proceed to passphrase entry.
 
-In preview 4, Sparrow's BIP84/SegWit QR export omitted full previous transactions
-and was rejected. BIP44 retained that data. The newer source accepts compact
-SegWit inputs with explicit fee-assurance review, as described in [FEES.md](FEES.md).
-Automated descriptor-import checks below separately cover all four standard
-account types in Sparrow 2.3.1 and 2.5.5.
+The recognizer is a separate confined process. It sees camera frames but has no
+signer memory, keyboard or approval authority. OpenCV is limited to core,
+image-processing and CPU inference modules; build-time Python and ONNX Runtime
+are absent from the device image.
 
-### Direct multisig source changes
-
-Source changes after `31c541f` add three multisig key shortcuts, a session-only
-approved wallet and automatic selection of verified signing accounts. The direct importer accepts Sparrow's
-standard legacy P2SH, nested SegWit and native SegWit sorted-multisig setup QRs.
-Wallet CBOR is validated in the signer; the scanner and its pipe enforce size/type bounds.
-Legacy/unclassified inputs still require full previous transactions. Fee warnings
-for compact inputs remain visible through approval and result review.
-The first implementation used static `[fingerprint/path]xpub` exports. Standard
-shortcuts now use SeedSigner-compatible `crypto-account`; custom paths offer text
-or modern `hdkey`. Existing Thunder Den command formats retain their meanings.
-The independent `urtypes` codec verifies the account wrapper, script tags, network
-and full key origin. Headless Sparrow 2.5.5 checks decoded 30 account-key exports
-across the three types and both networks without changing any xpub or origin.
-
-The branch's architectural cleanup groups public wallet codecs in `wallet_qr`
-and user workflows in `application`. The transaction layer depends on policies
-and keys, not the application/UI. Candidate reviews share one immutable PSBT
-snapshot, resolved outputs and signing precomputation. Policy value copies share
-immutable parsed descriptors. Regression checks cover source-buffer mutation and
-policy replacement while older reviews/copies remain valid.
-The eleven native suites and Sparrow checks passed again after cleanup. Public
-export and wallet-fixture vectors matched the pre-cleanup build exactly.
-
-Headless checks using the official Sparrow 2.5.5 runtime covered twelve wallet
-setups: 2-of-2 and 2-of-3, all three script types, mainnet and regtest. Its actual
-SeedSigner, Krux and Specter public-key importers and the conversion used by its
-watch-only text scanner preserved each public key, master fingerprint and path.
-Sparrow's actual Settings descriptor encoder produced setup QRs which Thunder Den
-imported; receiving/change addresses at indices 0, 1, 7 and 1000 matched Core.
-
-For each setup, one-input and two-input PSBTs passed through Sparrow's actual
-serializer with its SeedSigner QR-export flags. Thunder Den added signatures in
-two cosigner passes, and Sparrow parsed and verified the returned signatures and
-recognized completion. Fee-assurance flags matched the full/compact input data.
-These fixtures are synthetic and do not establish chain or mempool acceptance.
-
-Native regression checks cover automatic account selection, one-policy passes,
-already-signed inputs, all three multisig types and signature preservation. A
-two-request fee-attack fixture verifies that the attack remains possible after
-accepting the disclosed risk; a false single-input amount instead makes the
-signature invalid against the actual previous output. Pseudo-terminal checks
-cover setup approval, cancelled replacement, inline setup during signing,
-chooser/back navigation and persistent red fee-warning consent.
-All eleven native suites passed with
-`docker compose --progress quiet run --build --rm test`, including the confined
-scanner's wallet-setup transport and rejection of oversized setup messages.
-
-The earlier `a233f87` branch image passed BIOS/UEFI boot and image checks and was
-flashed with full read-back verification. The final `a56f61b` image includes the
-subsequent updates below, passed the image and boot checks, and was approved
-after the user's real-device test. The current guide targets preview 5 and later.
-
-### PSBT-first setup and menu updates
-
-Changes after `a233f87` reconstruct a candidate standard multisig policy when a
-PSBT contains complete global xpubs, origins and input scripts. Registration is
-still mandatory local approval, but does not require a second QR scan when that
-data is sufficient. The confirmation explicitly says REGISTER does not sign the
-transaction yet. Missing data falls back to setup QR scanning; conflicting
-metadata, scripts and account keys are rejected.
-
-The public-key menu now includes four single-signature shortcuts and the three
-multisig types, using script labels rather than BIP numbers. Recommendation hints
-were removed. The public-key review includes the full key without
-Details or an encoding field. Wrapped option labels and an orange header status
-keep navigation and loaded-wallet state usable on narrow screens.
-
-All eleven native suites passed again. The tests cover candidate approval without
-signing, cancellation at REGISTER and SIGN, no extra scan for a complete setup,
-missing-data fallback, different cosigner account numbers, conflicting global
-key metadata, changed scripts and false change. A mixed standard-account/multisig
-request keeps its remaining multisig wallet discoverable after the first pass.
-
-Headless Sparrow 2.5.5 checks passed 36 synthetic transaction round trips across
-the twelve-wallet matrix, including PSBT-first setup for both cosigners when
-global account data was included. Its account decoder also preserved script type,
-fingerprint, path and xpub for 38 single-key/multisig account exports on mainnet and
-regtest. These software checks complement the user's real-device multisig test.
-
-The subsequent menu simplification removes standalone descriptor export and its
-encoder. The main menu now contains Scan, Share a public key and End session.
-Sparrow's guide uses one keystore/account-key import flow for single signature
-and multisig, with PSBT-first approval as the normal route and the descriptor-scan
-alternative last. Approved PSBT-derived wallets use the same orange Loaded wallet
-status as setup-QR registration. Existing Liana `GET_XPUB` commands do not rely
-on manual descriptor export.
-The eleven native suites and the Sparrow account/signing checks passed after this
-simplification. The updated boot probe passed on the `a56f61b` image, checking the
-public account QR, three-action menu and session restart in both BIOS and UEFI.
-
-## Text multisig setup and Keeper integration
-
-Current source adds a wallet-independent text multisig configuration codec inside
-`ur:bytes`, alongside the existing `ur:crypto-output` setup importer. It is accepted
-from the main scanner or during inline setup when a multisig PSBT lacks enough account data.
-The schema is documented in [the protocol](PROTOCOL.md#text-multisig-setup).
-Both formats use the same policy validation, local key ownership check and typed
-`REGISTER` approval. The original PSBT remains loaded for separate `SIGN` approval.
-The main scanner recognizes text setup headers separately from binary CBOR commands;
-recognition never bypasses the full importer or local approval. Preloading a
-wallet displays **Loaded wallet** and avoids another setup scan for matching PSBTs.
-
-All eleven native suites passed with
-`docker compose --progress quiet run --build --rm test`. New checks cover 1-of-2,
-2-of-2, 2-of-3, 3-of-5 and 20-of-20 policies on mainnet and testnet4, matching
-structured/text setup identities and receiving/change addresses. Compact
-two-input PSBTs without global xpubs are signed in successive cosigner passes;
-the completed transactions pass Core's signature/script verification. Animated
-registration QR transport, malformed text/CBOR, network/origin mismatches,
-duplicate keys, spoofed fingerprints and size limits are also checked.
-Pseudo-terminal tests cover both inline formats, cancellation at `REGISTER` and
-`SIGN`, successful replacement and preservation of the old wallet after cancelled
-or malformed replacement.
-Additional checks cover main-scanner format recognition, preservation of command
-routing, preloading either setup format, the orange loaded-wallet status and
-signing without another setup scan.
-
-On 2026-10-01, the user reported successful multisig signing with Keeper's current
-iOS app on testnet4 using the Jade QR profile. The tested development image matches
-application source `576453f` and has SHA-256
-`84176b3d53cdab4f79f87a36ed0115a234dc2a5782b23534a13f5387fdd193d7`.
-Thunder Den's `ur:crypto-account` imported through Jade; the user scanned the PSBT
-first, then tapped **Vault details** in Keeper to display the text registration QR
-when Thunder Den requested setup. After `REGISTER`, the retained PSBT could be
-reviewed and signed. The device model, exact installed Keeper/iOS versions and
-broadcast outcome were not separately recorded.
-
-The main-scanner preload addition follows that physical test and has separate
-automated coverage; it was not part of the tested development image. See the
-[Keeper guide](KEEPER.md) for both workflows. Neither text setup route is present
-in the published preview 5 image.
+Generated layout fixtures cover punctuation, underlines, word/character boxes,
+column layouts, headings and blank cards. They establish reproducible structural
+behavior, not broad handwriting accuracy or hardware compatibility. The fixture
+sources and limitations are in [`tests/fixtures/ocr`](../tests/fixtures/ocr/README.md).
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` runs eleven suites on Linux/amd64:
-`qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
-`application`, `export-compat`, `terminal`, `camera` and `isolation`.
-Actual native confinement tests require Landlock ABI 6 and are reported as skipped
-on hosts without it; scanner operation never falls back to an unconfined mode.
+Run the current suite with:
 
-The ARM64 development image also compiles successfully, including the application
-and test executables. This compilation check ran under emulation on an AMD64 host;
-native ARM64 test execution remains unverified.
+```sh
+docker compose --progress quiet run --build --rm test
+```
 
-- BIP39 seed vectors for all five standard word counts, ASCII rejection and
-  exact preservation of passphrase spaces and case.
-- Numbered recovery-word entry for all five word counts, immediate word validation,
-  earlier-word editing and full phrase retry after a failed checksum, before the
-  passphrase prompt.
-- Empty passphrases accepted with one Enter; non-empty passphrases require matching
-  confirmation and can be retried without repeating the recovery words.
-- Core's published BIP32 vectors, leading zeros, depth limits and injected
-  invalid-child conditions.
-- Default-account authorization and registered-policy HMAC verification.
-- Wrong seeds, altered names/cosigners, invalid points, duplicate/unused keys,
-  overlapping derivations, literal-key injection and malformed policies.
-- Wallet-ID vectors with one, two and three keys and a CompactSize boundary.
-- Descriptor/Miniscript parsing and public script derivation through Core.
-- BIP44/49/84/86 signing, custom branches, repeated account-key references,
-  legacy/wrapped/native multisig and SegWit/Taproot Miniscript.
-- Timelock and hashlock scripts, missing-preimage partial signing, successive
-  cosigners and final signature/script verification through Core.
-- Immutable review and explicit approval before ECDSA/Schnorr signing; rejection,
-  missing approval callbacks and changed seed/network prevent signing.
-- False change hints, mismatched scripts/Taproot commitments, incorrect previous
-  outputs, duplicate inputs, amount limits, malformed PSBTs/signatures and
-  unsupported signing rules.
-- External input disclosure, authenticated or explicitly unverified fee accounting,
-  compact SegWit/Taproot signing and untrusted-signature-independent size estimates.
-- Verified Core source remains unchanged by configuration/build. Selected
-  node/RPC/wallet/LevelDB symbols are absent from the signing test executable.
-- Signing tests observe only local netlink socket use and no filesystem-write
-  opens; they also pass with socket creation forced to fail.
-- Published UR v2 vectors, reordered/missing-frame recovery, malformed lengths,
-  stream conflicts, duplicate-frame bounds and BBQR rejection.
-- QR generation and recognition through independent libraries, using rotated,
-  low-contrast synthetic images.
-- Camera startup with a simulated streaming driver, frame conversion, transient
-  read errors, access-denied reporting and disconnection. A mock framebuffer
-  verifies that live preview updates do not erase an unchanged controls banner.
-  Reliability on physical cameras remains under validation.
-- Strict wallet-policy request schemas and registration replies containing the
-  reviewed wallet ID and its seed-bound authorization tag.
-- Command parsing rejects malformed/truncated/non-canonical requests, wrong
-  networks, wrong keys, wrong proofs and missing approval callbacks.
-- Thunder Den commands use a request ID and standard fingerprint metadata. A claimed
-  matching fingerprint with another xpub is rejected before registration approval.
-- The test-only `qr-command-runner` verifies two-signer HTLC claim/refund paths,
-  delayed preimages and stable wallet-ID/HMAC vectors with Bitcoin Core.
-- Full review traversal and typed consent through a pseudo-terminal, including
-  buffered-input rejection, cancellation, resize detection and masked passphrase entry.
-- Address checks, registration and signing expose the wallet ID and full public
-  descriptor in Details. Registration keeps spending rules and cosigner keys in
-  the required review; switching views preserves required pages and typed consent.
-- Signing summaries retain full non-change destinations and amounts, fees,
-  verified change totals, qualified mixed-input accounting and active lock conditions.
-  Signing/registration Details show technical fields without repeating the summary.
-- Completed QR results can reopen their text review and redisplay identical reply
-  payloads without repeating approval. Enter leaves the QR visible; Esc finishes
-  viewing the result. Static and animated framebuffer paths are tested.
-- Repeated Esc/Ctrl-C input at network selection and after cancelling an operation
-  does not end the session; loaded keys remain usable until explicit logout.
-- The actual application retains one seed session across operations and recovers
-  to its menu when framebuffer display is unavailable.
-- Normal logout displays its key-clear confirmation only after the signer exits.
-  A fresh keyless viewer waits for Enter before starting a new signer; a new
-  mnemonic, passphrase and network produce a new account. Failed exits remain stopped.
-- Eight main/test-network public HD-key encodings decoded/re-encoded by `urtypes`
-  with updated registry tags and matching xpubs, origins and fingerprints. The
-   static public-key text retains that same information. Standard account QRs
-   are decoded independently to check script type, network and full origins.
-- Historical preview 4 checks against the actual Sparrow 2.3.1 and 2.5.5 descriptor import code
-  reproduce the null-key-list failure for the old, valid full-text encoding. The
-  compact BIP44/49/84/86 exports import on mainnet and regtest; receiving/change
-  addresses at indices 0, 1 and 7 match Bitcoin Core for every fixture. These checks
-  exercise UR decoding, descriptor import and wallet derivation, not a physical camera.
-- Fresh scanner execution with no inherited parent environment/extra descriptors;
-  bounded preview/result pipes, stalled-worker cancellation and reaping.
-- Healthy preview streams outlive the no-frame deadline; silent workers, partial
-  packets and stalled previews time out. Known failure codes map to fixed messages,
-  malformed failure records are rejected and confinement adds no lifetime CPU cap.
-- Restricted uid/capabilities, denied application-file writes, real JPEG/QR/UR
-  decoding under confinement and denied filesystem/parent-process access.
-- Recorded AddressSanitizer and UndefinedBehaviorSanitizer coverage includes the
-  application, transport, export compatibility and terminal tests. That run used
-  disabled leak detection and uninstrumented QR/camera shared libraries.
-  Process-confinement/IPC checks have been verified without sanitizers, including
-  on the image's kernel and runtime libraries.
+The experimental branch defines fourteen suites: `seed-ocr`, `ocr-engine`,
+`ocr-templates`, `qr-commands`, `foundation`, `transactions`, `core-keys`,
+`native-runtime`, `transport`, `application`, `export-compat`, `terminal`,
+`camera` and `isolation`.
+
+| Coverage | Reproducible sources |
+| --- | --- |
+| BIP39/BIP32 vectors, key derivation and passphrase handling | `tests/foundation.cpp`, `tests/core_keys.py` |
+| Policy validation, wallet IDs, registration tags and key ownership | `tests/foundation.cpp`, `tests/application.cpp` |
+| PSBT signing, script verification, fee assurance and immutable review | `tests/transactions.cpp` |
+| UR vectors, malformed input, account exports and interoperability | `tests/transport.cpp`, `tests/export_compat.py` |
+| Local approval, editing, cancellation and session lifecycle | `tests/terminal.py` |
+| Camera conversion, preview and device failures | `tests/camera.cpp` |
+| Scanner IPC bounds, confinement and process isolation | `tests/isolation.cpp`, `tests/native_runtime.py` |
+| OCR decoding, templates, ordering and draft validation | `tests/seed_ocr.cpp`, `tests/ocr_engine.cpp`, `tests/ocr_templates.cpp` |
+
+Confinement tests require Landlock ABI 6 and report a skip on older hosts; the
+application itself never falls back to an unconfined scanner. Transaction fixtures
+use synthetic previous transactions and Core script verification, not chain or
+mempool acceptance.
 
 ## Verified image behavior
 
-- The Buildroot checksum announcement is signature-verified against the pinned
-  release key; the archive hash matches the signed announcement and `.env`.
-- Resolved kernel configuration disables networking, block storage, modules,
-  swap, core dumps, persistent crash storage and the checked raw-memory interfaces.
-- Packed-initramfs inventory includes file hashes, modes, ownership, symlinks
-  and device nodes. Development executables and GUI-framework libraries are absent
-  from the checked installed tree.
-- Reassembling the same boot payloads with different file timestamps and time zones
-  produces identical disk-image bytes.
-- Two complete clean builds recompiled the toolchain, libraries, bootloader, kernel
-  and application in separate, uncached Docker builders with fresh source,
-  download and output volumes. The full disk image, kernel/initramfs, BIOS/UEFI
-  boot payloads, checksum file and installed-file inventory are byte-identical.
-  See [Clean-build comparison](BUILD.md#clean-build-comparison) to repeat the check.
-- SeaBIOS and 64-bit OVMF boot the image with a generic QEMU x86-64 CPU. The test
-  enters public recovery words through the local UI, approves an account export
-  and verifies the framebuffer QR against the expected BIP84 regtest account.
-- The optional containment suite passes on the image kernel/runtime through a
-  separate test-only initramfs overlay. The installed image has ten BusyBox command
-  links, root-owned non-writable application paths and no setuid/setgid files.
+The [build guide](BUILD.md) provides commands for these checks:
 
-The clean-build comparison on 2026-09-10 used source commit
-`e4c07d45348b94e2035d16f52bf97f9cffea0a9c`, its pinned inputs and
-`SOURCE_DATE_EPOCH=1787529600`. Both runs used the same Linux/amd64 host.
-The 67,108,864-byte image SHA-256 was:
+- Pinned source verification, including the signed Buildroot checksum announcement.
+- Kernel restrictions: networking, disk storage, swap, modules and crash persistence.
+- Packed-initramfs file hashes, ownership, permissions and absence of development tools.
+- Repeat assembly with changed source timestamps and time zones.
+- BIOS/UEFI QEMU boot, local entry, public account QR decoding and session restart.
+- Scanner containment on the image kernel/runtime using a test-only overlay.
 
-```text
-8d85faeb3a73bf23378691e8cde3c08cf1940057bda427917e13bc4c7faf1ab3
-```
+A historical full clean-build comparison at source revision
+`e4c07d45348b94e2035d16f52bf97f9cffea0a9c` produced identical artifacts from
+separate uncached builders and fresh volumes. Repeat assembly is a narrower
+check and does not replace that procedure for later revisions. See
+[clean-build comparison](BUILD.md#clean-build-comparison).
 
-Docker selects native AMD64 or ARM64 build tools while Buildroot targets x86-64.
-An Apple Silicon build was reported on 2026-09-21 to produce the same image hash.
-Local kernel and installed-file checks also pass, with all eight compared image
-artifacts byte-identical to the reference build.
+## Remaining validation
 
-The QR-command implementation image built on 2026-09-24, before the command-file
-naming cleanup, is also 67,108,864 bytes. Its SHA256 is:
+- Broader physical laptop/webcam coverage, including slow cameras and reconnects.
+- A writer-diverse, camera-captured OCR benchmark with independent ground truth.
+- Release-candidate checks against the exact source revision and build inputs.
+- A fresh full clean-build comparison for the current release candidate.
+- Coordinator/version interoperability beyond the documented workflows.
 
-```text
-540156e7f1812bd778a38bb3699ab77e00308a5bb1584d743f97d6c49280444b
-```
-
-That snapshot contains a 2,537,744-byte signer and an 88,184-byte scanner. Its
-installed-file and repeat-assembly checks passed, as did BIOS/UEFI boot and public
-descriptor export in QEMU. It includes uncommitted implementation work after
-`057d4c6`; it has not been tested on the physical HP during this phase.
-
-The image with the simplified command format rebuilt on 2026-09-24 is
-67,108,864 bytes with SHA256:
-
-```text
-8db022d60c556f81aa004c5e4cf279df231ec97ffadc94f3c042c55475ccd2cf
-```
-
-It includes the uncommitted protocol simplification after `f3677f0`. The checksum,
-installed-file checks, repeat assembly and BIOS/UEFI boot/export tests passed.
-Physical HP validation remains outstanding.
-
-A console image was built on 2026-09-27 from
-`feature/console-refresh`. It includes the UX refinements after `3b6f6a4`, later
-committed in `eec50f9`, but predates that commit's network-aware SegWit xpub example.
-Its application version is `0.0.1` and its 67,108,864-byte image SHA256 is:
-
-```text
-80103269ba8d951a3250c5fc20e9cbac81c6927069a46afbceba567c5a134fda
-```
-
-All eleven native suites passed. Coverage includes hint placement and TAB
-toggles, complete expanded review before approval, details cancellation,
-mainnet-first network selection and process exit before the keyless completion
-screen. Secret-input editing, typed consent and resize rejection remain covered.
-QEMU boot/export tests passed for BIOS and UEFI at 1280x800, BIOS at 640x480 and
-UEFI at 2560x1600. Each run used public test words, corrected an invalid word,
-returned from details with `d`, decoded the descriptor QR and exported again
-directly from details after holding Escape without re-entering recovery words.
-After logout, Enter returned to a pixel-identical fresh network menu.
-Kernel/content checks, checksum verification and repeat assembly passed.
-The full clean-build comparison and physical-hardware checks have not been
-repeated for this snapshot.
-
-On 2026-09-28, the native development build and terminal suite passed with the
-updated xpub example, including mainnet and Signet checks.
-
-The first published preview, `v0.0.1-preview.1`, was then built from source commit
-`b12fdbf549cb2a04e4db50abdc1463d8e6f0a3fa`. This image includes the updated example
-and reports application version `0.0.1`. Its size is 67,108,864 bytes and its
-SHA-256 is:
-
-```text
-baeaacb17bbd349449814fbee9ad1853a74b5d21ea0c46510bc4d586869728ec
-```
-
-Kernel restrictions, installed-file checks, checksum verification and repeat
-assembly passed. QEMU BIOS and UEFI tests passed at 1280x800, including QR export,
-cancellation and logout/restart. The image was written to a USB drive and all
-67,108,864 bytes matched on read-back. The published image, checksum and inventory
-were downloaded from GitHub and matched the original build artifacts byte-for-byte.
-The full clean-build comparison and physical laptop/camera checks have not been
-repeated for this preview.
-
-The second published preview, `v0.0.1-preview.2`, was built on 2026-09-29 from
-source commit `975ddeea1899353086c73de7afa5e7c991654431`. It includes the wallet
-review/Details changes and reports application version `0.0.1`. Its size is
-67,108,864 bytes and its SHA-256 is:
-
-```text
-8ccc6ffb7a88c4db3b5571dd415d95a3777aef2f531dcfe67fd5311830082e71
-```
-
-All eleven native suites passed. The source files copied into the image build
-match the tagged source. Kernel restrictions, installed-file checks, checksum
-verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
-1280x800, including public descriptor QR export, cancellation and logout/restart.
-The uploaded image, checksum and inventory were downloaded from GitHub and
-matched the original build artifacts byte-for-byte. The full clean-build comparison
-and physical USB/laptop/camera checks have not been repeated for this preview.
-
-The third published preview, `v0.0.1-preview.3`, uses source commit
-`121945741ab3b0a5d1bd95a67f86e0d1612eca74`. The 2026-09-29 build includes the shorter
-signing review, separate technical Details, completed-result QR/text navigation
-and removal of QR Pause/Resume. It reports application version `0.0.1`. Its size
-is 67,108,864 bytes and its SHA-256 is:
-
-```text
-03632638fad260507517d52598646dc51648f7bd265a2ead403d38e676f4a334
-```
-
-All eleven native suites passed. The source files copied into the image build
-match the tagged source. Kernel restrictions, installed-file checks, checksum
-verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
-1280x800, including QR/text round trips, extra Enter presses, Finish and
-logout/restart. The image was written to a USB drive and all 67,108,864 bytes
-matched on read-back. The uploaded image, checksum and inventory were downloaded
-from GitHub and matched the original build artifacts byte-for-byte. Physical
-laptop/camera checks and the full clean-build comparison have not been repeated
-for this preview.
-
-The fourth published preview, `v0.0.1-preview.4`, uses source commit
-`484b73d06e2fc51a2f62084b3b326e16c41212ee`. Its 2026-09-29 image adds the compact
-public descriptor export for Sparrow compatibility, with the strict
-previous-transaction requirements preserved. The release documents the user-tested
-single-signature BIP44/account 0 workflow. It reports application version `0.0.1`.
-Its size is 67,108,864 bytes and its SHA-256 is:
-
-```text
-12c00869202f06d39167e3b97584d2aca0a36725714363e9bdfc76f417ca9e71
-```
-
-All eleven native suites passed. Independent descriptor reconstruction and the
-headless Sparrow 2.3.1/2.5.5 import/address checks passed. The source copied into
-the image build matches the tagged source. Kernel/content checks, checksum
-verification and repeat assembly passed. QEMU BIOS and UEFI tests passed at
-1280x800, including compact descriptor QR export and result-review navigation.
-This exact image was written to a USB drive and matched byte-for-byte on read-back
-before the user's physical BIP44 Sparrow test. The uploaded image, checksum and
-inventory were downloaded from GitHub and matched the original artifacts.
-Broader laptop/camera coverage and Sparrow multisig validation remain open; the
-full clean-build comparison has not been repeated for this image.
-
-The fifth published preview, `v0.0.1-preview.5`, uses an image built on 2026-10-01
-from application source commit
-`a56f61bbc9e26131d0d67802b57b1ee515f93451`. It includes the three-action menu,
-SeedSigner-compatible account-key exports, PSBT-first multisig approval,
-automatic account matching and compact SegWit fee-assurance review. The signer
-reports application version `0.0.1`. Its size is 67,108,864 bytes and SHA-256 is:
-
-```text
-aa372406709cdb920d989179ac6950b295490253344ca1a5b01c0c879355a047
-```
-
-All eleven native suites passed. The independent export codec and headless
-Sparrow 2.5.5 account/address/signing matrix passed. The source copied into the
-build matches the application source revision. Pinned-input, kernel/content,
-checksum and repeat-assembly checks passed. BIOS and UEFI boot checks passed at
-1280x800, including public account QR decoding, result-review navigation, extra
-Enter, held Escape and logout/restart. The exact image was written to USB serial
-`55630D9D`, all image bytes matched on read-back, and the drive was safely powered
-off. The user approved it for release following their real-device Sparrow test.
-The release tag points to `ada3dbc1059b3aff07158e3a9dc5d41d62cad1c6`, which adds
-release documentation to the identical application source and build inputs. All
-three assets were downloaded from GitHub and matched the original artifacts
-byte-for-byte; the downloaded image checksum passed.
-Broader laptop/camera coverage and a fresh full clean-build comparison remain open.
-
-The sixth published preview, `v0.0.1-preview.6`, uses an image built on 2026-10-01
-from application source commit `b153aaa23e940e856b4714fbdfb8732ab0733ef7`.
-It adds wallet-independent text multisig setup inside `ur:bytes` and main-scanner
-preloading with the existing registration approval and loaded-wallet indicator.
-The signer reports application version `0.0.1`. Its size is 67,108,864 bytes and
-SHA-256 is:
-
-```text
-295d0277baa8cc9bdd796017f25a9dd684f85698d2ce0c253f6e273f91633d94
-```
-
-All eleven native suites passed. The source copied into the image build matches
-the application source revision. Pinned-input, kernel/content, checksum and
-repeat-assembly checks passed. BIOS and UEFI QEMU boot checks passed at 1280x800,
-including public account QR decoding, result-review navigation, extra Enter,
-held Escape and logout/restart. Release documentation is added on top of the
-application source revision without changing application code or build inputs.
-The user's successful Keeper iOS/testnet4 signing report applies to the preceding
-inline-setup image recorded above; main-scanner preloading has automated coverage.
-The release tag points to `f1ea515c81b2ef98b379e0521dc178fa40274802`. All three
-GitHub assets were downloaded and matched the original build artifacts byte-for-byte;
-the downloaded image checksum passed and public asset URLs returned HTTP 200.
-The release image was written to USB serial `55630D9D`; all 67,108,864 bytes matched
-on read-back, and the drive was safely powered off.
-The fresh full clean-build comparison and broader physical-device coverage remain open.
-
-Transaction fixtures use synthetic previous transactions and Core script
-verification, not chain/mempool acceptance. Dependency/syscall checks run the
-development executables in the restricted Docker container. The image inventory
-and guest checks above verify the built kernel configuration and scanner
-confinement; physical hardware behavior requires separate validation.
-
-The application implements seed entry, policy registration, transaction rendering,
-account export, webcam capture/preview and animated QR output. Broader physical
-webcam coverage and release-candidate verification remain outstanding.
-Synthetic-image, pseudo-terminal and emulated-display checks do not establish
-physical laptop/camera compatibility.
+Synthetic images, pseudo-terminals and emulated displays are useful regression
+tests, but do not establish physical camera compatibility or transcription accuracy.

@@ -37,3 +37,10 @@ still be too costly to include.
 Documentation and comments should explain the current design to a new reader,
 including the reason for non-obvious choices. Preserve a small, inspectable system
 as the project grows.
+
+Public documentation describes supported behavior, reproducible checks and known
+limits. Keep session diaries, private diagnostic paths, device identifiers and
+one-off investigation logs outside the public tree. Put shareable fixtures under
+`tests/fixtures/` or generate them in tests, with provenance and reproducible
+commands. Hardware reports should contain only the technical details needed to
+reproduce an issue, not personal identifiers or real wallet backups.

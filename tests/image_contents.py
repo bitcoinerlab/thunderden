@@ -27,7 +27,7 @@ forbidden = {
     "bitcoind", "bitcoin-cli", "bitcoin-wallet", "bitcoin-node", "python", "python3",
     "gcc", "g++", "cmake", "strace", "thunderden-tests", "transaction-tests", "transport-tests",
     "application-tests", "terminal-probe", "qr-image-probe", "core-key-probe", "core-key-edges",
-    "isolation-tests", "camera-tests",
+    "isolation-tests", "camera-tests", "seed-ocr-tests", "ocr-engine-tests", "ocr-template-tests",
 }
 for path in sorted(target.rglob("*")):
     relative = str(path.relative_to(target))
@@ -37,7 +37,7 @@ for path in sorted(target.rglob("*")):
 binary = target / "usr/bin/thunderden-signer"
 assert binary.is_file() and os.access(binary, os.X_OK)
 assert (target / "usr/bin/thunderden-scanner").is_file()
-for program in ("thunderden-signer", "thunderden-scanner"):
+for program in ("thunderden-signer", "thunderden-scanner", "thunderden-ocr"):
     header = subprocess.check_output(["readelf", "-h", target / "usr/bin" / program], text=True)
     assert re.search(r"Machine:\s+Advanced Micro Devices X86-64", header), program + " must target x86-64"
 assert not (target / "etc/init.d").exists()
@@ -77,7 +77,7 @@ while True:
 inventory = {}
 for name, mode, uid, gid, links, mtime, major, minor, identity in entries:
     assert not mode & 0o6000, name + " has setuid/setgid permissions"
-    if name in ("bin", "sbin", "lib", "lib64", "usr", "usr/bin", "usr/sbin", "usr/lib", "usr/lib64") or name.startswith(("bin/", "sbin/", "lib/", "usr/bin/", "usr/sbin/", "usr/lib/")):
+    if name in ("bin", "sbin", "lib", "lib64", "usr", "usr/bin", "usr/sbin", "usr/lib", "usr/lib64") or name.startswith(("bin/", "sbin/", "lib/", "usr/bin/", "usr/sbin/", "usr/lib/", "usr/share/thunderden/")):
         assert uid == 0 and (stat.S_ISLNK(mode) or not mode & 0o022), name + " is mutable by the application"
     item = {"mode": oct(mode), "uid": uid, "gid": gid, "links": links, "mtime": mtime}
     payload = contents[identity]
@@ -92,6 +92,8 @@ assert "init" in inventory and "dev/console" in inventory
 for required in ("bin/sh", "bin/mount", "bin/mkdir", "bin/sleep", "sbin/init", "sbin/poweroff", "usr/bin/thunderden-session"):
     assert required in inventory, required + " missing from runtime"
 assert inventory["usr/bin/thunderden-signer"]["sha256"] == hashlib.sha256(binary.read_bytes()).hexdigest()
+for name, variable in (("det.onnx", "OCR_DET_SHA256"), ("rec.onnx", "OCR_FIXED_REC_SHA256"), ("characters.txt", "OCR_CHARACTERS_SHA256")):
+    assert inventory["usr/share/thunderden/ocr/" + name]["sha256"] == os.environ[variable], name
 applets = [name for name, item in inventory.items() if item.get("symlink", "").endswith("busybox")]
 allowed = {"ash", "sh", "init", "mount", "mkdir", "sleep", "poweroff", "test", "[", "false"}
 assert all(Path(name).name in allowed for name in applets), applets

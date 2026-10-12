@@ -142,9 +142,16 @@ Display::~Display() { Close(); }
 
 void Display::Pixel(unsigned x, unsigned y, uint8_t gray)
 {
+    ColorPixel(x, y, gray, gray, gray);
+}
+
+void Display::ColorPixel(unsigned x, unsigned y, uint8_t red, uint8_t green, uint8_t blue)
+{
     uint32_t value = 0;
+    const std::array<uint8_t, 3> colors{red, green, blue};
+    size_t i = 0;
     for (const auto channel : {variable_.red, variable_.green, variable_.blue}) {
-        value |= (uint32_t(gray) >> (8 - channel.length)) << channel.offset;
+        value |= (uint32_t(colors[i++]) >> (8 - channel.length)) << channel.offset;
     }
     if (variable_.transp.length) value |= ((1U << variable_.transp.length) - 1) << variable_.transp.offset;
     auto* pixel = memory_ + (y + variable_.yoffset) * size_t(fixed_.line_length)
@@ -160,7 +167,11 @@ void Display::Clear()
 
 unsigned Display::Caption(const ReviewLines& lines)
 {
-    const auto wrapped = Wrap(lines, (variable_.xres - 32) / font_width_);
+    std::vector<std::vector<ControlGlyph>> wrapped;
+    for (const auto& line : lines) {
+        const auto rows = WrapControls(line, (variable_.xres - 32) / font_width_);
+        wrapped.insert(wrapped.end(), rows.begin(), rows.end());
+    }
     const unsigned height = wrapped.size() * (font_height_ + 4) + 16;
     Require(height < variable_.yres / 2, "Not enough room for the camera or QR code.");
     const unsigned stride = (font_width_ + 7) / 8;
@@ -169,33 +180,76 @@ unsigned Display::Caption(const ReviewLines& lines)
     }
     for (size_t row = 0; row < wrapped.size(); ++row) {
         for (size_t i = 0; i < wrapped[row].size(); ++i) {
-            const unsigned ch = static_cast<unsigned char>(wrapped[row][i]);
-            const auto* glyph = font_.data() + ch * 64 * stride;
+            const auto cell = wrapped[row][i];
+            const auto* glyph = cell.character < 128 ? font_.data() + cell.character * 64 * stride : nullptr;
+            // Four fixed UI icons, independent of the console font's glyph map.
+            static constexpr std::array<std::array<uint8_t, 7>, 4> arrows{{
+                {{8, 16, 32, 127, 32, 16, 8}}, {{8, 28, 42, 73, 8, 8, 8}},
+                {{8, 4, 2, 127, 2, 4, 8}}, {{8, 8, 8, 73, 42, 28, 8}}}};
             for (unsigned y = 0; y < font_height_; ++y) for (unsigned x = 0; x < font_width_; ++x) {
-                Pixel(16 + i * font_width_ + x, variable_.yres - height + 8 + row * (font_height_ + 4) + y,
-                    (glyph[y * stride + x / 8] & (0x80 >> (x % 8))) ? 239 : 25);
+                bool ink;
+                if (glyph) ink = glyph[y * stride + x / 8] & (0x80 >> (x % 8));
+                else {
+                    const unsigned size = std::min(font_width_, font_height_), top = (font_height_ - size) / 2;
+                    ink = y >= top && y < top + size && x < size
+                        && (arrows[cell.character - U'←'][(y - top) * 7 / size] & (64 >> (x * 7 / size)));
+                }
+                const unsigned px = 16 + i * font_width_ + x, py = variable_.yres - height + 8 + row * (font_height_ + 4) + y;
+                if (ink && cell.accent) ColorPixel(px, py, 247, 147, 26);
+                else Pixel(px, py, ink ? 239 : 25);
             }
         }
     }
     return height;
 }
 
-void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress)
+void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress, const ReviewLines& caption, const CaptureArea* area, bool bottom_right)
 {
     Require(width > 0 && width <= 1920 && height > 0 && height <= 1080
         && gray.size() == size_t(width) * height, "Invalid preview image");
+    Require(!area || area->Fits(width, height), "Invalid preview selection");
     const int percent = int(progress * 100);
     if (percent != preview_progress_) {
-        caption_height_ = Caption({"Point this device's camera at the code in your wallet app.",
-            std::to_string(percent) + "% scanned   Esc: Cancel"});
+        caption_height_ = Caption(caption.empty() ? ReviewLines{"Point this device's camera at the code in your wallet app.",
+            std::to_string(percent) + "% scanned   Esc: Cancel"} : caption);
         preview_progress_ = percent;
     }
     const unsigned fit_w = variable_.xres, fit_h = variable_.yres - caption_height_;
     const unsigned draw_w = std::min(fit_w, unsigned(uint64_t(width) * fit_h / height));
     const unsigned draw_h = unsigned(uint64_t(height) * draw_w / width);
     for (unsigned y = 0; y < draw_h; ++y) for (unsigned x = 0; x < draw_w; ++x) {
-        Pixel((fit_w - draw_w) / 2 + x, (fit_h - draw_h) / 2 + y,
-            gray[(uint64_t(y) * height / draw_h) * width + uint64_t(x) * width / draw_w]);
+        const unsigned sx = uint64_t(x) * width / draw_w, sy = uint64_t(y) * height / draw_h;
+        const unsigned px = (fit_w - draw_w) / 2 + x, py = (fit_h - draw_h) / 2 + y;
+        const bool inside = !area || (sx >= area->x && sx < area->x + area->width && sy >= area->y && sy < area->y + area->height);
+        const unsigned edge_x = std::max(1U, 2 * width / draw_w), edge_y = std::max(1U, 2 * height / draw_h);
+        if (area && inside) {
+            const unsigned cx = bottom_right ? area->x + area->width - 1 - sx : sx - area->x;
+            const unsigned cy = bottom_right ? area->y + area->height - 1 - sy : sy - area->y;
+            const unsigned handle_x = std::max(1U, 10 * width / draw_w), handle_y = std::max(1U, 10 * height / draw_h);
+            if (cx < handle_x && cy < handle_y)
+                Pixel(px, py, cx < edge_x || cy < edge_y || handle_x - cx <= edge_x || handle_y - cy <= edge_y ? 25 : 255);
+            else if (sx - area->x < edge_x || area->x + area->width - sx <= edge_x
+                || sy - area->y < edge_y || area->y + area->height - sy <= edge_y) ColorPixel(px, py, 247, 147, 26);
+            else Pixel(px, py, gray[size_t(sy) * width + sx]);
+        } else Pixel(px, py, gray[size_t(sy) * width + sx] / (inside ? 1 : 3));
+    }
+}
+
+CaptureArea Display::SelectArea(Terminal& terminal, std::span<const uint8_t> gray, unsigned width, unsigned height, CaptureArea area)
+{
+    Require(area.Fits(width, height), "Invalid capture selection");
+    Clear(); terminal.Flush();
+    bool bottom_right = false;
+    while (true) {
+        Preview(gray, width, height, 0, {"Select only the recovery words.",
+            "Arrows: Adjust corner   Tab: Switch corner", "Enter: Read words   Esc: Retake"}, &area, bottom_right);
+        const int key = terminal.Key();
+        if (key == 27 || key == 3) throw Cancelled{};
+        if (key == '\r' || key == '\n') return area;
+        if (key == '\t') { bottom_right = !bottom_right; continue; }
+        const int dx = std::max(2U, (width / 80) & ~1U), dy = std::max(2U, (height / 80) & ~1U);
+        AdjustCaptureCorner(area, key == KEY_LEFT ? -dx : key == KEY_RIGHT ? dx : 0,
+            key == KEY_UP ? -dy : key == KEY_DOWN ? dy : 0, bottom_right, width, height);
     }
 }
 

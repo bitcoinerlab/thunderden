@@ -4,6 +4,7 @@
 #include "isolation.h"
 #include "scan.h"
 #include "qr_commands.h"
+#include "seed_entry.h"
 
 #include <chainparams.h>
 #include <util/strencodings.h>
@@ -105,7 +106,7 @@ int main(int argc, char** argv)
         std::optional<td::ApprovedWallet> loaded_wallet;
         const auto keys = [&]() -> const td::Keys& {
             if (!session) {
-                const auto mnemonic = terminal.Mnemonic();
+                const auto mnemonic = td::ReadRecoveryWords(terminal);
                 while (!session) {
                     SecretInput visibility;
                     const auto passphrase = terminal.Input("Wallet passphrase (optional)", {

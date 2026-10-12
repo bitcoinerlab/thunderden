@@ -1,0 +1,14 @@
+# Model conversion / verification only, never installed in the USB image.
+flatbuffers==25.12.19
+markdown-it-py==4.2.0
+mdurl==0.1.2
+ml_dtypes==0.6.0
+numpy==2.5.3
+onnx==1.20.1
+onnxruntime==1.30.0
+onnxsim==0.4.36
+packaging==26.3
+protobuf==7.36.2
+Pygments==2.21.0
+rich==15.0.0
+typing_extensions==4.16.0

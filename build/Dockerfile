@@ -9,7 +9,7 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl g++ cmake ninja-build pkg-config libboost-dev libssl-dev python3 strace \
-      make meson bzip2 xz-utils libjpeg62-turbo-dev \
+      make meson bzip2 xz-utils libjpeg62-turbo-dev python3-venv python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ARG BITCOIN_VERSION
@@ -30,6 +30,9 @@ RUN curl --fail --location --retry 3 "$BIP39_WORDLIST_URL" -o /opt/bip39-english
 COPY .env /opt/inputs.env
 COPY build/native-deps.sh /work/build/native-deps.sh
 RUN sh /work/build/native-deps.sh
+
+COPY build/ocr-deps.sh build/ocr-models.py build/ocr-requirements.txt build/ocr-opencv.cmake /work/build/
+RUN sh /work/build/ocr-deps.sh
 
 FROM dependencies AS development
 COPY CMakeLists.txt /work/CMakeLists.txt

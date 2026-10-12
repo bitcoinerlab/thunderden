@@ -9,13 +9,16 @@
 
 #include <bit>
 #include <cerrno>
+#include <cstring>
 #include <stdexcept>
+#include <support/cleanse.h>
 
 namespace td {
 namespace {
 static_assert(std::endian::native == std::endian::little);
 // Five uint32s: kind, width, height, progress, payload length.
-constexpr uint32_t PREVIEW = 1, PSBT = 2, REQUEST = 3, FAILURE = 4, WALLET = 5;
+constexpr uint32_t PREVIEW = 1, PSBT = 2, REQUEST = 3, FAILURE = 4, WALLET = 5, SEED = 6, SEED_FRAME = 7;
+constexpr size_t MAX_SEED_PACKET = 8192;
 void Write(std::span<const uint8_t> bytes)
 {
     while (!bytes.empty()) {
@@ -32,19 +35,22 @@ void Send(const std::array<uint32_t, 5>& header, std::span<const uint8_t> bytes)
 }
 }
 
-std::string ScannerExecutable()
+std::string ScannerExecutable(std::string_view program)
 {
     std::array<char, 4096> path;
     const auto size = readlink("/proc/self/exe", path.data(), path.size());
     Require(size > 0 && size < ssize_t(path.size()), "Cannot locate scanner executable");
     const std::string executable(path.data(), size);
-    return executable.substr(0, executable.rfind('/') + 1) + "thunderden-scanner";
+    return executable.substr(0, executable.rfind('/') + 1) + std::string(program);
 }
 
-ScanProcess::ScanProcess(const std::string& executable)
+ScanProcess::ScanProcess(const std::string& executable, bool seed_scan) : seed_scan_(seed_scan)
 {
     int pipefd[2];
     Require(pipe2(pipefd, O_CLOEXEC) == 0, "Cannot create scanner pipe");
+    if (seed_scan && pipe2(input_.data(), O_CLOEXEC) != 0) {
+        close(pipefd[0]); close(pipefd[1]); throw std::invalid_argument("Cannot create OCR control pipe");
+    }
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attributes;
     const int action_status = posix_spawn_file_actions_init(&actions);
@@ -54,7 +60,8 @@ ScanProcess::ScanProcess(const std::string& executable)
         && fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK) == 0;
     if (configured) {
         configured = posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO) == 0
-            && posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0) == 0
+            && (seed_scan ? posix_spawn_file_actions_adddup2(&actions, input_[0], STDIN_FILENO)
+                : posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)) == 0
             && posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0) == 0
             && posix_spawn_file_actions_addclosefrom_np(&actions, 3) == 0
             && posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSID) == 0;
@@ -65,17 +72,43 @@ ScanProcess::ScanProcess(const std::string& executable)
     if (!action_status) posix_spawn_file_actions_destroy(&actions);
     if (!attr_status) posix_spawnattr_destroy(&attributes);
     close(pipefd[1]);
-    if (status != 0) { close(pipefd[0]); throw std::invalid_argument("Cannot start scanner"); }
+    if (status != 0) {
+        close(pipefd[0]); for (auto fd : input_) if (fd >= 0) close(fd);
+        throw std::invalid_argument("Cannot start scanner");
+    }
     fd_ = pipefd[0];
+    if (seed_scan) deadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(60);
 }
 
 ScanProcess::~ScanProcess()
 {
     close(fd_);
+    for (auto fd : input_) if (fd >= 0) close(fd);
+    if (seed_scan_) memory_cleanse(payload_.data(), payload_.size());
     // Reap before returning to review. A compromised/hung worker cannot retain
     // devices or continue running behind an approval screen.
     kill(child_, SIGKILL);
     while (waitpid(child_, nullptr, 0) < 0 && errno == EINTR) {}
+}
+
+void ScanProcess::CaptureSeed()
+{
+    Require(seed_scan_ && !seed_captured_ && kill(child_, SIGUSR1) == 0, "Cannot capture recovery words");
+    seed_captured_ = true;
+    deadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+}
+
+void ScanProcess::ReadSeedArea(const CaptureArea& area)
+{
+    Require(seed_scan_ && frame_seen_ && !area_sent_ && area.Fits(frame_width_, frame_height_), "Invalid OCR selection");
+    // Keep our read end until this one PIPE_BUF-sized write finishes. A worker
+    // exit cannot deliver SIGPIPE to the signer, and the empty pipe cannot fill.
+    ssize_t written;
+    do { written = write(input_[1], &area, sizeof(area)); } while (written < 0 && errno == EINTR);
+    Require(written == sizeof(area), "Cannot send OCR selection");
+    for (auto& fd : input_) { close(fd); fd = -1; }
+    area_sent_ = true;
+    deadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(60);
 }
 
 bool ScanProcess::Read(std::span<uint8_t> bytes, size_t& received)
@@ -90,7 +123,7 @@ bool ScanProcess::Read(std::span<uint8_t> bytes, size_t& received)
 std::optional<ScanUpdate> ScanProcess::Poll()
 {
     Require(!complete_, "Scan already complete");
-    Require(std::chrono::steady_clock::now() < deadline_, preview_seen_
+    Require(std::chrono::steady_clock::now() < deadline_, seed_scan_ ? "Camera/OCR timed out; retry or enter manually" : preview_seen_
         ? "Camera stopped producing frames for 10 seconds; retry the scan"
         : "Camera startup timed out after 10 seconds; retry the scan");
     pollfd descriptor{fd_, POLLIN, 0};
@@ -110,15 +143,20 @@ std::optional<ScanUpdate> ScanProcess::Poll()
             case ScanFailure::Capture: throw std::invalid_argument("Camera frame capture failed; retry the scan");
             case ScanFailure::Decode: throw std::invalid_argument("QR image decoding failed");
             case ScanFailure::Request: throw std::invalid_argument("Invalid or unsupported UR v2 request");
+            case ScanFailure::OCR: throw std::invalid_argument("Could not read the sheet. Try another capture or enter manually.");
             }
             throw std::invalid_argument("Invalid scanner failure code");
         }
         if (kind == PREVIEW) {
             Require(width > 0 && width <= 1920 && height > 0 && height <= 1080
-                && size == width * height && progress <= 100, "Invalid scanner preview");
+                && size == width * height && progress <= (seed_scan_ ? 0U : 100U) && !frame_seen_, "Invalid scanner preview");
+        } else if (kind == SEED_FRAME) {
+            Require(seed_scan_ && seed_captured_ && !frame_seen_ && width && width <= 1920 && height && height <= 1080
+                && progress == 0 && size == sizeof(CaptureArea) + width * height, "Invalid captured OCR frame");
         } else {
-            Require((kind == PSBT || kind == REQUEST || kind == WALLET) && width == 0 && height == 0 && progress == 0
-                && size > 0 && size <= (kind == WALLET ? MAX_WALLET_SETUP : MAX_UR_MESSAGE), "Invalid scanner result");
+            Require((seed_scan_ ? kind == SEED && area_sent_ : kind == PSBT || kind == REQUEST || kind == WALLET)
+                && width == 0 && height == 0 && progress == 0 && size > 0
+                && size <= (kind == SEED ? MAX_SEED_PACKET : kind == WALLET ? MAX_WALLET_SETUP : MAX_UR_MESSAGE), "Invalid scanner result");
         }
         payload_.resize(size);
         checked_ = true;
@@ -126,9 +164,22 @@ std::optional<ScanUpdate> ScanProcess::Poll()
     if (!Read(payload_, payload_bytes_)) return {};
     ScanUpdate update;
     if (kind == PREVIEW) {
-        update = {width, height, progress, std::move(payload_), {}};
+        update = {width, height, progress, std::move(payload_), {}, {}};
         preview_seen_ = true;
-        deadline_ = std::chrono::steady_clock::now() + SCAN_FRAME_TIMEOUT;
+        if (!seed_captured_) deadline_ = std::chrono::steady_clock::now() + (seed_scan_ ? std::chrono::seconds(60) : SCAN_FRAME_TIMEOUT);
+    } else if (kind == SEED_FRAME) {
+        CaptureArea area;
+        std::memcpy(&area, payload_.data(), sizeof(area));
+        Require(area.Fits(width, height), "Invalid initial OCR area");
+        payload_.erase(payload_.begin(), payload_.begin() + sizeof(area));
+        update = {width, height, 0, std::move(payload_), {}, {}, area};
+        frame_seen_ = true; frame_width_ = width; frame_height_ = height;
+        deadline_ = std::chrono::steady_clock::time_point::max(); // Local area selection controls the next step.
+    } else if (kind == SEED) {
+        update.seed.emplace(payload_.begin(), payload_.end());
+        memory_cleanse(payload_.data(), payload_.size());
+        payload_.clear();
+        complete_ = true;
     } else {
         update.message = QRMessage{kind == PSBT ? "crypto-psbt" : kind == WALLET ? "crypto-output" : "bytes", std::move(payload_)};
         complete_ = true;
@@ -148,6 +199,36 @@ void SendScanResult(const QRMessage& message)
     Require(message.type == "crypto-psbt" || message.type == "bytes" || message.type == "crypto-output", "Unsupported scanner result");
     const auto kind = message.type == "crypto-psbt" ? PSBT : message.type == "crypto-output" ? WALLET : REQUEST;
     Send({kind, 0, 0, 0, static_cast<uint32_t>(message.cbor.size())}, message.cbor);
+}
+
+void SendSeedScanResult(std::span<const uint8_t> bytes)
+{
+    Require(!bytes.empty() && bytes.size() <= MAX_SEED_PACKET, "OCR result too large");
+    Send({SEED, 0, 0, 0, static_cast<uint32_t>(bytes.size())}, bytes);
+}
+
+void SendSeedFrame(std::span<const uint8_t> gray, unsigned width, unsigned height, const CaptureArea& area)
+{
+    Require(width && width <= 1920 && height && height <= 1080 && gray.size() == size_t(width) * height
+        && area.Fits(width, height), "Invalid captured OCR frame");
+    const std::array<uint32_t, 5> header{SEED_FRAME, width, height, 0, uint32_t(sizeof(area) + gray.size())};
+    Write({reinterpret_cast<const uint8_t*>(header.data()), sizeof(header)});
+    Write({reinterpret_cast<const uint8_t*>(&area), sizeof(area)});
+    Write(gray);
+}
+
+CaptureArea ReceiveSeedArea(unsigned width, unsigned height)
+{
+    CaptureArea area;
+    auto* bytes = reinterpret_cast<uint8_t*>(&area);
+    size_t received = 0;
+    while (received < sizeof(area)) {
+        const auto n = read(STDIN_FILENO, bytes + received, sizeof(area) - received);
+        if (n < 0 && errno == EINTR) continue;
+        Require(n > 0, "OCR selection pipe closed"); received += n;
+    }
+    Require(area.Fits(width, height), "Invalid OCR selection");
+    return area;
 }
 
 void SendScanFailure(ScanFailure failure) noexcept

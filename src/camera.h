@@ -17,7 +17,7 @@ class Camera {
     uint32_t format_{};
     std::vector<uint8_t> frame_, gray_;
 public:
-    Camera();
+    Camera(unsigned preferred_width = 640, unsigned preferred_height = 480);
     ~Camera();
     Camera(const Camera&) = delete;
     Camera& operator=(const Camera&) = delete;

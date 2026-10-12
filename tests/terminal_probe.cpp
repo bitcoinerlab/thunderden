@@ -1,5 +1,6 @@
 #include "terminal.h"
 #include "multisig_fixture.h"
+#include "seed_entry.h"
 #include <util/strencodings.h>
 #include <unistd.h>
 #include <cstdio>
@@ -9,6 +10,42 @@ int main(int argc, char** argv)
 {
     try {
         td::Terminal terminal(dup(STDIN_FILENO));
+        if (argc == 2 && std::string_view(argv[1]) == "ocr-method") {
+            const auto result = td::ReadRecoveryWords(terminal);
+            std::puts(HexStr(result).c_str());
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]).starts_with("ocr-")) {
+            const std::string mode(argv[1]);
+            std::vector<td::OCRToken> tokens;
+            const unsigned count = mode == "ocr-short" ? 11 : mode == "ocr-extra" ? 13 : mode == "ocr-full" ? 24
+                : mode == "ocr-header" ? 30 : mode == "ocr-one" ? 1 : 12;
+            for (unsigned i = 0; i < count; ++i) {
+                const std::array<const char*, 6> heading{"MY", "RECOVERY", "WORDS", "KEEP", "THIS", "SAFE"};
+                const std::string word = mode == "ocr-header" && i < heading.size() ? heading[i]
+                    : i + 1 == count ? (mode == "ocr-edit" ? "abandon" : count >= 24 ? "art" : "about") : "abandon";
+                tokens.push_back({10, i * 30, 100, 25, i, td::SecretBytes(word.begin(), word.end())});
+            }
+            if (mode == "ocr-missing") tokens.back().text.clear();
+            if (mode == "ocr-weak") {
+                tokens.back().text = td::SecretBytes{'a','b','o','v','t'};
+                tokens.back().candidates = {td::SecretBytes{'a','b','o','u','t'}, td::SecretBytes{'a','b','o','v','e'}};
+            }
+            auto draft = td::ReadSeedTokens(tokens);
+            if (mode == "ocr-weak") draft.number_warning = draft.checksum_suggested = true;
+            if (mode == "ocr-suggestions" || mode == "ocr-picker-middle") {
+                auto& word = mode == "ocr-suggestions" ? draft.words.back() : draft.words[3];
+                word.uncertain = true;
+                word.alternatives.clear();
+                for (const auto value : {"ability", "absent", "carbon", "winter", "about"})
+                    word.alternatives.emplace_back(value, value + std::char_traits<char>::length(value));
+                word.value = word.alternatives.front();
+            }
+            auto result = td::ReviewSeedWords(terminal, draft);
+            if (result) { td::ValidateMnemonic(*result); std::puts(HexStr(*result).c_str()); }
+            else std::puts("RECAPTURE");
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]).starts_with("workflow-")) {
             const std::string mode = argv[1];
             ECC_Context context;

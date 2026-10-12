@@ -1,0 +1,16 @@
+Experimental seed OCR uses the following components:
+
+OpenCV 4.13.0, core/imgproc/dnn only (Apache-2.0), built from pinned source.
+https://github.com/opencv/opencv/tree/4.13.0
+Its bundled Protobuf implementation is covered by Protobuf-LICENSE.
+
+PP-OCRv5 mobile detection and English recognition models, distributed by
+RapidAI/RapidOCR v3.9.2 (Apache-2.0). See Models-LICENSE and model/source hashes
+in Thunder Den's .env and docs/OCR.md.
+https://github.com/RapidAI/RapidOCR/tree/v3.9.2
+https://github.com/PaddlePaddle/PaddleOCR
+
+The detector weights are unchanged. Thunder Den converts the recognizer to a
+fixed 1x3x48x640 input shape and simplifies its graph at build time, without
+training or fine-tuning. The derived model and character dictionary are hash-pinned.
+Python, ONNX Runtime and the conversion tools are build-only dependencies.

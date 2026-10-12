@@ -65,6 +65,12 @@ Bitcoin key derivation and signing remain Core operations. BBQR is not implement
 
 ## Development
 
+The `feature/seed-ocr` experiment adds a separate native OCR executable with a
+source-built OpenCV 4.13.0 core/imgproc/dnn subset and pinned PP-OCRv5 model files.
+The recognizer's graph is fixed/simplified at build time; model-conversion Python
+packages and ONNX Runtime are not shipped in the image. See [OCR](OCR.md) for
+provenance, bounds, measured costs and the exact scope of verification.
+
 Docker supplies the compiler, CMake, Python test runner, binary inspection tools
 and source downloads. These tools are not installed in the signer image.
 The independent `urtypes` 1.0.1 registry codec is hash-pinned for export-compatibility

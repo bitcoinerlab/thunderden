@@ -7,9 +7,8 @@ recovery words, review transactions on the laptop and exchange data through QR
 codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
-before you use it. Its own signer and scanner code, build scripts, boot settings
-and image checks total only around 4,600 lines. We keep that code clear, with
-few dependencies and a simple build process.
+before you use it. Its own signer, scanners, build scripts and boot settings are
+kept small and inspectable, with few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
 designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key
@@ -18,6 +17,10 @@ derivation, descriptor handling and transaction signing.
 **Status: Under active development. Use at your own risk.** The signer is usable
 with [Sparrow](#use-with-sparrow), [Keeper](#use-with-keeper) and [our Liana fork](#use-with-liana).
 See [implementation status](docs/STATUS.md) for completed checks and remaining work.
+
+**Experimental branch:** `feature/seed-ocr` adds camera-assisted recovery-word
+entry with an editable proposal. See the [camera-entry guide](docs/OCR.md).
+This experiment is not included in the preview 6 download below.
 
 ## Download and boot
 
@@ -73,8 +76,7 @@ for single-signature and sorted-multisig wallets. In Sparrow, choose
 
 Share the public key, create the wallet in Sparrow, then scan its transaction QR
 on Thunder Den. Multisig setup can be approved directly from a complete PSBT.
-The preview 5 image was user-tested with Sparrow multisig on a real device. See the
-[Sparrow guide](docs/SPARROW.md) for the steps and validation scope.
+See the [Sparrow guide](docs/SPARROW.md) for the steps and validation scope.
 
 ## Use with Keeper
 
@@ -85,9 +87,9 @@ on Keeper's signing screen and scan its registration QR. Review and approve with
 `REGISTER`, then continue to transaction review and `SIGN`.
 
 Preview 6 also lets you scan that registration QR directly from Thunder Den's main
-menu. After approval, **Loaded wallet** appears for the session. The inline flow
-was user-tested on iOS/testnet4. See the [Keeper guide](docs/KEEPER.md) for the steps,
-supported formats and validation scope.
+menu. After approval, **Loaded wallet** appears for the session.
+See the [Keeper guide](docs/KEEPER.md) for the steps, supported formats and
+validation scope.
 
 ## Use with Liana
 

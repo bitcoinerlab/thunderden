@@ -2,6 +2,7 @@
 #include "qr.h"
 #include "terminal.h"
 #include "transport.h"
+#include "capture_area.h"
 
 #include <linux/fb.h>
 
@@ -25,14 +26,17 @@ class Display {
     unsigned font_width_{}, font_height_{};
     void Close();
     void Pixel(unsigned x, unsigned y, uint8_t gray);
-    void Clear();
-    unsigned Caption(const ReviewLines& lines);
+    void ColorPixel(unsigned x, unsigned y, uint8_t red, uint8_t green, uint8_t blue);
 public:
     explicit Display(Terminal& tty);
     ~Display();
     Display(const Display&) = delete;
     Display& operator=(const Display&) = delete;
-    void Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress);
+    void Clear();
+    unsigned Caption(const ReviewLines& lines);
+    void Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress,
+        const ReviewLines& caption = {}, const CaptureArea* area = nullptr, bool bottom_right = false);
+    CaptureArea SelectArea(Terminal& terminal, std::span<const uint8_t> gray, unsigned width, unsigned height, CaptureArea area);
     void QR(const QRImage& image, std::string_view caption);
 };
 }

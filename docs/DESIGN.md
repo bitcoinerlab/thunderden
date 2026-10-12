@@ -31,7 +31,7 @@ are kept separate.
 ## Recovery input
 
 - English BIP39 wordlist; 12, 15, 18, 21 or 24 words with a valid checksum.
-- Choose the word count, then enter one lowercase word at a time. Words start
+- For keyboard entry, choose the word count, then enter one lowercase word at a time. Words start
   hidden and are checked on Enter. Empty Enter does nothing. Up returns to the
   previous word while preserving the current draft; Backspace only edits the
   current word. Drafts must be validated with Enter before moving forwards.
@@ -48,6 +48,14 @@ are kept separate.
 
 ASCII is unchanged by BIP39 NFKD normalization. Non-English mnemonics and
 non-ASCII passphrases are an explicit compatibility limitation.
+
+The experimental `feature/seed-ocr` branch offers camera-assisted entry before
+the manual word-count step. A separate OCR worker ranks the BIP39 vocabulary for
+each recognized word span using CTC probabilities. The signer bounds words,
+candidates and positions, preserves identifiable missing slots, applies a limited
+checksum search, and presents a highlighted, inline-editable draft. Count and checksum must be valid before
+the reviewed phrase reaches passphrase entry. See [OCR](OCR.md) for limits,
+layout ambiguity, dependency costs and the scope of native versus physical tests.
 
 Recovery-word, passphrase and intermediate BIP39 seed buffers are zeroed before
 release after key derivation. The master private key, chain code and wallet-policy
@@ -301,6 +309,9 @@ input text. Escape and Ctrl-C repeats are suppressed across screen transitions
 until there has been a one-second gap or a different key is pressed. This keeps
 a held cancellation key from also cancelling the parent screen. All styling
 comes from the renderer; wallet-provided text is still printable ASCII only.
+Application-owned control hints use orange key labels and four directional arrow
+icons. The terminal counts each icon as one cell; framebuffer captions draw fixed
+arrow bitmaps. Imported review text does not pass through the control formatter.
 Menus, inputs and reviews prepare their body rows using their own layout.
 The renderer draws those rows without rewrapping them or starting another
 interactive screen. Text validation is separate from wrapping.
@@ -398,6 +409,10 @@ The main code boundaries are deliberately small:
 - `transaction` validates one immutable request, finds matching policies and
   produces policy-specific reviews and signatures. It does not depend on the UI.
 - `wallet_qr` translates public wallet formats into and out of those models.
+- `seed_ocr` bounds/interprets OCR tokens; `seed_entry` coordinates capture/review;
+  `seed_editor` provides the persistent terminal word editor.
+  `ocr_engine`, `ocr_ctc` and `ocr_main` keep inference and vocabulary ranking in
+  a separate confined worker.
 - `application` coordinates setup and signing with local approval; `main` owns
   the session and routes user actions. `review` supplies text, and `terminal` /
   `hardware` render it. QR commands reuse the same approval and signing paths.
