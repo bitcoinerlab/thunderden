@@ -21,7 +21,7 @@ reviewer. **Unreviewed** means a project disposition has not yet been recorded.
 | TD-001 | Compact multi-input SegWit signing can conceal a higher real fee | High | [2026-10-12 / F-01](2026-10-12-gpt-6-astra-a5c2f5c.md#f-01--compact-multi-input-segwit-fee-attack-remains-possible) | Unreviewed | Report cites an existing executable attack regression and an intentional compatibility tradeoff. Assess the signing-policy recommendation. |
 | TD-002 | Direct wallet workflows lack general trusted receive-address verification | High | [2026-10-12 / F-02](2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows) | Unreviewed | Report identifies a gap in direct Sparrow/Keeper workflows and distinguishes it from address display through the custom command protocol. |
 | TD-003 | High-index change lacks mandatory recovery-risk disclosure | Medium | [2026-10-12 / F-03](2026-10-12-gpt-6-astra-a5c2f5c.md#f-03--high-index-change-can-make-ordinary-recovery-miss-funds) | Resolved | Fixed in [`f93b234`](https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6). [Decision and verification](#td-003--change-index-disclosure). |
-| TD-004 | Documented Liana/bridge installation follows moving versions | Medium | [2026-10-12 / F-04](2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow) | Unreviewed | Report cites moving fork revisions and an unversioned package command. Review installation reproducibility and tested-version references. |
+| TD-004 | Documented Liana/bridge installation follows moving versions | Medium | [2026-10-12 / F-04](2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow) | Resolved | Fixed in [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e). [Decision and verification](#td-004--pinned-online-installation). |
 | TD-005 | Unsigned boot and laptop/firmware trust can defeat signer protections | High impact, conditional | [2026-10-12 / L-01](2026-10-12-gpt-6-astra-a5c2f5c.md#l-01--unsigned-boot-and-general-purpose-laptop-trust-remain-critical) | Unreviewed | Report describes an architectural limitation; no physical exploit was attempted. Assess the supported trust boundary and proposed improvements. |
 
 For each disposition, record the rationale and supporting evidence here. A
@@ -67,3 +67,33 @@ checks native behavior, not physical-device recovery or a new release image.
 (`fix: disclose high-index change recovery risk`). TD-003 is resolved at this
 source revision; this is not a claim that the fix is in a published USB image.
 The original audit report remains unchanged.
+
+## TD-004 — Pinned online installation
+
+**Decision (2026-10-12):** preserve the integration revisions already recorded in
+the project status. The [installation guide](../docs/LIANA.md) specifies exact
+Liana and async-hwi commits, Rust 1.88.0, checked-in Cargo lockfiles with `--locked`,
+and QR bridge `0.1.2`. Both the README and command-line walkthrough now use the
+versioned bridge command. The guide records its release-source commit and archive
+SHA-256, provides archive verification before execution, and requires a new
+verification record when upgrading the pins.
+
+**Verification:** confirmed all three source commits through GitHub. Liana's
+manifest and lockfile both select the documented async-hwi commit, its toolchain
+file selects Rust 1.88.0, and the named GUI/CLI build targets and CLI lockfile exist.
+Downloaded the published bridge using the guide's versioned `npm pack
+--ignore-scripts` command: the archive matched the guide's SHA-256
+and npm's SHA-512 integrity value; npm's `gitHead` matched the recorded source
+commit. The packaged source files matched that commit, the bundled frontend was
+present, and the package declared no runtime npm dependencies. A temporary run
+with Node.js 26.11.1, `--no-open --port 0`, successfully served the browser page.
+Local documentation links, section anchors and shell-snippet syntax also passed
+validation.
+
+These are source/pin and published-package checks, not a new Rust build or a
+physical wallet/signing validation. The existing integration test scope remains
+in [STATUS.md](../docs/STATUS.md#liana-integration).
+
+**Fix commit:** [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e)
+(`docs: pin Liana integration installation versions`). TD-004 is resolved at this
+documentation revision. The original audit is unchanged.
