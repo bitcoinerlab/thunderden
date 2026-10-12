@@ -37,3 +37,12 @@ still be too costly to include.
 Documentation and comments should explain the current design to a new reader,
 including the reason for non-obvious choices. Preserve a small, inspectable system
 as the project grows.
+
+## Audit reports
+
+Store reviews in [`audits/`](audits/README.md), with the reviewed commit, reviewer,
+scope and evidence. Follow the report naming and submission conventions there.
+Preserve each report's original assessment and record project decisions and fix
+verification in [`audits/FINDINGS.md`](audits/FINDINGS.md). Validate findings before
+changing behavior; proposed remedies must justify their complexity like any other
+contribution.

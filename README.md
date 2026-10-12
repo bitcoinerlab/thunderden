@@ -142,6 +142,7 @@ To build your own USB image, follow the [build and test instructions](docs/BUILD
 - [Thunder Den QR protocol](docs/PROTOCOL.md)
 - [Dependencies](docs/DEPENDENCIES.md)
 - [Implementation status](docs/STATUS.md)
+- [Audit reports and finding status](audits/README.md)
 
 Tests and development tools run on the build computer. They are not part of the
 production image. Wallet applications can use the standard PSBT QR format or
