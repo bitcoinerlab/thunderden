@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <functional>
 #include <stdexcept>
+#include <tuple>
 
 static size_t signature_calls;
 extern "C" int __real_secp256k1_ecdsa_sign(const secp256k1_context*, secp256k1_ecdsa_signature*,
@@ -356,6 +357,18 @@ void Adversarial(const td::Keys& alice, const td::Keys& bob, const CScript& dest
         && std::count(multiple_summary.begin(), multiple_summary.end(), multiple_review.Review().outputs[0].address) == 2,
         "Multiple payments to the same address were merged or omitted");
     Check(Contains(multiple_summary, "Verified change: " + td::Amount(39999000) + " (2 outputs)"), "Change aggregation lost an output");
+    for (const auto& [number, amount, index] : {std::tuple{1U, 19999000, 6U}, {2U, 20000000, 7U}}) {
+        const td::ReviewLines entry{"Change output " + std::to_string(number), "Amount: " + td::Amount(amount),
+            "Change address index: " + std::to_string(index)};
+        Check(std::search(multiple_summary.begin(), multiple_summary.end(), entry.begin(), entry.end()) != multiple_summary.end(),
+            "A change amount was detached from its address index");
+    }
+    multiple.tx->vout[3].scriptPubKey = wallet.Make().Script(1, 1000000000);
+    multiple.outputs[3] = PSBTOutput{};
+    UpdatePSBTOutput(wallet.Make().PublicProvider({1, 1000000000}), multiple, 3);
+    const auto mixed_change = prepare(multiple);
+    Check(td::HasHighChangeIndex(mixed_change.Review()) && Contains(td::TransactionLines(mixed_change.Review()),
+        mixed_change.Review().outputs[3].address), "A normal change output concealed another high-index output");
 
     auto timing = psbt;
     timing.tx->nLockTime = 1700000000;
@@ -461,6 +474,71 @@ void ExternalInputs(const td::Keys& alice, const td::Keys& bob, const CScript& d
     Check(compact.Review().fee_unverified, "External compact input lost the fee warning");
     Check(Contains(td::TransactionLines(compact.Review()), "Unverified fee: " + td::Amount(1000)), "Unverified fee labeled as exact");
     std::puts("PASS: external input disclosure, partial signing and authenticated fee accounting");
+}
+
+void ChangeIndices(const td::Keys& alice, const td::Keys& bob, const CScript& destination)
+{
+    const std::vector<Wallet> wallets{
+        {"", "wpkh(@0/**)", {Key(alice, 84)}},
+        {"", "tr(@0/**)", {Key(alice, 86)}},
+        {"Recovery test", "wsh(sortedmulti(2,@0/**,@1/**))", {Key(alice, 48), Key(bob, 48)}}};
+    for (const auto& wallet : wallets) {
+        const auto policy = wallet.Make();
+        const auto finish = [&](std::optional<td::SigningResult> result) {
+            Check(result.has_value(), "Approved recovery fixture did not sign");
+            if (wallet.keys.size() == 2) {
+                td::ReviewedTransaction other(policy, bob, wallet.Tag(bob), result->psbt);
+                result = other.Sign(bob, [](const auto&) { return true; });
+            }
+            Check(result && result->complete, "Recovery fixture did not complete");
+            Verify(*result);
+        };
+        for (uint32_t index : {1000000000U, 0x7fffffffU, 6U, 50000U, 50001U}) {
+            auto psbt = fixture::Spend({&policy});
+            psbt.tx->vout[0].scriptPubKey = policy.Script(1, index);
+            psbt.outputs[0] = PSBTOutput{};
+            UpdatePSBTOutput(policy.PublicProvider({1, index}), psbt, 0);
+            const auto calls = signature_calls;
+            td::ReviewedTransaction reviewed(policy, alice, wallet.Tag(alice), Serialize(psbt));
+            const auto& facts = reviewed.Review();
+            Check(facts.outputs[0].position == td::Position{1, index} && !facts.fee_unverified && facts.fee == 1000,
+                "High-index change was not independently verified");
+            const auto summary = td::TransactionLines(facts);
+            Check(Contains(summary, "Change address index: " + std::to_string(index)), "Mandatory review hid the change index");
+            Check(Contains(summary, "Change output 1") && Contains(summary, "Amount: " + td::Amount(facts.outputs[0].amount)),
+                "Mandatory change review lost its amount");
+            const bool high = index > 50000;
+            Check(td::HasHighChangeIndex(facts) == high && Contains(summary, "WARNING: Unusually high change index.") == high
+                && Contains(summary, "Wallet recovery may not find this change automatically.") == high,
+                "Recovery warning has the wrong boundary");
+            Check(Contains(summary, facts.outputs[0].address) == high, "High-index address was hidden or normal change review expanded");
+            Check(!reviewed.Sign(alice, [](const auto&) { return false; }) && signature_calls == calls,
+                "Declining high-index change produced a signature");
+            finish(reviewed.Sign(alice, [](const auto&) { return true; }));
+        }
+        // Recover already-funded high-index receiving AND change addresses.
+        for (unsigned branch : {0, 1}) for (uint32_t index : {1000000000U, 0x7fffffffU}) {
+            auto recovery = Fixture(wallet, destination);
+            const auto previous = Funding(policy.Script(branch, index), COIN);
+            recovery.tx->vin[0].prevout = COutPoint{previous->GetHash(), 0};
+            recovery.inputs[0] = PSBTInput{};
+            recovery.inputs[0].non_witness_utxo = previous;
+            FillInput(recovery, 0, policy, {branch, index});
+            td::ReviewedTransaction reviewed(policy, alice, wallet.Tag(alice), Serialize(recovery));
+            Check(reviewed.Review().inputs[0].position == td::Position{branch, index}, "High-index input could not be located");
+            Check(!td::HasHighChangeIndex(reviewed.Review()) && !Contains(td::TransactionLines(reviewed.Review()), "WARNING: Unusually high change index."),
+                "High-index input triggered an output recovery warning");
+            finish(reviewed.Sign(alice, [](const auto&) { return true; }));
+        }
+        auto receive = fixture::Spend({&policy});
+        receive.tx->vout[0].scriptPubKey = policy.Script(0, 1000000000);
+        receive.outputs[0] = PSBTOutput{};
+        UpdatePSBTOutput(policy.PublicProvider({0, 1000000000}), receive, 0);
+        td::ReviewedTransaction reviewed(policy, alice, wallet.Tag(alice), Serialize(receive));
+        Check(!td::HasHighChangeIndex(reviewed.Review()) && Contains(td::TransactionLines(reviewed.Review()), reviewed.Review().outputs[0].address),
+            "A receiving output was treated as high-index change");
+    }
+    std::puts("PASS: mandatory change indices, warning boundary, cancellation and high-index input recovery across BIP84/BIP86/multisig");
 }
 
 void Detection(const td::Keys& alice, const td::Keys& bob)
@@ -682,6 +760,7 @@ int main()
         const auto destination = recipient.Make().Script(0, 0);
         ScriptFamilies(alice, bob, destination);
         Adversarial(alice, bob, destination);
+        ChangeIndices(alice, bob, destination);
         ExternalInputs(alice, bob, destination);
         Detection(alice, bob);
         CompactFees(alice, bob);

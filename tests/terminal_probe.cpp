@@ -49,7 +49,12 @@ int main(int argc, char** argv)
             auto multisig = td::ImportMultisig(setup);
             auto psbt = mode.starts_with("workflow-inline") || mode.starts_with("workflow-preload") || mode == "workflow-inferred"
                 ? fixture::Spend({&multisig}, true)
-                : fixture::Spend({&first, mode == "workflow-many" ? &second : &first}, mode == "workflow-fee");
+                : fixture::Spend({&first, mode == "workflow-many" ? &second : &first}, mode == "workflow-fee" || mode == "workflow-change-fee");
+            if (mode.starts_with("workflow-change")) {
+                psbt.tx->vout[0].scriptPubKey = first.Script(1, 1000000000);
+                psbt.outputs[0] = PSBTOutput{};
+                UpdatePSBTOutput(first.PublicProvider({1, 1000000000}), psbt, 0);
+            }
             if (mode == "workflow-inferred") fixture::AccountKeys(psbt, {&multisig});
             auto foreign = td::DefaultPolicy(bob, 84, 0);
             if (mode == "workflow-unmatched") psbt = fixture::Spend({&foreign});
@@ -58,7 +63,10 @@ int main(int argc, char** argv)
             std::optional<td::ReviewScreen> completed;
             unsigned scans = 0;
             auto response = td::SignRequest(terminal, alice, loaded, request, [&] { ++scans; return setup; },
-                [&](const auto& review) { return td::ApproveTransaction(terminal, review, completed); });
+                [&](const auto& review) {
+                    if (mode.starts_with("workflow-change")) std::printf("CHANGE %s\n", review.outputs[0].address.c_str());
+                    return td::ApproveTransaction(terminal, review, completed);
+                });
             td::Require(scans <= 1, "Setup caused an unnecessary transaction rescan");
             if (mode == "workflow-inferred" || mode == "workflow-unmatched" || mode.starts_with("workflow-preload"))
                 td::Require(scans == 0, "Request made an unnecessary setup scan");

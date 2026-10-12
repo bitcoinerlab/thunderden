@@ -36,10 +36,16 @@ bool LoadWallet(Terminal& terminal, const Keys& keys, std::optional<ApprovedWall
 bool ApproveTransaction(Terminal& terminal, const TransactionReview& review, std::optional<ReviewScreen>& completed)
 {
     if (review.fee_unverified && !terminal.Confirm("Fee not fully verified", FeeWarning(), "continue to review", {}, true)) return false;
-    completed = ReviewScreen{review.fee_unverified ? "Signed - fee not fully verified" : "Signed transaction - review",
-        TransactionLines(review), TransactionDetails(review), review.fee_unverified};
-    return terminal.Approve(review.fee_unverified ? "Review - fee not fully verified" : "Review transaction",
-        completed->summary, "SIGN", completed->details, review.fee_unverified);
+    const bool high_change = HasHighChangeIndex(review), warning = review.fee_unverified || high_change;
+    const auto note = !high_change ? "" : review.fee_unverified
+        ? "The fee is not fully verified and change may be missed during recovery. Confirm only if you accept both risks."
+        : "Wallet recovery may miss this change. Confirm only if you can recover it.";
+    completed = ReviewScreen{review.fee_unverified ? "Signed - fee not fully verified"
+        : high_change ? "Signed - high change index" : "Signed transaction - review",
+        TransactionLines(review), TransactionDetails(review), warning};
+    return terminal.Approve(review.fee_unverified ? "Review - fee not fully verified"
+        : high_change ? "Review - high change index" : "Review transaction",
+        completed->summary, "SIGN", completed->details, warning, note);
 }
 
 std::optional<QRMessage> SignRequest(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded,

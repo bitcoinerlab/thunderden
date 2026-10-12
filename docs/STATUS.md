@@ -306,7 +306,10 @@ native ARM64 test execution remains unverified.
   descriptor in Details. Registration keeps spending rules and cosigner keys in
   the required review; switching views preserves required pages and typed consent.
 - Signing summaries retain full non-change destinations and amounts, fees,
-  verified change totals, qualified mixed-input accounting and active lock conditions.
+  each verified change amount/index, change totals, qualified mixed-input accounting
+  and active lock conditions. Change indices above 50,000 also expose the full
+  address and a recovery warning in mandatory review. Native cases cover the
+  threshold, cancellation and spending existing high-index inputs.
   Signing/registration Details show technical fields without repeating the summary.
 - Completed QR results can reopen their text review and redisplay identical reply
   payloads without repeating approval. Enter leaves the QR visible; Esc finishes

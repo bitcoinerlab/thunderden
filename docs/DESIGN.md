@@ -242,11 +242,18 @@ an unfinished external input or unsatisfied script prevents dummy finalization.
 
 The mandatory signing review shows wallet/network, every non-change destination's
 full address or script and amount, the fee with its assurance, a fee-rate estimate when
-available, and verified change totals/counts. Receive/self-payments remain visible.
-Only independently verified change addresses move to Details. With unrecognized
+available, each verified change output's amount and address index, and change
+totals/counts. Receive/self-payments remain visible. Change indices above 50,000
+also show the full address or script and warn that wallet recovery may not find
+the change automatically. The red warning heading persists in Details and
+completed review; the signing confirmation also states the recovery risk. This
+threshold is a disclosure heuristic, not a derivation limit or a guarantee that
+lower indices will be discovered: a stateless signer does not know the wallet's
+last-used index or gap limit. Spending existing high-index inputs remains supported.
+Ordinary verified change addresses remain in Details. With unrecognized
 inputs, wallet accounting is explicitly limited to verified inputs/outputs rather
 than claiming an exact wallet decrease. Active absolute and relative lock conditions
-are disclosed without claiming chain maturity. Input records, individual change
+are disclosed without claiming chain maturity. Input records, full change
 addresses, raw transaction fields and wallet-policy identity remain in Details.
 
 `Sign` invokes a local approval callback with these facts. Rejection returns no

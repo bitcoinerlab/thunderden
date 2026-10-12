@@ -92,6 +92,13 @@ ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
     return lines;
 }
 
+bool HasHighChangeIndex(const TransactionReview& review)
+{
+    return std::any_of(review.outputs.begin(), review.outputs.end(), [](const auto& output) {
+        return output.position && output.position->branch == 1 && output.position->index > CHANGE_INDEX_WARNING_THRESHOLD;
+    });
+}
+
 ReviewLines TransactionLines(const TransactionReview& review)
 {
     ReviewLines lines{
@@ -108,6 +115,14 @@ ReviewLines TransactionLines(const TransactionReview& review)
         if (output.position && output.position->branch == 1) {
             change += output.amount;
             ++change_count;
+            lines.insert(lines.end(), {"", "Change output " + std::to_string(change_count), "Amount: " + Amount(output.amount),
+                "Change address index: " + std::to_string(output.position->index)});
+            if (output.position->index > CHANGE_INDEX_WARNING_THRESHOLD) {
+                lines.insert(lines.end(), {"WARNING: Unusually high change index.",
+                    "Wallet recovery may not find this change automatically.",
+                    output.address.empty() ? "Change script (hex):" : "Change address:",
+                    output.address.empty() ? HexStr(output.script) : output.address});
+            }
             continue;
         }
         lines.push_back("");
