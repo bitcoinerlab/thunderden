@@ -63,7 +63,7 @@ QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAppr
             in.End();
             const auto xpub = EncodePublic(keys.PublicAt(path), chain == ChainType::MAIN);
             auto lines = PublicKeyReview(keys, path);
-            lines.insert(lines.begin(), {"Your wallet app is asking for this public key.", ""});
+            lines.insert(lines.begin(), {"Review the public key you're being asked to share.", ""});
             lines.insert(lines.end(), {"", "Extended public key:", xpub});
             if (!Approve(approve.export_key, lines)) status = 1;
             body.Array(2); body.Array(path.size());
@@ -87,7 +87,7 @@ QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAppr
                     Require(ExtractDestination(policy.Script(branch, index), destination), "Invalid address");
                     const auto address = EncodeDestination(destination);
                     auto lines = AddressReview(policy, keys, {static_cast<unsigned>(branch), static_cast<uint32_t>(index)}, address);
-                    lines.insert(lines.begin(), {"Your wallet app is asking you to check this address. Compare the complete address with the one shown in your wallet app.", ""});
+                    lines.insert(lines.begin(), {"Compare this full address with the one shown in your wallet app.", ""});
                     if (!Approve(approve.address, lines, PolicyDetails(policy, keys))) status = 1;
                     body.Array(1); body.Text(address);
                 } else {

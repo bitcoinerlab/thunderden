@@ -81,7 +81,7 @@ To sign a transaction:
    encoding if Sparrow offers a choice.
 3. On Thunder Den, choose **Scan a QR code** and scan the transaction.
 4. For a new multisig wallet, Thunder Den normally reconstructs the setup from
-   the PSBT and shows **Check this multisig wallet**. Review the threshold,
+   the PSBT and shows **Review wallet setup**. Review the threshold,
    cosigner keys and paths. Compare other keys with their devices or a trusted
    wallet backup, then type `REGISTER` to approve the setup. **This does not sign
    the transaction yet.** No separate setup scan is needed when the PSBT includes

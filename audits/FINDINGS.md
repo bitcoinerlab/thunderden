@@ -19,7 +19,7 @@ reviewer. **Unreviewed** means a project disposition has not yet been recorded.
 | ID | Finding | Report priority | Source | Status | Decision / evidence |
 | --- | --- | --- | --- | --- | --- |
 | TD-001 | Compact multi-input SegWit signing can conceal a higher real fee | High | [2026-10-12 / F-01](2026-10-12-gpt-6-astra-a5c2f5c.md#f-01--compact-multi-input-segwit-fee-attack-remains-possible) | Unreviewed | Report cites an existing executable attack regression and an intentional compatibility tradeoff. Assess the signing-policy recommendation. |
-| TD-002 | Direct wallet workflows lack general trusted receive-address verification | High | [2026-10-12 / F-02](2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows) | Open | Address-QR verification implemented and tested in the working tree. [Decision and verification](#td-002--direct-address-verification); fix commit and physical trial pending. |
+| TD-002 | Direct wallet workflows lack general trusted receive-address verification | High | [2026-10-12 / F-02](2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows) | Open | Address-QR verification implemented in [`801b8c7`](https://github.com/bitcoinerlab/thunderden/commit/801b8c7bf35b66a5de73e01576a5334c81f1a616). [Decision and verification](#td-002--direct-address-verification); physical-camera verification pending. |
 | TD-003 | High-index change lacks mandatory recovery-risk disclosure | Medium | [2026-10-12 / F-03](2026-10-12-gpt-6-astra-a5c2f5c.md#f-03--high-index-change-can-make-ordinary-recovery-miss-funds) | Resolved | Fixed in [`f93b234`](https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6). [Decision and verification](#td-003--change-index-disclosure). |
 | TD-004 | Documented Liana/bridge installation follows moving versions | Medium | [2026-10-12 / F-04](2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow) | Resolved | Fixed in [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e). [Decision and verification](#td-004--pinned-online-installation). |
 | TD-005 | Unsigned boot and laptop/firmware trust can defeat signer protections | High impact, conditional | [2026-10-12 / L-01](2026-10-12-gpt-6-astra-a5c2f5c.md#l-01--unsigned-boot-and-general-purpose-laptop-trust-remain-critical) | Unreviewed | Report describes an architectural limitation; no physical exploit was attempted. Assess the supported trust boundary and proposed improvements. |
@@ -131,6 +131,7 @@ no OCR executable, models or OpenCV. The public fixture producer
 `address-check-tests --fixtures` supplies 12-word regtest examples and two multisig
 setup QRs for a physical trial; every generated QR matrix is decoded before export.
 
-Implementation and test evidence are recorded; the fix commit and physical-camera
-trial are pending. Keep this entry Open until the fix commit is recorded. The
-original report is unchanged.
+**Implementation checkpoint (2026-10-13):** [`801b8c7`](https://github.com/bitcoinerlab/thunderden/commit/801b8c7bf35b66a5de73e01576a5334c81f1a616)
+(`feat: verify scanned addresses against wallet accounts`) records the implementation
+and automated verification above. Physical-camera verification remains pending;
+this entry remains Open. The original report is unchanged.

@@ -397,7 +397,7 @@ for mode in ("workflow-inline", "workflow-inline-text"):
     for accept_setup, sign in ((False, False), (True, False), (True, True)):
         p = Probe(mode, rows=40)
         p.enter(b"Enter: scan wallet setup", b"\r")
-        p.wait(b"Check this multisig wallet")
+        p.wait(b"Review wallet setup")
         if accept_setup:
             approve_review(p, b"REGISTER")
             p.wait(b"Review transaction")
@@ -412,12 +412,12 @@ for mode in ("workflow-inline", "workflow-inline-text"):
         assert (b"SIGNED" in output) == sign
         assert p.all_text.count(b"Wallet setup needed") == 1
         if accept_setup:
-            assert b"this won't sign the transaction yet" in p.all_text
+            assert b"You'll still review and approve each transaction before signing." in p.all_text
 
 for mode in ("workflow-preload", "workflow-preload-text"):
     for accept_setup in (False, True):
         p = Probe(mode, rows=40)
-        p.wait(b"Check this multisig wallet")
+        p.wait(b"Review wallet setup")
         if accept_setup:
             approve_review(p, b"REGISTER")
             p.wait(b"\x1b[33mLoaded wallet: Native SegWit multisig (2 of 2)")
@@ -432,7 +432,7 @@ for mode in ("workflow-preload", "workflow-preload-text"):
 
 for accept_setup, sign in ((False, False), (True, False), (True, True)):
     p = Probe("workflow-inferred", rows=40)
-    p.wait(b"Its setup was included in the transaction request.")
+    p.wait(b"The scanned transaction includes a multisig wallet setup.")
     if accept_setup:
         approve_review(p, b"REGISTER")
         p.wait(b"Review transaction")
@@ -440,7 +440,7 @@ for accept_setup, sign in ((False, False), (True, False), (True, True)):
             approve_review(p)
         else:
             p.enter(b"Esc: Cancel", b"\x1b")
-        assert b"this won't sign the transaction yet" in p.all_text
+        assert b"You'll still review and approve each transaction before signing." in p.all_text
     else:
         p.enter(b"Esc: Cancel", b"\x1b")
     output, _ = p.finish(0)
@@ -457,7 +457,7 @@ assert b"EMPTY CANCELLED" in output and b"Wallet setup needed" not in p.all_text
 for mode in ("workflow-replace", "workflow-replace-text"):
     for replace in (False, True):
         p = Probe(mode, rows=40)
-        p.wait(b"This will replace the loaded multisig wallet.")
+        p.wait(b"Switch wallet setup")
         if replace:
             approve_review(p, b"REGISTER")
         else:
@@ -467,7 +467,7 @@ for mode in ("workflow-replace", "workflow-replace-text"):
 
 p = Probe("workflow-replace-invalid-text", rows=40)
 output, _ = p.finish(0)
-assert b"KEPT" in output and b"Check this multisig wallet" not in p.all_text
+assert b"KEPT" in output and b"Switch wallet setup" not in p.all_text
 
 for stop in ("warning", "review", "sign"):
     p = Probe("workflow-fee", rows=40)
@@ -545,8 +545,34 @@ for columns in (40, 80):
 print("PASS: high-index change warning, full address, typed approval, cancellation and combined fee/recovery risks on narrow/wide screens")
 
 
+def address_action(p, action, key=b"\r"):
+    # Compact screens page required context before showing a menu/confirmation.
+    while True:
+        p.wait(b"Esc:")
+        last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        if action in last:
+            p.send(key)
+            return
+        assert b"Press Enter" in last, (action, last)
+        p.send(b"\r")
+
+
+def address_number(p, prompt=b"Account number [0]: ", value=b"\r"):
+    while True:
+        p.wait(b"Esc:")
+        if b"Enter: Continue" in p.all_text.rsplit(b"\x1b[2J", 1)[-1]:
+            break
+        p.send(b"\r")
+    p.wait(prompt)
+    p.spaced(prompt.rstrip())
+    if prompt.startswith(b"Account"):
+        assert b"Most wallets use account 0." in b" ".join(p.rows().values()), "Account help disappeared from the input screen"
+        p.spaced(b"Most wallets use account 0.")
+    p.send(value)
+
+
 def finish_address(p):
-    p.wait(b"Address matches this wallet")
+    p.wait(b"Address verified")
     while True:
         p.wait(b"Esc:")
         last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
@@ -556,7 +582,7 @@ def finish_address(p):
     output, _ = p.finish(0)
     address = re.search(rb"EXPECTED (\S+)", output)[1]
     rendered = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", p.all_text)
-    assert address in rendered and b"before sending." in rendered, "Verified address was truncated or comparison instruction missing"
+    assert address in rendered and b"Before sending," in rendered, "Verified address was truncated or comparison instruction missing"
     assert b"CHECK FINISHED" in output and b"Type SIGN" not in p.all_text
     assert b"amount=0.1" not in p.all_text and b"Public%20test" not in p.all_text, "Payment URI text was treated as review data"
 
@@ -564,71 +590,77 @@ def finish_address(p):
 for rows, columns in ((12, 40), (24, 80)):
     for mode, branch in (("address-single", b"Receiving"), ("address-change", b"Change"), ("address-incompatible", b"Receiving")):
         p = Probe(mode, rows=rows, columns=columns)
-        p.enter(b"Account number [0]: ", b"\r")
+        address_number(p)
         finish_address(p)
-        assert branch + b" address - number 7" in p.all_text and b"Choose wallet" not in p.all_text
+        assert branch + b" address number: 7" in p.all_text and b"Which wallet" not in p.all_text
+        assert b"Single-signature" not in p.all_text, "Ordinary address checks exposed an unnecessary wallet-type choice"
 
 p = Probe("address-single")
-p.enter(b"Account number [0]: ", b"abc\r")
+address_number(p, value=b"abc\r")
 p.wait(b"Enter a number from 0 to 100.")
-p.enter(b"Account number [0]: ", b"101\r")
+address_number(p, value=b"101\r")
 p.wait(b"Enter a number from 0 to 100.")
-p.enter(b"Account number [0]: ", b"\r")
+address_number(p)
 finish_address(p)
 
 for mode, action in (("address-account", b"2"), ("address-late", b"1"), ("address-high", b"3")):
     p = Probe(mode, rows=16, columns=40)
-    p.enter(b"Account number [0]: ", b"\r")
-    p.wait(b"No match: 0-999")
-    p.enter(b"Enter/1-3: Select", action)
+    address_number(p)
+    p.wait(b"No match found")
+    address_action(p, b"Enter/1-3: Select", action)
+    assert p.all_text.count(b"0-999") == 1, "Search range was hidden or repeated"
     if mode == "address-account":
-        p.enter(b"Account number [0]: ", b"7\r")
+        address_number(p, value=b"7\r")
     elif mode == "address-high":
-        p.enter(b"Address number [0]: ", b"2147483648\r")
+        address_number(p, b"Address number [0]: ", b"2147483648\r")
         p.wait(b"Enter a number from 0 to 2147483647.")
-        p.enter(b"Address number [0]: ", b"2147483647\r")
+        address_number(p, b"Address number [0]: ", b"2147483647\r")
     finish_address(p)
     assert b"No match in all" not in p.all_text
 
-p = Probe("address-wrong")
-p.enter(b"Account number [0]: ", b"\r")
-p.wait(b"No match: 0-999")
-p.enter(b"Enter/1-3: Select", b"3")
-p.enter(b"Address number [0]: ", b"7\r")
-p.wait(b"No match: 7-7")
-p.enter(b"Esc:", b"\x1b")
-p.finish(2)
-assert b"Address matches this wallet" not in p.all_text and b"Wallet setup needed" not in p.all_text
+for rows, columns in ((12, 40), (24, 80)):
+    p = Probe("address-wrong", rows=rows, columns=columns)
+    address_number(p)
+    p.wait(b"No match found")
+    address_action(p, b"Enter/1-3: Select", b"3")
+    assert p.all_text.count(b"0-999") == 1, "Compact search result lost or duplicated the checked range"
+    address_number(p, b"Address number [0]: ", b"7\r")
+    p.wait(b"No match found")
+    address_action(p, b"Enter/1-3: Select", b"\x1b")
+    p.finish(2)
+    assert b"number 7." in p.all_text and b"7-7" not in p.all_text
+    assert b"Address verified" not in p.all_text and b"Wallet setup needed" not in p.all_text
 
 for mode in ("address-multisig", "address-multisig-change"):
     p = Probe(mode, rows=12, columns=40)
-    p.enter(b"Enter: start checking", b"\r")
+    address_action(p, b"Enter: verify address")
     finish_address(p)
     assert b"Account number [0]" not in p.all_text and b"Type REGISTER" not in p.all_text
-    assert (b"Change" if mode.endswith("change") else b"Receiving") + b" address - number 7" in p.all_text
+    assert (b"Change" if mode.endswith("change") else b"Receiving") + b" address number: 7" in p.all_text
 
-for mode, choice in (("address-ambiguous", b"1"), ("address-ambiguous-single", b"2")):
-    p = Probe(mode, rows=24)
-    p.wait(b"Choose wallet")
-    p.enter(b"Enter/1-2: Select", choice)
-    if choice == b"2":
-        p.enter(b"Account number [0]: ", b"\r")
-    finish_address(p)
+for rows, columns in ((12, 40), (24, 80)):
+    for mode, choice in (("address-ambiguous", b"1"), ("address-ambiguous-single", b"2")):
+        p = Probe(mode, rows=rows, columns=columns)
+        p.wait(b"Which wallet should we verify against?")
+        p.enter(b"Enter/1-2: Select", choice)
+        if choice == b"2":
+            address_number(p)
+        finish_address(p)
 
 p = Probe("address-unloaded")
 p.wait(b"Wallet setup needed")
-p.enter(b"Enter: go back", b"\r")
+address_action(p, b"Enter: go back")
 p.finish(0)
 assert b"Checking address number" not in p.all_text
 p = Probe("address-unapproved")
 _, error = p.finish(3)
-assert b"not approved for this seed" in error and b"Address matches" not in p.all_text
+assert b"not approved for this seed" in error and b"Address verified" not in p.all_text
 
 # Twenty-key public fixture makes the search long enough to observe incremental
 # updates. It exercises the same synchronous search used on the device.
 for resize in (False, True):
     p = Probe("address-progress", rows=16, columns=40)
-    p.enter(b"Enter: start checking", b"\r")
+    address_action(p, b"Enter: verify address")
     p.wait(b"Checking address number:")
     start = p.all_text.rfind(b"\x1b[2J")
     p.wait(b"\x1b[13;30H")
@@ -639,22 +671,22 @@ for resize in (False, True):
         continue
     p.wait(b"\x1b[13;30H")
     p.send(b"\x1b")
-    p.wait(b"Search stopped:")
+    p.wait(b"Address check paused")
     search = p.all_text[start:].rsplit(b"\x1b[2J", 1)[0]
     assert search.count(b"\x1b[2J") == 1 and search.count(b"Receiving and change addresses") == 1, "Search repainted fixed text"
     numbers = [int(n) for n in re.findall(rb"\x1b\[13;30H *(\d+)", search)]
     assert len(numbers) >= 2 and numbers[0] == 0 and numbers[-1] > 0, "Index did not advance in place"
-    p.enter(b"Enter/1-2: Select", b"2")
-    p.enter(b"Address number [0]: ", b"\x1b")
-    p.wait(b"Search stopped:")
-    p.enter(b"Enter/1-2: Select", b"1")
+    address_action(p, b"Enter/1-2: Select", b"2")
+    address_number(p, b"Address number [0]: ", b"\x1b")
+    p.wait(b"Address check paused")
+    address_action(p, b"Enter/1-2: Select", b"1")
     p.wait(b"Checking address number:")
     p.wait(b"\x1b[13;30H")
     p.send(b"\x1b")
-    p.wait(b"Search stopped:")
+    p.wait(b"Address check paused")
     resumed = [int(n) for n in re.findall(rb"\x1b\[13;30H *(\d+)", p.all_text)]
     assert resumed[-1] >= numbers[-1], "Resume reset the address search"
-    p.enter(b"Esc:", b"q")
+    address_action(p, b"Enter/1-2: Select", b"q")
     # Menu cancellation is Esc/Ctrl-C, not arbitrary text; a fresh non-cancel key
     # above releases the held-Escape latch before leaving the stopped menu.
     p.send(b"\x1b")

@@ -187,7 +187,7 @@ void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::str
 }
 
 int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction,
-    bool cancellable, std::string_view status)
+    bool cancellable, std::string_view status, bool keep_introduction)
 {
     Require(!choices.empty() && choices.size() <= 9, "Invalid menu");
     Printable(status);
@@ -206,7 +206,17 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
             entry_rows += entries.back().size();
         }
         auto lines = introduction.empty() ? ReviewLines{} : Wrap({std::string(introduction), ""}, view.width);
-        if (lines.size() + entry_rows > available) lines.clear();
+        if (lines.size() + entry_rows > available) {
+            // Required context is paged once on compact screens, never silently lost.
+            if (keep_introduction && !previous_view) {
+                ReviewLines context;
+                if (!status.empty()) context = {std::string(status), ""};
+                context.push_back(std::string(introduction));
+                while (!Pages(title, context, "choose what to do next", {}, PageMode::Review))
+                    if (cancellable) throw Cancelled{};
+            }
+            lines.clear();
+        }
         const size_t start = lines.size(), slots = available - start;
         Require(entries[selected].size() <= slots, "Menu option does not fit this screen");
         if (!previous_view || *previous_view != view) first = 0;
@@ -254,7 +264,7 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
 }
 
 SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
-    size_t limit, SecretInput* secret, SecretBytes result, std::string error, bool warning)
+    size_t limit, SecretInput* secret, SecretBytes result, std::string error, bool warning, std::string_view help)
 {
     const auto view = View();
     Printable(prompt);
@@ -265,7 +275,7 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     result.reserve(limit);
     const bool word = secret && secret->word_number;
     if (secret) secret->previous = false;
-    const auto hidden_hint = !secret ? ReviewLines{} : Wrap({word
+    const auto hidden_hint = !secret ? (help.empty() ? ReviewLines{} : Wrap({std::string(help)}, view.width)) : Wrap({word
         ? "Your words are hidden as you type." : "Your passphrase is hidden as you type.", word
         ? "Press TAB if you want to see the word you are entering."
         : "Press TAB if you want to see what you are entering."}, view.width);
@@ -277,13 +287,13 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     const auto erase = [&]() { At(input_row, view.left); Write("\033[2K\033[?25l"); };
     const auto draw = [&]() {
         auto text = Wrap(error.empty() ? introduction : ReviewLines{error}, view.width);
-        if (hint_rows + (secret && !text.empty() ? 1 : 0) + text.size() + 2 > view.height) {
+        if (hint_rows + (hint_rows && !text.empty() ? 1 : 0) + text.size() + 2 > view.height) {
             if (!Pages(title, error.empty() ? introduction : ReviewLines{error}, "continue", {},
                 error.empty() ? PageMode::Review : PageMode::Error, warning)) throw Cancelled{};
             text.clear();
         }
         auto lines = text;
-        if (!text.empty() && secret) lines.emplace_back("");
+        if (!text.empty() && hint_rows) lines.emplace_back("");
         hint_row = lines.size();
         const auto& hint = secret && secret->visible ? visible_hint : hidden_hint;
         lines.insert(lines.end(), hint.begin(), hint.end());

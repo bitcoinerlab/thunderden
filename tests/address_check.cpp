@@ -61,10 +61,10 @@ void Fixtures(const td::Keys& keys, const td::Keys& other)
         row.pushKV("payload", payload); row.pushKV("modules", modules); cases.push_back(row);
     };
     const auto single = td::DefaultPolicy(keys, 84, 0);
-    add("01-receiving", "Native SegWit receiving address", "Use account 0. Expect Receiving address - number 7.", Address(single, 0, 7));
-    add("02-change-uri", "Change address in a payment URI", "Use account 0. Expect Change address - number 5. The amount and label are not reviewed.",
+    add("01-receiving", "Native SegWit receiving address", "Use account 0. Expect Receiving address number: 7.", Address(single, 0, 7));
+    add("02-change-uri", "Change address in a payment URI", "Use account 0. Expect Change address number: 5. The amount and label are not reviewed.",
         "bitcoin:" + Address(single, 1, 5) + "?amount=0.001&label=Public%20test");
-    add("03-account-seven", "Another account", "Try account 0 to see No match: 0-999, then choose another account and enter 7. Expect receiving number 0.",
+    add("03-account-seven", "Another account", "Try account 0 to see No match found for 0-999, then try another account and enter 7. Expect receiving number 0.",
         Address(td::DefaultPolicy(keys, 84, 7), 0, 0));
     add("04-later-address", "Continue or enter an exact number", "Use account 0. No match in 0-999; continue or enter 1007. Expect receiving number 1007.", Address(single, 0, 1007));
     add("05-other-wallet", "A valid address from a different seed", "Use account 0. Expect no match. Stop, resume, or check number 7; it must never show a successful match.",
@@ -76,18 +76,18 @@ void Fixtures(const td::Keys& keys, const td::Keys& other)
         add(kind == 2 ? "06-native-multisig-setup" : "08-nested-multisig-setup", kind == 2 ? "Load native SegWit 2-of-2" : "Load nested SegWit 2-of-2",
             "Scan, review both test cosigner keys and type REGISTER. This loads the wallet for this session.", sender.Next());
         add(kind == 2 ? "07-native-multisig-address" : "09-nested-multisig-address", kind == 2 ? "Native multisig address" : "Ambiguous-format multisig address",
-            kind == 2 ? "Before loading setup: Wallet setup needed. After setup: expect Receiving address - number 7."
-                : "Choose the loaded multisig wallet. Expect Change address - number 7. Choosing single signature must not match.", Address(policy, kind == 2 ? 0 : 1, 7));
+             kind == 2 ? "Before loading setup: Wallet setup needed. After setup: expect Receiving address number: 7."
+                 : "Choose the loaded multisig wallet. Expect Change address number: 7. Choosing single signature must not match.", Address(policy, kind == 2 ? 0 : 1, 7));
         if (kind == 2) {
             UniValue public_keys(UniValue::VARR);
             for (const auto& key : policy.KeyInformation()) public_keys.push_back(key.text);
             out.pushKV("native_multisig_keys", public_keys);
         }
     }
-    add("10-nested-single", "Single signature while multisig is loaded", "With nested multisig loaded, choose Single signature and account 0. Expect receiving number 3.",
+    add("10-nested-single", "Single signature while multisig is loaded", "With nested multisig loaded, choose Single-signature account and account 0. Expect receiving number 3.",
         Address(td::DefaultPolicy(keys, 49, 0), 0, 3));
-    add("11-taproot", "Standard Taproot account", "Use account 0. Expect Receiving address - number 0.", Address(td::DefaultPolicy(keys, 86, 0), 0, 0));
-    add("12-legacy", "Legacy single-signature account", "Use account 0. Expect Receiving address - number 0.", Address(td::DefaultPolicy(keys, 44, 0), 0, 0));
+    add("11-taproot", "Standard Taproot account", "Use account 0. Expect Receiving address number: 0.", Address(td::DefaultPolicy(keys, 86, 0), 0, 0));
+    add("12-legacy", "Legacy single-signature account", "Use account 0. Expect Receiving address number: 0.", Address(td::DefaultPolicy(keys, 44, 0), 0, 0));
     SelectParams(ChainType::MAIN);
     add("13-wrong-network", "Wrong network", "Keep Thunder Den on Regtest. This mainnet address must be rejected for the selected network.",
         Address(td::DefaultPolicy(keys, 84, 0), 0, 0));

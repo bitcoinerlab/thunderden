@@ -81,7 +81,7 @@ ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
 {
     const bool standard = policy.IsDefault(keys);
     ReviewLines lines{
-        "Check the spending rules and public keys for this wallet. They must match the wallet you intended to set up.", "",
+        "Check who can spend from this wallet and under what conditions.", "",
         "Network: " + NetworkName(Params().GetChainType()),
         standard ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name(),
         standard ? "Address type: " + AccountType(policy.KeyInformation()[0].origin[0] & 0x7fffffff) : "",
@@ -95,12 +95,10 @@ ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
 ReviewLines AddressReview(const Policy& policy, const Keys& keys, Position position, const std::string& address)
 {
     const bool standard = policy.IsDefault(keys);
-    ReviewLines lines{"Network: " + NetworkName(Params().GetChainType()),
+    ReviewLines lines{address, "", "Network: " + NetworkName(Params().GetChainType()),
         standard ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name()};
     if (standard) lines.push_back("Address type: " + AccountType(policy.KeyInformation()[0].origin[0] & 0x7fffffff));
-    lines.insert(lines.end(), {
-        std::string(position.branch ? "Change" : "Receiving") + " address - number " + std::to_string(position.index),
-        address});
+    lines.push_back(std::string(position.branch ? "Change" : "Receiving") + " address number: " + std::to_string(position.index));
     return lines;
 }
 

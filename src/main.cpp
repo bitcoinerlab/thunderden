@@ -172,11 +172,11 @@ int main(int argc, char** argv)
                             },
                             [&](const auto& lines, const auto& details) {
                                 completed = td::ReviewScreen{"Registered wallet - review", lines, details};
-                                return terminal.Approve("Confirm wallet spending rules", lines, "REGISTER", details);
+                                return terminal.Approve("Review wallet registration", lines, "REGISTER", details);
                             },
                             [&](const auto& lines, const auto& details) {
                                 completed = td::ReviewScreen{"Confirmed address - review", lines, details};
-                                return terminal.Confirm("Check your wallet's address", lines, "confirm this address", details);
+                                return terminal.Confirm("Verify wallet address", lines, "confirm this address", details);
                             }, approve});
                         if (result.status) completed.reset();
                         response = std::move(result.message);

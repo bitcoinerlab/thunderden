@@ -46,9 +46,10 @@ public:
     void SetNetwork(std::string_view network) { network_ = network; }
     void Screen(std::string_view title, const ReviewLines& lines, std::string_view footer);
     int Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction = {},
-        bool cancellable = true, std::string_view status = {});
+        bool cancellable = true, std::string_view status = {}, bool keep_introduction = false);
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
-        size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false);
+        size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false,
+        std::string_view help = {});
     SecretBytes Mnemonic();
     std::optional<Position> SearchAddress(const Policy& policy, const CScript& script,
         std::string_view wallet, uint32_t& next, uint32_t end);

@@ -67,7 +67,7 @@ std::optional<Position> Terminal::SearchAddress(const Policy& policy, const CScr
     Require(lines.size() < view.height, "Not enough room for address search");
     lines.resize(view.height);
     lines.back() = "Checking address number:";
-    Flush(); Draw(view, "Checking address", lines, "Esc: Stop");
+    Flush(); Draw(view, "Verifying address", lines, "Esc: Stop");
     auto painted = std::chrono::steady_clock::time_point::min();
     return FindAddress(policy, script, next, end, [&](uint32_t index) {
         Require(View() == view, "The screen changed. Start this check again.");
@@ -85,11 +85,11 @@ std::optional<Position> Terminal::SearchAddress(const Policy& policy, const CScr
 }
 
 namespace {
-uint32_t Number(Terminal& terminal, const ReviewLines& lines, std::string_view prompt, uint32_t maximum)
+uint32_t Number(Terminal& terminal, const ReviewLines& lines, std::string_view prompt, uint32_t maximum, std::string_view help)
 {
     std::string error;
     while (true) {
-        const auto input = terminal.Input("Check address", lines, prompt, std::to_string(maximum).size(), nullptr, {}, error);
+        const auto input = terminal.Input("Verify address", lines, prompt, std::to_string(maximum).size(), nullptr, {}, error, false, help);
         uint32_t number = 0;
         if (input.empty()) return number;
         const auto* first = reinterpret_cast<const char*>(input.data());
@@ -110,17 +110,20 @@ void CheckAddress(Terminal& terminal, const Keys& keys, const ApprovedWallet* lo
     if (compatible) Require(loaded->policy.Authorized(keys, loaded->proof), "The loaded wallet is not approved for this seed.");
     if (!purpose) {
         if (!compatible) {
-            terminal.Confirm("Wallet setup needed", {"Scan your wallet's setup QR first, then scan this address again."}, "go back");
+            terminal.Confirm("Wallet setup needed", {"This address needs a wallet setup before it can be verified.", "",
+                "Scan the matching wallet setup QR, then scan this address again."}, "go back");
             return;
         }
-        if (!terminal.Confirm("Check address", {"Wallet: " + loaded->policy.Name()}, "start checking")) return;
+        if (!terminal.Confirm("Verify address", {"Check whether the scanned address belongs to your loaded multisig wallet.", "",
+            "Wallet: " + loaded->policy.Name()}, "verify address")) return;
     }
     const auto choose = [&]() -> std::pair<Policy, std::string> {
-        if (compatible && (!purpose || terminal.Menu("Choose wallet", {"Loaded wallet: " + loaded->policy.Name(), "Single signature (one signer)"}) == 0))
+        if (compatible && (!purpose || terminal.Menu("Which wallet should we verify against?",
+            {"Loaded wallet: " + loaded->policy.Name(), "Single-signature account"}) == 0))
             return {loaded->policy, "Wallet: " + loaded->policy.Name()};
         auto type = AccountType(purpose); type = type.substr(0, type.find(" ("));
-        const auto account = Number(terminal, {"Wallet type: Single signature", "Address type: " + type,
-            "Most wallets use account 0."}, "Account number [0]: ", 100);
+        const auto account = Number(terminal, {"Check whether the scanned address belongs to your wallet.", "", "Address type: " + type},
+            "Account number [0]: ", 100, "Most wallets use account 0. Press Enter to use 0, or enter your wallet app's account number.");
         return {DefaultPolicy(keys, purpose, account), type + " - account " + std::to_string(account)};
     };
     auto [policy, wallet] = choose();
@@ -129,21 +132,27 @@ void CheckAddress(Terminal& terminal, const Keys& keys, const ApprovedWallet* lo
         const auto match = terminal.SearchAddress(policy, script, wallet, next, end);
         if (match) {
             auto lines = AddressReview(policy, keys, *match, EncodeDestination(destination));
-            if (match->branch) lines.push_back("Change addresses hold money returned to this wallet.");
-            lines.insert(lines.end(), {"", "Compare this full address with the destination before sending."});
-            terminal.Confirm("Address matches this wallet", lines, "finish", PolicyDetails(policy, keys));
+            lines.insert(lines.begin(), {"The scanned address belongs to this wallet.", ""});
+            if (match->branch) lines.insert(lines.end(), {"", "Change addresses return the remaining funds from a transaction to the same wallet."});
+            lines.insert(lines.end(), {"", "Before sending, compare this full address with the destination in your sending app."});
+            terminal.Confirm("Address verified", lines, "finish", PolicyDetails(policy, keys));
             return;
         }
-        const auto range = next == first ? "" : std::to_string(first) + "-" + std::to_string(next - 1);
-        const auto checked = range.empty() ? "No address numbers fully checked." : "Checked address numbers " + range + ".";
+        const auto range = std::string(next - first == 1 ? "number " : "numbers ") + std::to_string(first)
+            + (next - first > 1 ? "-" + std::to_string(next - 1) : "");
+        const auto checked = next < end
+            ? (next == first ? "No address numbers were fully checked." : "Checked receiving and change address " + range + ".")
+                + std::string(" Resume to keep checking.")
+            : "The scanned address did not match receiving or change address " + range
+                + ". It may be outside this range or belong to another wallet or account.";
         while (true) {
             ReviewLines choices;
             int resume = -1, change = -1;
-            if (next < ADDRESS_INDEX_END) { resume = choices.size(); choices.push_back(next < end ? "Resume search" : "Continue searching"); }
-            if (purpose) { change = choices.size(); choices.push_back(compatible ? "Choose wallet" : "Choose another account"); }
-            choices.push_back("Enter an address number");
-            const auto title = std::string(next < end ? "Search stopped" : "No match") + (range.empty() ? "" : ": " + range);
-            const int action = terminal.Menu(title, choices, checked, true, wallet);
+            if (next < ADDRESS_INDEX_END) { resume = choices.size(); choices.push_back(next < end ? "Resume checking" : "Search further"); }
+            if (purpose) { change = choices.size(); choices.push_back(compatible ? "Choose another wallet" : "Try another account"); }
+            choices.push_back("Check a specific address number");
+            const auto title = next < end ? "Address check paused" : "No match found";
+            const int action = terminal.Menu(title, choices, checked, true, wallet, true);
             try {
                 if (action == resume) {
                     if (next == end) { first = next; end = std::min(ADDRESS_INDEX_END, next + ADDRESS_SEARCH_WINDOW); }
@@ -151,7 +160,8 @@ void CheckAddress(Terminal& terminal, const Keys& keys, const ApprovedWallet* lo
                     auto replacement = choose(); policy = std::move(replacement.first); wallet = std::move(replacement.second);
                     first = next = 0; end = ADDRESS_SEARCH_WINDOW;
                 } else {
-                    first = next = Number(terminal, {wallet, "Address number 0 is the first address."}, "Address number [0]: ", ADDRESS_INDEX_END - 1);
+                    first = next = Number(terminal, {"Check a specific receiving or change address.", "", wallet},
+                        "Address number [0]: ", ADDRESS_INDEX_END - 1, "Address numbers start at 0. Find this number in your wallet app.");
                     end = next + 1;
                 }
                 break;
