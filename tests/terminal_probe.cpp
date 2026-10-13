@@ -1,5 +1,7 @@
 #include "terminal.h"
 #include "address_check.h"
+#include "entropy.h"
+#include "entropy_rng.h"
 #include "multisig_fixture.h"
 #include <key_io.h>
 #include <util/strencodings.h>
@@ -11,6 +13,22 @@ int main(int argc, char** argv)
 {
     try {
         td::Terminal terminal(dup(STDIN_FILENO));
+        if (argc == 2 && std::string_view(argv[1]).starts_with("entropy-")) {
+            const std::string_view mode(argv[1]);
+            if (mode == "entropy-generate" || mode == "entropy-rng-fail") {
+                mock_entropy_rng = true; fail_entropy_rng = mode == "entropy-rng-fail";
+                const auto mnemonic = td::NewMnemonic(terminal);
+                td::ValidateMnemonic(mnemonic);
+                td::Require(entropy_rng_calls == 1, "Generation did not request fresh randomness exactly once");
+                std::puts("BACKUP VERIFIED");
+            } else {
+                const auto source = mode == "entropy-dice" ? td::ManualSource::Dice
+                    : mode == "entropy-pairs" ? td::ManualSource::CoinPairs : td::ManualSource::Coins;
+                const auto samples = terminal.ManualEntropy(source, 12);
+                std::puts(HexStr(samples).c_str()); // Public test inputs only.
+            }
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]).starts_with("address-")) {
             const std::string mode(argv[1]);
             ECC_Context context; SelectParams(ChainType::REGTEST); terminal.SetNetwork("Regtest");

@@ -4,6 +4,7 @@
 #include <termios.h>
 
 namespace td {
+enum class ManualSource : unsigned char;
 struct Cancelled {};
 enum NavigationKey { KEY_UP = 256, KEY_DOWN, KEY_RIGHT, KEY_LEFT };
 struct SecretInput {
@@ -50,7 +51,9 @@ public:
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
         size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false,
         std::string_view help = {});
-    SecretBytes Mnemonic();
+    SecretBytes Mnemonic(unsigned count = 0);
+    SecretBytes ManualEntropy(ManualSource source, unsigned words);
+    void BackupWords(std::span<const unsigned char> mnemonic);
     std::optional<Position> SearchAddress(const Policy& policy, const CScript& script,
         std::string_view wallet, uint32_t& next, uint32_t end);
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {},

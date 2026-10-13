@@ -358,11 +358,12 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     }
 }
 
-SecretBytes Terminal::Mnemonic()
+SecretBytes Terminal::Mnemonic(unsigned count)
 {
-    const size_t count = 12 + 3 * Menu("Your recovery phrase",
+    if (!count) count = 12 + 3 * Menu("Your recovery phrase",
         {"12 words", "15 words", "18 words", "21 words", "24 words"},
         "How many words are in your wallet backup?");
+    Require(count >= 12 && count <= 24 && count % 3 == 0, "Invalid recovery word count");
     SecretInput visibility;
     std::string error;
     while (true) {

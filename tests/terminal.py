@@ -701,6 +701,8 @@ def word(p, index, count, value):
 
 
 def mnemonic(p, words, choice=b"\r"):
+    if p.controlling:
+        p.enter(b"Use existing recovery words", b"1")
     p.enter(b"1: 12 words", choice)
     for index, value in enumerate(words, 1):
         word(p, index, len(words), value)
@@ -718,6 +720,72 @@ def export_review(p):
         if b"Enter: show the QR code" in p.all_text.rsplit(b"\x1b[2J", 1)[-1]:
             return
         p.send(b"\r")
+
+
+for mode, entered, expected in (
+        ("entropy-coins", b"t" * 150, bytes(150)),
+        ("entropy-dice", b"07" + b"6" * 63 + b"5\x7f1", bytes([5] * 63 + [0])),
+        ("entropy-pairs", b"ttYYtYYtt\x7f" + b"ty" * 126, bytes([0, 1] + [0] * 126))):
+    p = Probe(mode, rows=12, columns=40)
+    address_action(p, b"Enter: start collecting")
+    p.wait(b"Tosses:" if mode != "entropy-dice" else b"Rolls:")
+    p.send(entered)
+    p.wait(b"Enter: Finish collection")
+    assert p.process.poll() is None, "Reaching the manual target skipped confirmation"
+    p.send(b"\r")
+    output, _ = p.finish(0)
+    assert bytes.fromhex(output.decode().strip()) == expected
+
+
+def start_generation(p, words=12):
+    address_action(p, b"Enter/1-2: Select", b"1" if words == 12 else b"2")
+    address_action(p, b"Enter/1-4: Select", b"1")
+
+
+def copy_backup(p):
+    while True:
+        p.wait(b"Copy every word in order.")
+        last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        p.send(b"\r")
+        if b"Enter: Check backup" in last:
+            break
+    found = re.findall(rb"\x1b\[\d+;\d+H(\d+)\. ([a-z]+)", p.all_text)
+    return [value.decode() for _, value in sorted({int(index): value for index, value in found}.items())]
+
+
+for count, rows, columns in ((12, 12, 40), (24, 24, 80)):
+    p = Probe("entropy-generate", rows=rows, columns=columns)
+    start_generation(p, count)
+    assert b"Write down your recovery words" not in p.all_text
+    address_action(p, b"Enter: generate words")
+    backup = copy_backup(p)
+    assert len(backup) == count
+    address_action(p, b"Enter: enter your words")
+    if count == 12:
+        for index, value in enumerate(MNEMONIC, 1):
+            word(p, index, count, value)
+        p.wait(b"Backup did not match")
+        assert p.process.poll() is None, "Incorrect backup made the wallet available"
+        address_action(p, b"Enter: review the words")
+        assert copy_backup(p) == backup, "Retry generated different words"
+        address_action(p, b"Enter: enter your words")
+    for index, value in enumerate(backup, 1):
+        word(p, index, count, value)
+    output, _ = p.finish(0)
+    assert b"BACKUP VERIFIED" in output
+
+p = Probe("entropy-generate")
+start_generation(p)
+address_action(p, b"Enter: generate words", b"\x1b")
+output, _ = p.finish(2)
+assert b"Write down your recovery words" not in p.all_text and not output
+p = Probe("entropy-rng-fail")
+start_generation(p)
+address_action(p, b"Enter: generate words")
+output, _ = p.process.communicate(timeout=5)
+assert p.process.returncode == 91 and not output
+assert b"Write down your recovery words" not in p.all_text, "RNG failure exposed a fallback mnemonic"
+print("PASS: manual outcomes, corrections, pair extraction, private backup verification, cancellation and fatal RNG failure")
 
 
 # Exercise the actual application with a controlling tty. The test container has

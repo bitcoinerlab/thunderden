@@ -3,6 +3,8 @@
 #include <crypto/sha256.h>
 
 namespace td {
+class Terminal;
+SecretBytes NewMnemonic(Terminal& terminal);
 // Secret hash state is erased, including on cancellation and exceptions.
 struct EntropyHash : CSHA256 {
     ~EntropyHash() { memory_cleanse(this, sizeof(*this)); }

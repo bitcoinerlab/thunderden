@@ -48,7 +48,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(QR REQUIRED IMPORTED_TARGET libqrencode zbar libv4l2)
 
 add_library(thunderden STATIC src/keys.cpp src/policy.cpp src/transaction.cpp src/transport.cpp src/qr.cpp
-  src/review.cpp src/terminal.cpp src/application.cpp src/address_check.cpp src/entropy.cpp src/wallet_qr.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
+  src/review.cpp src/terminal.cpp src/application.cpp src/address_check.cpp src/entropy.cpp src/generation.cpp src/wallet_qr.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
 target_include_directories(thunderden PUBLIC src "${CORE_SOURCE_DIR}/src"
   "${CORE_SOURCE_DIR}/src/secp256k1/include" "${CMAKE_BINARY_DIR}/core/src"
   PRIVATE "${CMAKE_BINARY_DIR}")
@@ -121,6 +121,7 @@ add_test(NAME export-compat COMMAND Python3::Interpreter -B "${CMAKE_SOURCE_DIR}
   "$<TARGET_FILE:application-tests>")
 
 add_executable(terminal-probe tests/terminal_probe.cpp)
+target_link_options(terminal-probe PRIVATE -Wl,--wrap=_Z18GetStrongRandBytesSt4spanIhLm18446744073709551615EE)
 target_link_libraries(terminal-probe PRIVATE thunderden)
 target_compile_options(terminal-probe PRIVATE -Wall -Wextra -Werror)
 add_test(NAME terminal COMMAND Python3::Interpreter -B "${CMAKE_SOURCE_DIR}/tests/terminal.py"

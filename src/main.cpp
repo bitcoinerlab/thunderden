@@ -5,6 +5,7 @@
 #include "scan.h"
 #include "qr_commands.h"
 #include "address_check.h"
+#include "entropy.h"
 
 #include <chainparams.h>
 #include <util/strencodings.h>
@@ -106,7 +107,8 @@ int main(int argc, char** argv)
         std::optional<td::ApprovedWallet> loaded_wallet;
         const auto keys = [&]() -> const td::Keys& {
             if (!session) {
-                const auto mnemonic = terminal.Mnemonic();
+                const auto mnemonic = terminal.Menu("Recovery words", {"Use existing recovery words", "Generate new recovery words"}) == 0
+                    ? terminal.Mnemonic() : td::NewMnemonic(terminal);
                 while (!session) {
                     SecretInput visibility;
                     const auto passphrase = terminal.Input("Wallet passphrase (optional)", {

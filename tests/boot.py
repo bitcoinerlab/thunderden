@@ -84,6 +84,8 @@ with (args.output / "qemu.log").open("wb") as log:
         time.sleep(1)
         key("ret")  # Account zero
         time.sleep(1)
+        key("ret")  # Use existing recovery words.
+        time.sleep(1)
         key("ret")  # Default: 12 recovery words
         time.sleep(1)
         screenshot("recovery-entry.ppm")
