@@ -2,9 +2,9 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.6/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.6/thunderden.img.sha256)
-from [v0.0.1-preview.6](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.7/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.7/thunderden.img.sha256)
+from [v0.0.1-preview.7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7).
 The release also includes `installed-files.json` for reviewing the built system.
 
 The same 64 MiB image can be written from macOS, Linux or Windows. It boots
@@ -94,7 +94,9 @@ Address checks, registration and signing show the wallet ID and full public
 descriptor in Details. Registration requires reviewing the spending rules and
 cosigner keys before typing `REGISTER`; signing requires typing `SIGN` after review.
 The signing review shows every non-change destination and amount, the fee, and
-verified change totals. Individual change addresses and input records are in Details.
+each verified change output's amount and index. Unusually high change indices also
+show the full address and a recovery warning. All change addresses and input
+records are available in Details.
 On a result QR, `b` or Left returns to its text review without rescanning or
 repeating approval. The final review action shows the same QR again. Esc finishes
 viewing the result and returns to the menu; it cannot undo an exported signature.

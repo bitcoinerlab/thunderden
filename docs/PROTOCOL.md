@@ -56,7 +56,7 @@ position for comparison with the destination before sending. **d** shows public
 wallet details. Plain checks produce neither a reply QR nor a signature, and
 cannot replace an in-progress multipart UR stream. Structured address commands
 below already supply the policy and index and retain their direct review/reply
-flow. Plain address checks require a source build after preview 6.
+flow. Plain address checks are available in preview 7 and later.
 
 ## Standard PSBT exchange
 

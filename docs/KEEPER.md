@@ -1,6 +1,6 @@
 # Use Bitcoin Keeper with Thunder Den
 
-Use [Thunder Den v0.0.1-preview.6](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6)
+Use [Thunder Den v0.0.1-preview.7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7)
 or later. The user reported successful multisig
 signing with Keeper on iOS/testnet4 using the text-setup development image.
 The main-scanner preload option was added afterwards and has automated coverage.
@@ -29,11 +29,10 @@ the advanced text-xpub workaround is unnecessary with Keeper's Jade profile.
 
 ## Check a receiving address
 
-With the current source build, choose **Scan a QR code** on Thunder Den and scan
+Choose **Scan a QR code** on Thunder Den and scan
 Keeper's **Receive** QR. A multisig setup must already be loaded as described below.
 Compare the matched address with the destination before sending. Payment amounts
 in the QR are not checked. See [search controls and limits](PROTOCOL.md#plain-address-checks).
-Plain address checks are not included in the published preview 6 image.
 
 ## Sign: PSBT first, then Vault details
 

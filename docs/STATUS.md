@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-10-01, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-13, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
@@ -11,13 +11,14 @@ with the text-setup development image; the report and scope are recorded below.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.6`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6),
+[`v0.0.1-preview.7`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7),
 with its checksum and installed-file inventory. BIOS/UEFI boot checks passed;
 USB write/read-back checks are recorded per image below. Broader laptop/camera coverage and a fresh
 full clean-build comparison remain outstanding.
 Current executable sizes refer to the latest recorded build below.
-Preview 6 adds text multisig setup and main-scanner wallet preloading to the
-direct multisig/compact-PSBT signing and account-key QRs introduced in preview 5.
+Preview 7 adds direct address verification, clearer QR reviews and mandatory
+high-index change disclosure. It also includes the pinned Liana installation
+guide and [audit follow-up record](../audits/FINDINGS.md).
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
@@ -33,7 +34,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,615,536-byte signer and an 88,176-byte scanner, with
+Buildroot executables are a 2,636,080-byte signer and a 96,368-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -559,6 +560,32 @@ the downloaded image checksum passed and public asset URLs returned HTTP 200.
 The release image was written to USB serial `55630D9D`; all 67,108,864 bytes matched
 on read-back, and the drive was safely powered off.
 The fresh full clean-build comparison and broader physical-device coverage remain open.
+
+The seventh published preview, `v0.0.1-preview.7`, uses an image built on 2026-10-13
+from application source commit `b6b9c16406e3476e6b2a0333281a648f02c327e1`.
+It adds plain address/payment-URI verification against a selected standard account
+or approved multisig wallet, bounded receiving/change searches and clearer review
+screens. Mandatory transaction review now discloses each change index and warns
+about recovery at unusually high indices. The signer still reports application
+version `0.0.1`. Its size is 67,108,864 bytes and SHA-256 is:
+
+```text
+4ebcf74e19543399f09db6acc8747b1bacd511a6519bdd64b738f1efca826073
+```
+
+All twelve native suites passed, with none skipped. The build/test invocation
+reached its tool timeout during the last suite; that isolation suite passed when
+rerun separately. Tests cover address/network validation, both address branches,
+account selection, bounded search, full-address display, compact-screen guidance,
+stop/resume, wallet replacement and approval boundaries. Source and pinned build
+inputs match the image build; installed-content/kernel checks, checksum and repeat
+assembly passed. BIOS/UEFI boot checks passed at 1280x800, including account QR
+decoding, review navigation and session restart. Release documentation is added
+above the application revision without changing application code or build inputs.
+The image contains no OCR executable, models or OpenCV. Dependencies were reused
+from the non-OCR build cache; a fresh full clean-build comparison and physical-camera
+validation of the new address screens remain pending. The compact-PSBT fee risk
+remains as documented in [FEES.md](FEES.md) and audit finding TD-001.
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

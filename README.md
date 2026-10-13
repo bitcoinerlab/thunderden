@@ -21,9 +21,9 @@ See [implementation status](docs/STATUS.md) for completed checks and remaining w
 
 ## Download and boot
 
-**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.6/thunderden.img)**
-· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.6/thunderden.img.sha256)
-· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.6)
+**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.7/thunderden.img)**
+· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.7/thunderden.img.sha256)
+· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7)
 
 This image boots x86-64 (Intel/AMD) laptops with BIOS or UEFI. You can prepare the
 USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot it.
@@ -59,6 +59,7 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.
 - BIP-388 wallet policies with seed-bound registration proofs.
 - BIP44, BIP49, BIP84 and BIP86 defaults without prior registration.
+- Verify scanned addresses against a standard account or loaded multisig wallet.
 - Partial signing when other signatures or spending conditions are still needed.
 - UR v2 scanning and animated QR output, with the scanner isolated from keys
   and approval.
@@ -84,7 +85,7 @@ Keeper's PSBT first; when Thunder Den requests wallet setup, tap **Vault details
 on Keeper's signing screen and scan its registration QR. Review and approve with
 `REGISTER`, then continue to transaction review and `SIGN`.
 
-Preview 6 also lets you scan that registration QR directly from Thunder Den's main
+You can also scan that registration QR directly from Thunder Den's main
 menu. After approval, **Loaded wallet** appears for the session. The inline flow
 was user-tested on iOS/testnet4. See the [Keeper guide](docs/KEEPER.md) for the steps,
 supported formats and validation scope.

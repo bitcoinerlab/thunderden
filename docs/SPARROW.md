@@ -1,7 +1,7 @@
 # Use Sparrow with Thunder Den
 
-Use [Thunder Den v0.0.1-preview.5](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.5)
-or later. The released image was approved following the user's real-device
+Use [Thunder Den v0.0.1-preview.7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7)
+or later. The earlier preview 5 image was approved following the user's real-device
 Sparrow multisig test. Automated checks use Sparrow 2.5.5; see
 [validation status](STATUS.md#sparrow-integration) for the recorded scope.
 Use fresh test words and test coins while validating your own setup.
@@ -66,12 +66,11 @@ Sparrow holds public information; Thunder Den provides the signatures.
 
 ## Receive and sign directly
 
-With the current source build, choose **Scan a QR code** on Thunder Den and scan
+Choose **Scan a QR code** on Thunder Den and scan
 the QR in Sparrow's **Receive** tab. Confirm the account number (normally 0);
 for multisig, [load the setup](#alternative-load-the-setup-qr) first. On a match,
 compare the complete address with the destination before sending. **Esc** stops
 the search; see [search controls and limits](PROTOCOL.md#plain-address-checks).
-Plain address checks are not included in the published preview 6 image.
 
 To sign a transaction:
 

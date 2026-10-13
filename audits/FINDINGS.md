@@ -68,6 +68,9 @@ checks native behavior, not physical-device recovery or a new release image.
 source revision; this is not a claim that the fix is in a published USB image.
 The original audit report remains unchanged.
 
+**Release availability (2026-10-13):** the change-index disclosure is included in
+[preview 7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7).
+
 ## TD-004 — Pinned online installation
 
 **Decision (2026-10-12):** preserve the integration revisions already recorded in
@@ -135,3 +138,6 @@ setup QRs for a physical trial; every generated QR matrix is decoded before expo
 (`feat: verify scanned addresses against wallet accounts`) records the implementation
 and automated verification above. Physical-camera verification remains pending;
 this entry remains Open. The original report is unchanged.
+
+**Release availability (2026-10-13):** [preview 7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7)
+includes address verification and the review/layout polish from `b6b9c16`.
