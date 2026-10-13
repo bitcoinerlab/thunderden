@@ -7,8 +7,8 @@ recovery words, review transactions on the laptop and exchange data through QR
 codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
-before you use it. Its own signer and scanner code, build scripts, boot settings
-and image-content/assembly checks total about 4,900 lines, including comments and
+before you use it. Its own signer and worker code, build scripts, boot settings
+and image-content/assembly checks total about 5,800 lines, including comments and
 blank lines. We keep that code clear, with few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
@@ -56,6 +56,8 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 ## Features
 
 - English BIP39 recovery words with an optional printable ASCII passphrase.
+- This experimental branch also [generates 12/24 words](docs/ENTROPY.md), with
+  mandatory system randomness and optional camera or physical input; not in preview 7.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.
 - BIP-388 wallet policies with seed-bound registration proofs.
 - BIP44, BIP49, BIP84 and BIP86 defaults without prior registration.

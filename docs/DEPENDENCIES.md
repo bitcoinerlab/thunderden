@@ -63,6 +63,38 @@ includes are supplied by compiler options; the source is unmodified. Its bundled
 CRC/SHA and deterministic fountain-mixing code processes public transport data.
 Bitcoin key derivation and signing remain Core operations. BBQR is not implemented.
 
+## Experimental entropy assessment
+
+Generation reuses Core's strong RNG, SHA-256 and the existing English wordlist.
+Only the optional camera diagnostic adds runtime libraries:
+
+| Component | Pin / license | Use |
+| --- | --- | --- |
+| NIST EntropyAssessment | `87c104d0ed4cbc96103e7b8b38d6f2c7e0a6b289`; NIST public-service notice | Official non-IID estimators in `thunderden-assess` |
+| libdivsufsort and libdivsufsort64 | `5f60d6f026c30fb4ac296f696b3c8b0eb71bd428`; MIT | Suffix sorting for NIST |
+| jsoncpp | Buildroot/pinned Debian package; MIT | NIST report generation |
+| libgomp | Pinned GCC toolchain; GPL with GCC Runtime Library Exception | Upstream OpenMP support, one production thread |
+
+Source archive hashes are in `.env`; the external Buildroot recipe also checks
+the divsufsort archive. `CMakeLists.txt` builds only the official non-IID entry
+point for the image, with `-O2 -ffloat-store` and the target compiler's baseline.
+It renames `main` to enter through the confinement wrapper. It does not use
+`-march=native` or host header paths. The sole upstream source patch,
+`build/nist-json-warning.patch`, retains warning text in JSON when errorLevel is
+zero; estimator mathematics are unchanged. The complete NIST notice is installed
+as `usr/share/licenses/NIST-EntropyAssessment.txt`.
+
+The official general Makefile also lists bzip2, but only the IID permutation code
+uses it. It is not needed or installed for this non-IID integration. GMP/MPFR and
+the IID, restart and conditioning programs are likewise absent. The development
+builder's `bzip2` tool is still used to unpack source archives.
+
+The signer parses the bounded report with Core's existing UniValue library and
+does not load NIST, jsoncpp, suffix-sort or OpenMP libraries. The native camera
+worker shares libv4l but does not load ZBar. Closure and symbol checks cover both
+workers; neither contains key sessions, generation, signing or terminal UI code.
+See [measurements](ENTROPY_BENCHMARKS.md) and [isolation](ISOLATION.md#entropy-workers).
+
 ## Development
 
 Docker supplies the compiler, CMake, Python test runner, binary inspection tools

@@ -43,7 +43,9 @@ are kept separate.
 - An empty passphrase needs one Enter. A non-empty passphrase must be entered twice;
   a mismatch lets you retry without re-entering the recovery words.
 - The mnemonic is entered when first needed. Derived keys remain in RAM for the session.
-- No mnemonic generation or persistent seed storage.
+- No persistent seed storage. This experimental branch also supports
+  [12/24-word generation](ENTROPY.md): mandatory Core strong randomness, optional
+  camera and physical contributions, and complete backup re-entry before key use.
 - The initial console interface uses the kernel's default US keyboard layout.
 
 ASCII is unchanged by BIP39 NFKD normalization. Non-English mnemonics and

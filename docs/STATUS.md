@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-10-13, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-14, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
@@ -26,6 +26,10 @@ separate from the automated checks below.
 
 ## Architecture
 
+The experimental `feature/seed-generation` branch adds generation with mandatory
+system randomness and optional camera/manual contributions. It is not part of
+preview 7. See [design and use](ENTROPY.md) and [measured results](ENTROPY_BENCHMARKS.md).
+
 Native code links pinned, unmodified Bitcoin Core libraries for keys, descriptors,
 Miniscript, PSBT review and signing. Recovery input uses English words and printable
 ASCII passphrases. OpenSSL libcrypto provides PBKDF2 and constant-time comparison.
@@ -34,7 +38,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-Buildroot executables are a 2,636,080-byte signer and a 96,368-byte scanner, with
+preview 7 Buildroot executables are a 2,636,080-byte signer and a 96,368-byte scanner, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -247,7 +251,8 @@ in the published preview 5 image.
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` runs twelve suites on Linux/amd64:
+`docker compose run --build --rm test` runs sixteen suites on this branch on Linux/amd64:
+`entropy`, `entropy-camera`, `entropy-confinement`, `entropy-assessment`,
 `address-check`, `qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
 `application`, `export-compat`, `terminal`, `camera` and `isolation`.
 Actual native confinement tests require Landlock ABI 6 and are reported as skipped

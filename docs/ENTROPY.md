@@ -7,6 +7,11 @@ It requires independent review and physical-camera testing before merging.
 
 ## Sources and backup
 
+Before a key session is loaded, choose an action such as **Share a public key**,
+then **Generate new recovery words** when asked for recovery words. Choose the
+length and optional sources. To use an existing wallet, choose **Use existing
+recovery words** instead. End the current session before generating another wallet.
+
 Generate 12 or 24 English BIP39 words. Import still accepts 12, 15, 18, 21 or 24.
 Bitcoin Core 31.1 supplies 32 fresh bytes through `GetStrongRandBytes`; an OS RNG
 failure terminates the process. There is no fallback or production test RNG.
@@ -64,6 +69,7 @@ its nonzero type (1 for camera), followed by its 32-byte contribution digest.
 Take the first 16 bytes of F for 12 words, or all 32 for 24 words, then add the
 BIP39 checksum and use the existing pinned English wordlist. Hash contexts and
 managed secret buffers are erased; complete physical-memory erasure is not claimed.
+The later 64-byte PBKDF2 seed does not increase the mnemonic's 128/256-bit entropy.
 
 A fixed SHA-256 is not a universal statistical extractor. Unpredictability relies
 on its cryptographic properties and a secret, unpredictable contribution. Extra
@@ -85,6 +91,8 @@ Within each batch: position, then component, then time. Each immutable batch is
 constructed once; its byte stream is hashed incrementally and the predetermined
 prefix is copied unchanged to a sealed RAM-only memfd for assessment. This is
 batch-local temporal grouping, not a whole-capture transpose.
+At T=64 the assessed prefix contains the first 16,384 component histories; it is
+not assumed to represent all positions or the rest of the capture.
 
 Starting parameters are provisional: 8 warm-up frames, T=64, 1,048,576 assessed
 samples, up to 64 MiB hashed, a 20-second capture limit and 120-second total
@@ -93,6 +101,10 @@ score. Whole batches are serialized; the byte cap may stop at a complete tempora
 history. No differences, filters, LSB extraction or bias correction are applied.
 Device exposure/gain remain at driver defaults; no characterized control profile
 is claimed. Failed capture or assessment is omitted unless a fresh attempt succeeds.
+Eight repeated-frame comparisons or eight frames with at least 99% dark/bright
+samples trigger whole-contribution rejection. These are fault heuristics, not
+calibrated NIST RCT/APT health tests. Even data with a high estimate can be entirely
+predictable. The camera never replaces mandatory system randomness.
 
 ## Assessment boundary
 
@@ -100,11 +112,11 @@ Use only the official NIST `ea_non_iid` with `-i -a` and eight bits per symbol.
 It runs as a fresh executable, separate from the signer and camera, using sealed
 sample input and a bounded anonymous JSON output. No sample hash or full JSON is
 displayed or logged. The signer uses the existing bounded JSON parser to read the
-global `Overall.h_assessed` result; it does not link NIST or jsoncpp.
+global `Overall.hAssessed` JSON result; it does not link NIST or jsoncpp.
 One OpenMP thread is allowed in production; process limits forbid additional
 threads/processes. The assessment has a separate memory/CPU/output budget; scanner
 confinement is not weakened. Cancellation kills and waits for every worker.
 
 Pins, runtime dependencies, measured timings and physical-test limitations are
-recorded with the build and benchmark documentation. Estimates from synthetic
+recorded in [dependencies](DEPENDENCIES.md) and [benchmarks](ENTROPY_BENCHMARKS.md). Estimates from synthetic
 public fixtures are not evidence of camera unpredictability.

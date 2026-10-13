@@ -33,7 +33,7 @@ local approval.
 
 ## Two programs with separate responsibilities
 
-The application uses two Linux processes: running programs with separate memory.
+A QR scan uses two Linux processes: running programs with separate memory.
 
 - **Scanner (`thunderden-scanner`):** opens the camera, converts its images, reads
   QR codes and assembles animated QR messages. It receives no recovery words or
@@ -87,10 +87,44 @@ The image's Linux kernel has networking disabled entirely. Landlock enforcement
 uses the kernel API directly. If the required protection is unavailable, the
 scanner refuses to scan.
 
-Only the scanner loads ZBar, libv4l and JPEG decoding libraries. Its executable
+Only the QR scanner loads ZBar. Camera workers load libv4l and its JPEG dependency;
+the entropy worker disables conversion and requests native sample formats. The QR scanner's executable
 contains no key-session, signing, keyboard or screen-rendering implementation.
 The image includes only the required BusyBox startup/shutdown helpers, and image
 checks reject executables that grant extra user or group privileges.
+
+## Entropy workers
+
+Experimental [recovery-word generation](ENTROPY.md) uses a fresh
+`thunderden-camera-entropy` process and a separate `thunderden-assess` process.
+They run before manual input or the final system-randomness request. Both have
+fresh address spaces, fixed environments, separate sessions and closed inherited
+keyboard/display descriptors. They cannot read the parent's memory, control its
+terminal or approve an action. All workers are killed if necessary and reaped
+before camera review, physical input or recovery-word display.
+
+The camera uses the existing 256 MiB scanner confinement policy. Its binary pipe
+has a BE32 kind and BE32 byte length: profile (17 bytes), frame count (4), samples
+(at most 65,536 per record), or completion flags (4). The parent validates the
+profile, bounds the complete sample stream to 64 MiB and requires complete
+records for its ten-second activity deadline. Capture has a separate elapsed
+budget; the complete capture/assessment operation has a 120-second wall limit.
+
+The assessment wrapper first checks two anonymous RAM-file descriptors. Input is
+sealed against writes, growth and shrinkage; the output is capped at 64 KiB.
+The official program can reopen `/proc/self/fd/3` and `/proc/self/fd/4`: Landlock
+retains anonymous-file descriptor access without allowing normal filesystem
+reads or adding a `/proc` exception. It receives only the camera prefix. The
+parent accepts a complete, finite, correctly sized overall result with coherent
+exit status; the upstream constant-alphabet failure is a distinct zero diagnostic.
+The input hash and full JSON stay off the screen and out of logs.
+
+Assessment limits are 512 MiB virtual address space, 120 CPU seconds, 64 open
+descriptors and zero additional processes/threads. OpenMP is fixed to one thread;
+the OS process limit enforces the boundary. This does not relax the QR scanner's
+limits. Failed, frozen, saturated or timed-out camera attempts are discarded; the
+user can explicitly omit the optional source or start a new attempt. Partial
+statistics are never treated as a complete assessment.
 
 ## Scope and practical limits
 
