@@ -92,6 +92,18 @@ ReviewLines PolicyReview(const Policy& policy, const Keys& keys)
     return lines;
 }
 
+ReviewLines AddressReview(const Policy& policy, const Keys& keys, Position position, const std::string& address)
+{
+    const bool standard = policy.IsDefault(keys);
+    ReviewLines lines{"Network: " + NetworkName(Params().GetChainType()),
+        standard ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name()};
+    if (standard) lines.push_back("Address type: " + AccountType(policy.KeyInformation()[0].origin[0] & 0x7fffffff));
+    lines.insert(lines.end(), {
+        std::string(position.branch ? "Change" : "Receiving") + " address - number " + std::to_string(position.index),
+        address});
+    return lines;
+}
+
 bool HasHighChangeIndex(const TransactionReview& review)
 {
     return std::any_of(review.outputs.begin(), review.outputs.end(), [](const auto& output) {

@@ -8,8 +8,8 @@ codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
 before you use it. Its own signer and scanner code, build scripts, boot settings
-and image checks total only around 4,600 lines. We keep that code clear, with
-few dependencies and a simple build process.
+and image-content/assembly checks total about 4,900 lines, including comments and
+blank lines. We keep that code clear, with few dependencies and a simple build process.
 
 Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
 designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key

@@ -121,6 +121,11 @@ validation work; current coverage is listed in [Implementation status](STATUS.md
   and zero width, height and payload size. The signer maps these codes to its own
   messages; decoder-provided text is never displayed.
   Nonblocking reads use a maximum 50 ms poll interval.
+- Plain address records are bounded to a 512-byte text payload plus CBOR framing.
+  The scanner preserves address case and returns an untrusted proposal; the signer
+  separately checks URI syntax, the Bitcoin destination and public script matches.
+  Address searching runs after the camera worker has exited and can be stopped
+  between public derivations. It does not call signing operations.
 - Per-scanner resource limits are 256 MiB of address space, 64 file descriptors
   and no additional child processes or threads. A parent-side ten-second
   no-frame deadline covers startup and stalled capture/decoding.

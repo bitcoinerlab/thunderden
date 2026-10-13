@@ -86,11 +86,9 @@ QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAppr
                     CTxDestination destination;
                     Require(ExtractDestination(policy.Script(branch, index), destination), "Invalid address");
                     const auto address = EncodeDestination(destination);
-                    if (!Approve(approve.address, {"Your wallet app is asking you to check this address. Compare the complete address with the one shown in your wallet app.", "",
-                        "Network: " + NetworkName(chain),
-                        policy.IsDefault(keys) ? "Account: " + std::to_string(policy.KeyInformation()[0].origin[2] & 0x7fffffff) : "Wallet: " + policy.Name(),
-                        AddressPosition({static_cast<unsigned>(branch), static_cast<uint32_t>(index)}), address},
-                        PolicyDetails(policy, keys))) status = 1;
+                    auto lines = AddressReview(policy, keys, {static_cast<unsigned>(branch), static_cast<uint32_t>(index)}, address);
+                    lines.insert(lines.begin(), {"Your wallet app is asking you to check this address. Compare the complete address with the one shown in your wallet app.", ""});
+                    if (!Approve(approve.address, lines, PolicyDetails(policy, keys))) status = 1;
                     body.Array(1); body.Text(address);
                 } else {
                     const auto psbt = in.Bytes(ReviewedTransaction::MAX_PSBT_BYTES);

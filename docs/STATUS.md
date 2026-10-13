@@ -246,8 +246,8 @@ in the published preview 5 image.
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` runs eleven suites on Linux/amd64:
-`qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
+`docker compose run --build --rm test` runs twelve suites on Linux/amd64:
+`address-check`, `qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
 `application`, `export-compat`, `terminal`, `camera` and `isolation`.
 Actual native confinement tests require Landlock ABI 6 and are reported as skipped
 on hosts without it; scanner operation never falls back to an unconfined mode.
@@ -270,6 +270,10 @@ native ARM64 test execution remains unverified.
   overlapping derivations, literal-key injection and malformed policies.
 - Wallet-ID vectors with one, two and three keys and a CompactSize boundary.
 - Descriptor/Miniscript parsing and public script derivation through Core.
+- Plain address/payment-URI checks for standard accounts and the loaded multisig
+  wallet: both branches, bounded ranges, exact indices, cancellation/resume and
+  unchanged account/policy selection. Tests cover Base58/Bech32 case, network
+  handling, hostile URI parameters and confined QR-to-parent delivery.
 - BIP44/49/84/86 signing, custom branches, repeated account-key references,
   legacy/wrapped/native multisig and SegWit/Taproot Miniscript.
 - Timelock and hashlock scripts, missing-preimage partial signing, successive

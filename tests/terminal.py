@@ -544,6 +544,123 @@ for columns in (40, 80):
                 assert address in rendered, "Mandatory review did not display the full high-index address"
 print("PASS: high-index change warning, full address, typed approval, cancellation and combined fee/recovery risks on narrow/wide screens")
 
+
+def finish_address(p):
+    p.wait(b"Address matches this wallet")
+    while True:
+        p.wait(b"Esc:")
+        last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        p.send(b"\r")
+        if b"Enter: finish" in last:
+            break
+    output, _ = p.finish(0)
+    address = re.search(rb"EXPECTED (\S+)", output)[1]
+    rendered = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", p.all_text)
+    assert address in rendered and b"before sending." in rendered, "Verified address was truncated or comparison instruction missing"
+    assert b"CHECK FINISHED" in output and b"Type SIGN" not in p.all_text
+    assert b"amount=0.1" not in p.all_text and b"Public%20test" not in p.all_text, "Payment URI text was treated as review data"
+
+
+for rows, columns in ((12, 40), (24, 80)):
+    for mode, branch in (("address-single", b"Receiving"), ("address-change", b"Change"), ("address-incompatible", b"Receiving")):
+        p = Probe(mode, rows=rows, columns=columns)
+        p.enter(b"Account number [0]: ", b"\r")
+        finish_address(p)
+        assert branch + b" address - number 7" in p.all_text and b"Choose wallet" not in p.all_text
+
+p = Probe("address-single")
+p.enter(b"Account number [0]: ", b"abc\r")
+p.wait(b"Enter a number from 0 to 100.")
+p.enter(b"Account number [0]: ", b"101\r")
+p.wait(b"Enter a number from 0 to 100.")
+p.enter(b"Account number [0]: ", b"\r")
+finish_address(p)
+
+for mode, action in (("address-account", b"2"), ("address-late", b"1"), ("address-high", b"3")):
+    p = Probe(mode, rows=16, columns=40)
+    p.enter(b"Account number [0]: ", b"\r")
+    p.wait(b"No match: 0-999")
+    p.enter(b"Enter/1-3: Select", action)
+    if mode == "address-account":
+        p.enter(b"Account number [0]: ", b"7\r")
+    elif mode == "address-high":
+        p.enter(b"Address number [0]: ", b"2147483648\r")
+        p.wait(b"Enter a number from 0 to 2147483647.")
+        p.enter(b"Address number [0]: ", b"2147483647\r")
+    finish_address(p)
+    assert b"No match in all" not in p.all_text
+
+p = Probe("address-wrong")
+p.enter(b"Account number [0]: ", b"\r")
+p.wait(b"No match: 0-999")
+p.enter(b"Enter/1-3: Select", b"3")
+p.enter(b"Address number [0]: ", b"7\r")
+p.wait(b"No match: 7-7")
+p.enter(b"Esc:", b"\x1b")
+p.finish(2)
+assert b"Address matches this wallet" not in p.all_text and b"Wallet setup needed" not in p.all_text
+
+for mode in ("address-multisig", "address-multisig-change"):
+    p = Probe(mode, rows=12, columns=40)
+    p.enter(b"Enter: start checking", b"\r")
+    finish_address(p)
+    assert b"Account number [0]" not in p.all_text and b"Type REGISTER" not in p.all_text
+    assert (b"Change" if mode.endswith("change") else b"Receiving") + b" address - number 7" in p.all_text
+
+for mode, choice in (("address-ambiguous", b"1"), ("address-ambiguous-single", b"2")):
+    p = Probe(mode, rows=24)
+    p.wait(b"Choose wallet")
+    p.enter(b"Enter/1-2: Select", choice)
+    if choice == b"2":
+        p.enter(b"Account number [0]: ", b"\r")
+    finish_address(p)
+
+p = Probe("address-unloaded")
+p.wait(b"Wallet setup needed")
+p.enter(b"Enter: go back", b"\r")
+p.finish(0)
+assert b"Checking address number" not in p.all_text
+p = Probe("address-unapproved")
+_, error = p.finish(3)
+assert b"not approved for this seed" in error and b"Address matches" not in p.all_text
+
+# Twenty-key public fixture makes the search long enough to observe incremental
+# updates. It exercises the same synchronous search used on the device.
+for resize in (False, True):
+    p = Probe("address-progress", rows=16, columns=40)
+    p.enter(b"Enter: start checking", b"\r")
+    p.wait(b"Checking address number:")
+    start = p.all_text.rfind(b"\x1b[2J")
+    p.wait(b"\x1b[13;30H")
+    if resize:
+        fcntl.ioctl(p.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 16, 80, 0, 0))
+        _, error = p.finish(3)
+        assert b"screen changed" in error
+        continue
+    p.wait(b"\x1b[13;30H")
+    p.send(b"\x1b")
+    p.wait(b"Search stopped:")
+    search = p.all_text[start:].rsplit(b"\x1b[2J", 1)[0]
+    assert search.count(b"\x1b[2J") == 1 and search.count(b"Receiving and change addresses") == 1, "Search repainted fixed text"
+    numbers = [int(n) for n in re.findall(rb"\x1b\[13;30H *(\d+)", search)]
+    assert len(numbers) >= 2 and numbers[0] == 0 and numbers[-1] > 0, "Index did not advance in place"
+    p.enter(b"Enter/1-2: Select", b"2")
+    p.enter(b"Address number [0]: ", b"\x1b")
+    p.wait(b"Search stopped:")
+    p.enter(b"Enter/1-2: Select", b"1")
+    p.wait(b"Checking address number:")
+    p.wait(b"\x1b[13;30H")
+    p.send(b"\x1b")
+    p.wait(b"Search stopped:")
+    resumed = [int(n) for n in re.findall(rb"\x1b\[13;30H *(\d+)", p.all_text)]
+    assert resumed[-1] >= numbers[-1], "Resume reset the address search"
+    p.enter(b"Esc:", b"q")
+    # Menu cancellation is Esc/Ctrl-C, not arbitrary text; a fresh non-cancel key
+    # above releases the held-Escape latch before leaving the stopped menu.
+    p.send(b"\x1b")
+    p.finish(2)
+print("PASS: address account selection, both branches, multisig, ambiguity, bounded search, exact indices and non-flickering stop/resume")
+
 MNEMONIC = ["abandon"] * 11 + ["about"]
 
 

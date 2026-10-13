@@ -4,6 +4,7 @@
 #include "isolation.h"
 #include "scan.h"
 #include "qr_commands.h"
+#include "address_check.h"
 
 #include <chainparams.h>
 #include <util/strencodings.h>
@@ -128,7 +129,7 @@ int main(int argc, char** argv)
         while (true) {
             const int choice = terminal.Menu("What would you like to do?", {
                 "Scan a QR code", "Share a public key (xpub)", "End session (clear keys)"},
-                "Scan a transaction or request from your wallet app.", false,
+                "Scan an address, transaction or request from your wallet app.", false,
                 loaded_wallet ? "Loaded wallet: " + loaded_wallet->policy.Name() : "");
             if (choice == 2) return 0;
             try {
@@ -159,6 +160,8 @@ int main(int argc, char** argv)
                     };
                     if (message.type == "crypto-psbt") {
                         response = td::SignRequest(terminal, keys(), loaded_wallet, message, [&] { return Scan(terminal); }, approve);
+                    } else if (message.type == "address") {
+                        td::CheckAddress(terminal, keys(), loaded_wallet ? &*loaded_wallet : nullptr, td::UnwrapBytes(message.cbor));
                     } else if (td::IsMultisigSetup(message)) {
                         LoadWallet(terminal, keys(), loaded_wallet, message);
                     } else {

@@ -48,7 +48,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(QR REQUIRED IMPORTED_TARGET libqrencode zbar libv4l2)
 
 add_library(thunderden STATIC src/keys.cpp src/policy.cpp src/transaction.cpp src/transport.cpp src/qr.cpp
-  src/review.cpp src/terminal.cpp src/application.cpp src/wallet_qr.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
+  src/review.cpp src/terminal.cpp src/application.cpp src/address_check.cpp src/wallet_qr.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/scan.cpp src/isolation.cpp)
 target_include_directories(thunderden PUBLIC src "${CORE_SOURCE_DIR}/src"
   "${CORE_SOURCE_DIR}/src/secp256k1/include" "${CMAKE_BINARY_DIR}/core/src"
   PRIVATE "${CMAKE_BINARY_DIR}")
@@ -68,6 +68,11 @@ install(TARGETS thunderden-scanner RUNTIME DESTINATION bin)
 
 if(TD_BUILD_TESTS)
 enable_testing()
+add_executable(address-check-tests tests/address_check.cpp)
+target_link_libraries(address-check-tests PRIVATE thunderden)
+target_compile_options(address-check-tests PRIVATE -Wall -Wextra -Werror)
+target_link_options(address-check-tests PRIVATE -Wl,--wrap=secp256k1_ecdsa_sign -Wl,--wrap=secp256k1_schnorrsig_sign32)
+add_test(NAME address-check COMMAND address-check-tests)
 add_executable(qr-command-runner tests/qr_command_runner.cpp)
 target_link_libraries(qr-command-runner PRIVATE thunderden)
 target_compile_options(qr-command-runner PRIVATE -Wall -Wextra -Werror)

@@ -16,6 +16,7 @@ Custom public-key exports may also use a case-sensitive static text QR.
 | Standard account key | `crypto-account` | One-way, script-typed public cosigner key and origin |
 | Custom public key | Plain text QR or `hdkey` | Public extended key and origin, without script-type assumptions |
 | Multisig setup | `crypto-output`, or text configuration inside `bytes` | Import and locally approve a supported public multisig account |
+| Address check | Plain address or `bitcoin:` URI | Local comparison against a chosen account or loaded multisig; no reply QR |
 
 ## Human-operated exchange
 
@@ -25,6 +26,37 @@ online client to scan. Animated frames are collected automatically within each
 scan. The computers can be repositioned between steps; continuous camera alignment
 is not required. Recovery input stays on the signer and should be completed before
 the online camera is pointed at its screen.
+
+## Plain address checks
+
+A single QR may contain a Bitcoin address or a `bitcoin:` payment URI, up to
+512 printable non-space ASCII bytes. The scheme is case-insensitive; address
+case is preserved for Bitcoin Core validation. Optional URI parameter values
+are ignored and never displayed or treated as payment instructions. Parameter
+names must be plain ASCII URI names; unknown `req-` parameters are rejected.
+This is address extraction and verification, not full payment-URI validation.
+
+The signer validates the destination for its selected network and compares scripts
+derived from one chosen BIP44/49/84/86 account or the already-approved multisig
+wallet in RAM. P2SH can be single-signature or multisig; a P2WSH address needs a
+compatible loaded setup. The standard Taproot check covers BIP86, not arbitrary
+Taproot policies. The selected network never changes; some test networks share
+address formats and cannot be distinguished by an address alone.
+
+The user confirms the account (normally 0) or chooses the loaded wallet. Each run
+checks up to 1,000 indices on both receiving and change branches. **Esc** stops without
+losing the address or position; the menu offers resume/continue, another account
+where applicable, or an exact address number. Indices start at 0 and extend through
+2,147,483,647; standard accounts are limited to 0 through 100. Searches never
+silently switch context or replace the loaded wallet. A range without a match
+does not establish that the address is unrelated to the wallet.
+
+A match displays the complete address, account/wallet, network and receiving/change
+position for comparison with the destination before sending. **d** shows public
+wallet details. Plain checks produce neither a reply QR nor a signature, and
+cannot replace an in-progress multipart UR stream. Structured address commands
+below already supply the policy and index and retain their direct review/reply
+flow. Plain address checks require a source build after preview 6.
 
 ## Standard PSBT exchange
 
@@ -277,6 +309,7 @@ separate from the time allowed to review a request.
 ## Bounds and assembly
 
 - Individual QR text: at most 4,296 ASCII characters.
+- Plain address/payment-URI QR: at most 512 bytes; a single complete frame.
 - Message: at most 2 MiB + 64 KiB of CBOR.
 - Command request: at most 1 MiB + 64 KiB, excluding its CBOR byte-string wrapper.
 - Incoming raw PSBT: at most 1 MiB.

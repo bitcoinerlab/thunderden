@@ -27,6 +27,14 @@ The account path is `m/48h/0h/accounth/2h` on mainnet or
 `m/48h/1h/accounth/2h` on test networks. Standard account export is sufficient;
 the advanced text-xpub workaround is unnecessary with Keeper's Jade profile.
 
+## Check a receiving address
+
+With the current source build, choose **Scan a QR code** on Thunder Den and scan
+Keeper's **Receive** QR. A multisig setup must already be loaded as described below.
+Compare the matched address with the destination before sending. Payment amounts
+in the QR are not checked. See [search controls and limits](PROTOCOL.md#plain-address-checks).
+Plain address checks are not included in the published preview 6 image.
+
 ## Sign: PSBT first, then Vault details
 
 On the first transaction of a session, Keeper's Jade QR PSBT may omit the global

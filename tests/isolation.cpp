@@ -37,6 +37,8 @@ void Header(std::array<uint32_t, 5> header)
 }
 td::QRMessage Message() { return {"bytes", td::CborBytes(std::vector<uint8_t>{1, 2, 3})}; }
 td::QRMessage WalletMessage() { return {"crypto-output", {0xd9, 1, 0x91, 0xd9, 1, 0x97, 0xa2, 1, 2, 2, 0x80}}; }
+const std::string ADDRESS = "bitcoin:1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA?amount=0.1&label=Test";
+td::QRMessage AddressMessage() { return {"address", td::CborBytes({reinterpret_cast<const uint8_t*>(ADDRESS.data()), ADDRESS.size()})}; }
 
 int CameraControl(void*, int, unsigned long request, void* argument)
 {
@@ -75,6 +77,8 @@ int Worker(const std::string& mode)
     if (mode == "progress") { Header({1, 1, 1, 101, 1}); return 0; }
     if (mode == "command") { Header({99, 0, 0, 0, 4}); return 0; }
     if (mode == "wallet-oversize") { Header({5, 0, 0, 0, td::MAX_WALLET_SETUP + 1}); return 0; }
+    if (mode == "address-oversize") { Header({6, 0, 0, 0, td::MAX_ADDRESS_QR + 10}); return 0; }
+    if (mode == "address-geometry") { Header({6, 1, 0, 0, 2}); return 0; }
     if (mode == "bad-failure-code") { Header({4, 0, 0, UINT32_MAX, 0}); return 0; }
     if (mode == "bad-failure-zero") { Header({4, 0, 0, 0, 0}); return 0; }
     if (mode == "bad-failure-geometry") { Header({4, 1, 0, 1, 0}); return 0; }
@@ -115,7 +119,7 @@ int Worker(const std::string& mode)
     // Generate public image data before confinement, then exercise the actual
     // ZBar + UR decode and pipe-write path under the production policy.
     td::URSender sender(mode == "wallet" ? WalletMessage() : Message());
-    td::QRImage qr(sender.Next());
+    td::QRImage qr(mode == "address" ? ADDRESS : sender.Next());
     const unsigned width = (qr.width + 8) * 4;
     std::vector<uint8_t> image(width * width, 255);
     for (int y = 0; y < qr.width; ++y) for (int x = 0; x < qr.width; ++x) {
@@ -185,7 +189,7 @@ int Worker(const std::string& mode)
     else if (mode == "fork") { result = syscall(SYS_clone, SIGCHLD, nullptr, nullptr, nullptr, 0); expected_errno = EAGAIN; }
     else if (mode == "raise-limit") { rlimit unlimited{RLIM_INFINITY, RLIM_INFINITY}; result = syscall(SYS_prlimit64, 0, RLIMIT_AS, &unlimited, nullptr); }
     else {
-        Check(mode == "decode" || mode == "limit" || mode == "mjpeg" || mode == "wallet", "Unknown probe mode");
+        Check(mode == "decode" || mode == "limit" || mode == "mjpeg" || mode == "wallet" || mode == "address", "Unknown probe mode");
         char value;
         Check(read(camera, &value, 1) == 0, "Previously opened device became unreadable");
         Check(ioctl(camera, FIONREAD, &result) == -1 && errno == ENOTTY, "Previously opened device ioctl was blocked");
@@ -232,14 +236,15 @@ void Parent(const std::string& executable)
             std::filesystem::create_symlink(executable, link);
             return link.string();
         };
-        for (const auto mode : {"decode", "limit", "bytewise", "mjpeg", "wallet"}) {
+        for (const auto mode : {"decode", "limit", "bytewise", "mjpeg", "wallet", "address"}) {
             td::ScanProcess process(path(mode));
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             bool complete = false;
             while (!complete && std::chrono::steady_clock::now() < deadline) {
                 if (auto update = process.Poll()) {
                     if (update->message) {
-                        const auto expected = std::string_view(mode) == "wallet" ? WalletMessage() : Message();
+                        const auto expected = std::string_view(mode) == "wallet" ? WalletMessage()
+                            : std::string_view(mode) == "address" ? AddressMessage() : Message();
                         Check(update->message->type == expected.type && update->message->cbor == expected.cbor, "Result changed across process boundary");
                         complete = true;
                     } else {
@@ -249,7 +254,7 @@ void Parent(const std::string& executable)
             }
             Check(complete, "Worker failed to return a result");
         }
-        for (const auto mode : {"oversize", "wallet-oversize", "geometry", "progress", "command", "truncated", "partial-header",
+        for (const auto mode : {"oversize", "wallet-oversize", "address-oversize", "address-geometry", "geometry", "progress", "command", "truncated", "partial-header",
                 "bad-failure-code", "bad-failure-zero", "bad-failure-geometry", "bad-failure-payload"}) {
             bool rejected = false;
             td::ScanProcess process(path(mode));
@@ -266,7 +271,7 @@ void Parent(const std::string& executable)
                 {"failure-4", "Scanner isolation setup failed"},
                 {"failure-5", "Camera frame capture failed; retry the scan"},
                 {"failure-6", "QR image decoding failed"},
-                {"failure-7", "Invalid or unsupported UR v2 request"},
+                {"failure-7", "Invalid or unsupported QR data"},
                 {"unexpected-exit", "Camera/QR worker exited unexpectedly; retry the scan"}}}) {
             td::ScanProcess process(path(mode));
             bool reported = false;

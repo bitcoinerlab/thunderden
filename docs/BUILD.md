@@ -27,19 +27,23 @@ docker compose run --build --name thunderden-image-build image
 This builds the signer and its bootable Linux system. The first build also compiles
 the toolchain and dependencies, so allow plenty of time. Later builds reuse caches.
 
-Once it finishes successfully, copy the image and its checksum to your current
-folder, then remove the finished container:
+Once it finishes successfully, copy the image, checksum and file inventory to
+`out/latest/`:
 
 ```sh
-docker cp thunderden-image-build:/cache/out/images/thunderden.img .
-docker cp thunderden-image-build:/cache/out/images/thunderden.img.sha256 .
-docker rm thunderden-image-build
+mkdir -p out/latest
+docker cp thunderden-image-build:/cache/out/images/thunderden.img out/latest/
+docker cp thunderden-image-build:/cache/out/images/thunderden.img.sha256 out/latest/
+docker cp thunderden-image-build:/cache/out/images/installed-files.json out/latest/
 ```
+
+`out/latest/thunderden.img` is your last copied local build. Repeat these copy
+commands after each successful build to update it.
 
 #### Verify the image
 
 Put `thunderden.img` and `thunderden.img.sha256` in the same folder, then open a
-terminal in that folder:
+terminal in that folder (`out/latest/` for a local build):
 
 - **Linux:** `sha256sum -c thunderden.img.sha256`
 - **macOS:** `shasum -a 256 -c thunderden.img.sha256`
@@ -47,7 +51,13 @@ terminal in that folder:
   compare the `Hash` value with the hash in `thunderden.img.sha256`.
 
 Linux and macOS should report `thunderden.img: OK`. If the hash does not match,
-download the image again before writing it to USB.
+copy or download the image again before writing it to USB.
+
+After verifying a local build, remove the finished container:
+
+```sh
+docker rm thunderden-image-build
+```
 
 ### 2. Write it to a USB drive
 
@@ -114,12 +124,7 @@ Source versions and checksums are pinned in `.env`.
 
 The image build checks source integrity, kernel settings, installed files and
 repeatable disk-image assembly. It also creates `installed-files.json`, a list of
-the files and hashes inside the boot system. To save it, run this before removing
-the build container:
-
-```sh
-docker cp thunderden-image-build:/cache/out/images/installed-files.json .
-```
+the files and hashes inside the boot system, copied alongside the image above.
 
 ## Write the USB from Linux
 
@@ -133,6 +138,9 @@ In the commands below, replace `/dev/sdX` with the **whole USB device**, such as
 `/dev/sdb`, not a partition such as `/dev/sdb1`. Unmount any mounted partitions
 listed for that USB first, for example with `sudo umount /dev/sdb1`.
 **The write command overwrites the selected drive.**
+
+Run these commands from the folder containing the verified image (`out/latest/`
+for a local build):
 
 ```sh
 sudo dd if=thunderden.img of=/dev/sdX bs=4M conv=fsync status=progress
@@ -227,8 +235,8 @@ commands require a Linux host with QEMU, a built USB image and the Docker test
 image from the software-test command above.
 
 ```sh
-python3 tests/boot.py thunderden.img /tmp/thunderden-bios
-python3 tests/boot.py thunderden.img /tmp/thunderden-uefi --firmware /path/to/OVMF.fd
+python3 tests/boot.py out/latest/thunderden.img /tmp/thunderden-bios
+python3 tests/boot.py out/latest/thunderden.img /tmp/thunderden-uefi --firmware /path/to/OVMF.fd
 ```
 
 The first command tests BIOS boot; the second tests UEFI boot using a combined

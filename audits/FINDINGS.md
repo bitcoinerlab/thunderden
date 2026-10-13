@@ -19,7 +19,7 @@ reviewer. **Unreviewed** means a project disposition has not yet been recorded.
 | ID | Finding | Report priority | Source | Status | Decision / evidence |
 | --- | --- | --- | --- | --- | --- |
 | TD-001 | Compact multi-input SegWit signing can conceal a higher real fee | High | [2026-10-12 / F-01](2026-10-12-gpt-6-astra-a5c2f5c.md#f-01--compact-multi-input-segwit-fee-attack-remains-possible) | Unreviewed | Report cites an existing executable attack regression and an intentional compatibility tradeoff. Assess the signing-policy recommendation. |
-| TD-002 | Direct wallet workflows lack general trusted receive-address verification | High | [2026-10-12 / F-02](2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows) | Unreviewed | Report identifies a gap in direct Sparrow/Keeper workflows and distinguishes it from address display through the custom command protocol. |
+| TD-002 | Direct wallet workflows lack general trusted receive-address verification | High | [2026-10-12 / F-02](2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows) | Open | Address-QR verification implemented and tested in the working tree. [Decision and verification](#td-002--direct-address-verification); fix commit and physical trial pending. |
 | TD-003 | High-index change lacks mandatory recovery-risk disclosure | Medium | [2026-10-12 / F-03](2026-10-12-gpt-6-astra-a5c2f5c.md#f-03--high-index-change-can-make-ordinary-recovery-miss-funds) | Resolved | Fixed in [`f93b234`](https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6). [Decision and verification](#td-003--change-index-disclosure). |
 | TD-004 | Documented Liana/bridge installation follows moving versions | Medium | [2026-10-12 / F-04](2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow) | Resolved | Fixed in [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e). [Decision and verification](#td-004--pinned-online-installation). |
 | TD-005 | Unsigned boot and laptop/firmware trust can defeat signer protections | High impact, conditional | [2026-10-12 / L-01](2026-10-12-gpt-6-astra-a5c2f5c.md#l-01--unsigned-boot-and-general-purpose-laptop-trust-remain-critical) | Unreviewed | Report describes an architectural limitation; no physical exploit was attempted. Assess the supported trust boundary and proposed improvements. |
@@ -97,3 +97,40 @@ in [STATUS.md](../docs/STATUS.md#liana-integration).
 **Fix commit:** [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e)
 (`docs: pin Liana integration installation versions`). TD-004 is resolved at this
 documentation revision. The original audit is unchanged.
+
+## TD-002 — Direct address verification
+
+**Decision (2026-10-12):** accept plain address QRs and the address portion of
+`bitcoin:` payment URIs through the existing scanner. Check one explicitly
+selected standard account or the compatible multisig wallet already approved in
+RAM. Search both receiving and change branches in 1,000-index windows, with a
+stable progress display, stop/resume, account selection and exact-index lookup.
+The [protocol guide](../docs/PROTOCOL.md#plain-address-checks) describes supported contexts and limits.
+
+The signer independently validates the destination and compares public scripts
+derived by Bitcoin Core. URI amounts/labels are not payment instructions. A
+successful result displays the full address for comparison with the destination
+before sending. A range without a match does not imply the address is unrelated
+to the wallet. Existing authenticated policy/index requests retain their direct
+verification and reply flow; no new policy-loading or signing path is added.
+
+**Verification:** all 12 native suites passed on 2026-10-12 with
+`docker compose --progress quiet run --build --rm test` (28.33 seconds; none
+skipped). [`tests/address_check.cpp`](../tests/address_check.cpp) covers standard
+account types, all selected networks, both branches, wrong accounts/seeds,
+Base58/Bech32 case, URI bounds/required parameters, range boundaries and all
+supported multisig wrappers. ECDSA/Schnorr signing functions are trapped in that
+test executable. [`tests/isolation.cpp`](../tests/isolation.cpp) exercises confined
+address-QR decoding and bounded IPC. [`tests/terminal.py`](../tests/terminal.py)
+covers full-address display, setup/approval checks, ambiguity, stop/resume,
+exact-number entry, resize handling and numeric-only progress updates.
+
+The test image passed installed-content/kernel checks, source-snapshot comparison,
+repeat assembly and BIOS/UEFI boot/account-export checks. Its inventory contains
+no OCR executable, models or OpenCV. The public fixture producer
+`address-check-tests --fixtures` supplies 12-word regtest examples and two multisig
+setup QRs for a physical trial; every generated QR matrix is decoded before export.
+
+Implementation and test evidence are recorded; the fix commit and physical-camera
+trial are pending. Keep this entry Open until the fix commit is recorded. The
+original report is unchanged.

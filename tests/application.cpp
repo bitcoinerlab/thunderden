@@ -114,7 +114,7 @@ void Registration(const td::Keys& keys)
     for (const bool accept : {false, true}) {
         Check(Status(td::HandleQRRequest(Message(address_request.data), keys, {{}, {}, [&](const auto& lines, const auto& details) {
             Check(Contains(lines, "Wallet: Savings") && Contains(lines, "Network: Regtest")
-                && Contains(lines, "Change address (index 7)") && Contains(lines, EncodeDestination(destination)),
+                && Contains(lines, "Change address - number 7") && Contains(lines, EncodeDestination(destination)),
                 "Address summary lost the wallet, network, position or full address");
             Check(!Contains(lines, "Wallet ID: " + HexStr(id)) && !Contains(lines, policy.DescriptorText()),
                 "Technical wallet identity belongs in address details");

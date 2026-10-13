@@ -53,6 +53,20 @@ bool URReceiver::Receive(std::string frame)
 {
     Require(!result_, "Scan is already complete");
     Require(!frame.empty() && frame.size() <= MAX_QR_TEXT, "QR text size limit exceeded");
+    auto prefix = frame.substr(0, 8);
+    for (auto& c : prefix) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+    if (!prefix.starts_with("ur:")) {
+        Require(type_.empty(), "Address conflicts with multipart scan");
+        Require(frame.size() <= MAX_ADDRESS_QR && std::all_of(frame.begin(), frame.end(), [](unsigned char c) {
+            return c >= 33 && c <= 126;
+        }), "Invalid address QR text");
+        Require(prefix.starts_with("bitcoin:") || prefix.starts_with("bc1") || prefix.starts_with("tb1")
+            || prefix.starts_with("bcrt1") || std::string_view("13mn2").find(frame.front()) != std::string_view::npos,
+            "Unsupported QR data");
+        // Preserve Base58 case. The signer independently validates the address/URI.
+        result_ = QRMessage{"address", CborBytes({reinterpret_cast<const uint8_t*>(frame.data()), frame.size()})};
+        return true;
+    }
     for (char& c : frame) {
         Require((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
             || c == ':' || c == '/' || c == '-', "Invalid UR character");

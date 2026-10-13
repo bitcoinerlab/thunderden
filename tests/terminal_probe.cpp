@@ -1,5 +1,7 @@
 #include "terminal.h"
+#include "address_check.h"
 #include "multisig_fixture.h"
+#include <key_io.h>
 #include <util/strencodings.h>
 #include <unistd.h>
 #include <cstdio>
@@ -9,6 +11,40 @@ int main(int argc, char** argv)
 {
     try {
         td::Terminal terminal(dup(STDIN_FILENO));
+        if (argc == 2 && std::string_view(argv[1]).starts_with("address-")) {
+            const std::string mode(argv[1]);
+            ECC_Context context; SelectParams(ChainType::REGTEST); terminal.SetNetwork("Regtest");
+            td::Keys keys(fixture::Bytes(fixture::WORDS), {}), other(fixture::Bytes(fixture::WORDS), fixture::Bytes("cosigner"));
+            const unsigned purpose = mode == "address-ambiguous-single" ? 49 : 84;
+            auto policy = td::DefaultPolicy(mode == "address-wrong" ? other : keys, purpose, mode == "address-account" ? 7 : 0);
+            std::optional<td::ApprovedWallet> loaded;
+            if (mode.find("multisig") != mode.npos || mode.find("ambiguous") != mode.npos || mode == "address-unloaded"
+                || mode == "address-unapproved" || mode == "address-progress" || mode == "address-incompatible") {
+                const unsigned kind = mode.find("ambiguous") != mode.npos || mode == "address-incompatible" ? 1 : 2;
+                std::vector<const td::Keys*> signers{&keys, &other};
+                std::vector<td::Path> paths{fixture::Path(kind), fixture::Path(kind, 7)};
+                if (mode == "address-progress") {
+                    signers.assign(20, &keys); paths.clear();
+                    for (unsigned i = 0; i < 20; ++i) paths.push_back(fixture::Path(kind, i));
+                }
+                auto multi = td::ImportMultisig(fixture::Setup(kind, 2, signers, paths));
+                if (mode != "address-ambiguous-single" && mode != "address-incompatible") policy = multi;
+                if (mode != "address-unloaded") loaded.emplace(td::ApprovedWallet{multi,
+                    mode == "address-unapproved" ? td::Digest{} : keys.RegistrationTag(multi.ID())});
+            }
+            const unsigned branch = mode.find("change") != mode.npos ? 1 : 0;
+            const uint32_t index = mode == "address-late" ? 1007 : mode == "address-high" ? 0x7fffffff
+                : mode == "address-progress" ? 1000000000 : 7;
+            CTxDestination destination;
+            td::Require(ExtractDestination(policy.Script(branch, index), destination), "No fixture address");
+            const auto address = EncodeDestination(destination);
+            std::printf("EXPECTED %s\n", address.c_str());
+            const auto before = loaded ? std::optional{loaded->policy.ID()} : std::nullopt;
+            td::CheckAddress(terminal, keys, loaded ? &*loaded : nullptr, fixture::Bytes("bitcoin:" + address + "?amount=0.1&label=Public%20test"));
+            td::Require(!before || (loaded->policy.ID() == *before && keys.VerifyTag(*before, loaded->proof)), "Address check changed the loaded wallet");
+            std::puts("CHECK FINISHED");
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]).starts_with("workflow-")) {
             const std::string mode = argv[1];
             ECC_Context context;

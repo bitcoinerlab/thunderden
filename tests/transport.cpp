@@ -111,6 +111,9 @@ void Adversarial()
     td::URReceiver active;
     active.Receive(GOLDEN[0]);
     const auto progress = active.Progress();
+    Reject([&] { active.Receive("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"); });
+    Check(active.Progress() == progress && !active.Result(), "An address replaced a multipart request");
+    Reject([] { td::URReceiver{}.Receive("bitcoin:" + std::string(td::MAX_ADDRESS_QR, 'a')); });
     for (int i = 0; i < 5000; ++i) Check(!active.Receive(GOLDEN[0]), "Duplicate consumed work");
     Check(active.Progress() == progress, "Duplicate changed progress");
     Reject([&] { active.Receive(SINGLE); });
