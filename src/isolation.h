@@ -7,4 +7,5 @@ void PrepareSigner();
 void LockProcess();
 // Apply only after opening the camera, before reading any image data.
 void ConfineScanner();
+void ConfineAssessment();
 }

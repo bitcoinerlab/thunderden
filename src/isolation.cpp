@@ -46,11 +46,12 @@ void PrepareSigner()
     LockProcess();
 }
 
-void ConfineScanner()
+namespace {
+void ConfineWorker(rlim_t memory_bytes)
 {
     Require(syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION) >= 6,
         "Scanner requires Landlock ABI 6 or later");
-    const rlimit memory{256 * 1024 * 1024, 256 * 1024 * 1024}, files{64, 64}, children{0, 0};
+    const rlimit memory{memory_bytes, memory_bytes}, files{64, 64}, children{0, 0};
     Require(setrlimit(RLIMIT_AS, &memory) == 0 && setrlimit(RLIMIT_NOFILE, &files) == 0
         && setrlimit(RLIMIT_NPROC, &children) == 0,
         "Cannot bound scanner resources");
@@ -72,5 +73,15 @@ void ConfineScanner()
     const int status = syscall(SYS_landlock_restrict_self, fd, 0);
     close(fd);
     Require(status == 0, "Cannot confine scanner");
+}
+}
+
+void ConfineScanner() { ConfineWorker(256 * 1024 * 1024); }
+
+void ConfineAssessment()
+{
+    const rlimit cpu{120, 120}, output{65536, 65536};
+    Require(setrlimit(RLIMIT_CPU, &cpu) == 0 && setrlimit(RLIMIT_FSIZE, &output) == 0, "Cannot bound assessment resources");
+    ConfineWorker(512 * 1024 * 1024);
 }
 }

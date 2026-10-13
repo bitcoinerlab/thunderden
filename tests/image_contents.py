@@ -19,7 +19,7 @@ for symbol in (
 ):
     assert not re.search(rf'^CONFIG_{symbol}=[ym]$', config, re.M), symbol + " unexpectedly enabled"
 for symbol in ("X86_64", "USB_VIDEO_CLASS", "USB_HID", "VT", "FRAMEBUFFER_CONSOLE", "DEVTMPFS", "TMPFS", "SECURITY_LANDLOCK",
-               "FONT_8x16", "FONT_TER10x18", "FONT_TER16x32"):
+               "FONT_8x16", "FONT_TER10x18", "FONT_TER16x32", "MEMFD_CREATE"):
     assert f"CONFIG_{symbol}=y" in config, symbol + " missing"
 assert 'CONFIG_LSM="landlock"' in config
 
@@ -27,7 +27,9 @@ forbidden = {
     "bitcoind", "bitcoin-cli", "bitcoin-wallet", "bitcoin-node", "python", "python3",
     "gcc", "g++", "cmake", "strace", "thunderden-tests", "transaction-tests", "transport-tests",
     "application-tests", "terminal-probe", "qr-image-probe", "core-key-probe", "core-key-edges",
-    "isolation-tests", "camera-tests", "address-check-tests",
+    "isolation-tests", "camera-tests", "address-check-tests", "entropy-tests", "ea_non_iid",
+    "entropy-camera-tests", "entropy-worker-tests", "entropy-benchmark", "entropy-guest-tests", "entropy-confined",
+    "bzip2", "bunzip2", "bzcat", "ea_iid", "ea_restart", "ea_conditioning", "ea_transpose",
 }
 for path in sorted(target.rglob("*")):
     relative = str(path.relative_to(target))
@@ -37,7 +39,7 @@ for path in sorted(target.rglob("*")):
 binary = target / "usr/bin/thunderden-signer"
 assert binary.is_file() and os.access(binary, os.X_OK)
 assert (target / "usr/bin/thunderden-scanner").is_file()
-for program in ("thunderden-signer", "thunderden-scanner"):
+for program in ("thunderden-signer", "thunderden-scanner", "thunderden-camera-entropy", "thunderden-assess"):
     header = subprocess.check_output(["readelf", "-h", target / "usr/bin" / program], text=True)
     assert re.search(r"Machine:\s+Advanced Micro Devices X86-64", header), program + " must target x86-64"
 assert not (target / "etc/init.d").exists()

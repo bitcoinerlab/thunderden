@@ -70,15 +70,24 @@ void Terminal::BackupWords(std::span<const unsigned char> mnemonic)
 SecretBytes NewMnemonic(Terminal& terminal)
 {
     const unsigned words = terminal.Menu("Generate recovery words", {"12 words", "24 words"}) == 0 ? 12 : 24;
+    const bool use_camera = terminal.Menu("Add camera samples?", {"No camera", "Use camera"}) == 1;
     const auto source = static_cast<ManualSource>(terminal.Menu("Add physical randomness?",
         {"No physical input", "Coin tosses", "Coin pairs (von Neumann)", "Six-sided die"}, "System randomness is always included."));
-    SecretBytes manual;
+    SecretBytes camera, manual;
+    while (use_camera) {
+        try { camera = terminal.CameraEntropy(); break; }
+        catch (const std::exception& error) {
+            if (terminal.Menu("Camera not included", {"Continue without camera", "Try camera again"},
+                std::string(error.what()) + ". No camera samples will be used.", true, {}, true) == 0) break;
+        }
+    }
     if (source != ManualSource::None) manual = ManualContribution(source, terminal.ManualEntropy(source, words));
     if (!terminal.Confirm("Ready to generate", {"Recovery words: " + std::to_string(words), "System randomness: included",
-        source == ManualSource::None ? "Physical input: not selected" : "Physical input: included", "",
+        source == ManualSource::None ? "Physical input: not selected" : "Physical input: included",
+        !camera.empty() ? "Camera: included" : use_camera ? "Camera: omitted after failure" : "Camera: not selected", "",
         "The next screen shows your new recovery words. Keep it private and write every word down.", "",
         "You will re-enter the words to check your backup before using the wallet."}, "generate words")) throw Cancelled{};
-    auto mnemonic = GenerateMnemonic(words, {}, source, manual);
+    auto mnemonic = GenerateMnemonic(words, camera, source, manual);
     while (true) {
         terminal.BackupWords(mnemonic);
         if (!terminal.Confirm("Check your backup", {"Enter the words from your written backup in the same order."}, "enter your words")) throw Cancelled{};

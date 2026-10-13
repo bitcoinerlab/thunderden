@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory() as directory:
 
 application = Path(sys.argv[2])
 app_symbols = subprocess.check_output(["nm", "-C", "--defined-only", application], text=True)
-for absent in ("CConnman::", "PeerManager", "CRPCTable::", "HTTPServer", "CWallet::", "leveldb::", "__wrap_secp256k1"):
+for absent in ("CConnman::", "PeerManager", "CRPCTable::", "HTTPServer", "CWallet::", "leveldb::", "__wrap_secp256k1", "__wrap__Z18GetStrongRandBytes", "NistMain"):
     assert absent not in app_symbols, absent
 closure = subprocess.check_output(["ldd", application], text=True)
 allowed = {
@@ -85,3 +85,16 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["strip", "--strip-unneeded", "-o", stripped, scanner], check=True)
     print(f"Stripped scanner: {stripped.stat().st_size} bytes", flush=True)
 print("PASS: image decoders absent from signer closure; key/signing/UI implementations absent from scanner", flush=True)
+
+for program in ("thunderden-camera-entropy", "thunderden-assess"):
+    worker = application.with_name(program)
+    symbols = subprocess.check_output(["nm", "-C", "--defined-only", worker], text=True)
+    for absent in ("td::Keys::", "SignPSBTInput", "td::Terminal::", "td::Display::", "td::GenerateMnemonic", "GetStrongRandBytes"):
+        assert absent not in symbols, (program, absent)
+    closure = subprocess.check_output(["ldd", worker], text=True)
+    assert "not found" not in closure and "libzbar" not in closure, closure
+    if program == "thunderden-camera-entropy":
+        assert "libjsoncpp" not in closure and "libgomp" not in closure, closure
+    else:
+        assert "libv4l" not in closure and "libjpeg" not in closure and "libbz2" not in closure, closure
+print("PASS: entropy workers contain no signing/generation/UI code and only their required library closures", flush=True)

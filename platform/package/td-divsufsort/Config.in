@@ -1,0 +1,2 @@
+config BR2_PACKAGE_TD_DIVSUFSORT
+	bool "libdivsufsort (entropy assessment)"

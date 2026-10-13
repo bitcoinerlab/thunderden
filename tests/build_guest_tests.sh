@@ -10,4 +10,4 @@ cmake -S /work -B /cache/out/validation \
     -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DTD_BUILD_TESTS=ON \
     -DCORE_SOURCE_DIR=/opt/bitcoin -DUR_SOURCE_DIR=/opt/bc-ur \
     -DBIP39_WORDLIST=/opt/bip39-english.txt -DBIP39_WORDLIST_SHA256="$BIP39_WORDLIST_SHA256"
-cmake --build /cache/out/validation --parallel 2 --target isolation-tests
+cmake --build /cache/out/validation --parallel 2 --target "${1:-isolation-tests}"

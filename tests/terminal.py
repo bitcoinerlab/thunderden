@@ -52,8 +52,8 @@ class Probe:
         self.all_text = b""
         probes.append(self)
 
-    def wait(self, text):
-        deadline = time.monotonic() + 5
+    def wait(self, text, timeout=5):
+        deadline = time.monotonic() + timeout
         while text not in self.screen:
             assert time.monotonic() < deadline, (text, self.screen)
             if select.select([self.master], [], [], 0.1)[0]:
@@ -737,9 +737,10 @@ for mode, entered, expected in (
     assert bytes.fromhex(output.decode().strip()) == expected
 
 
-def start_generation(p, words=12):
+def start_generation(p, words=12, camera=False, manual=b"1"):
     address_action(p, b"Enter/1-2: Select", b"1" if words == 12 else b"2")
-    address_action(p, b"Enter/1-4: Select", b"1")
+    address_action(p, b"Enter/1-2: Select", b"2" if camera else b"1")
+    address_action(p, b"Enter/1-4: Select", manual)
 
 
 def copy_backup(p):
@@ -786,6 +787,50 @@ output, _ = p.process.communicate(timeout=5)
 assert p.process.returncode == 91 and not output
 assert b"Write down your recovery words" not in p.all_text, "RNG failure exposed a fallback mnemonic"
 print("PASS: manual outcomes, corrections, pair extraction, private backup verification, cancellation and fatal RNG failure")
+
+for scenario in ("valid", "constant", "frozen", "bad-header", "stalled-capture", "cancel-assessment", "timeout-assessment"):
+    # Build-time hardlinks keep fixtures executable on the read-only test image;
+    # the writable /tmp mount deliberately remains noexec.
+    probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
+    p = Probe("entropy-generate", executable=str(probe), rows=40)
+    start_generation(p, camera=True, manual=b"4" if scenario == "valid" else b"1")
+    address_action(p, b"Enter: start capture")
+    children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
+    if scenario == "cancel-assessment":
+        p.wait(b"Capture: complete")
+        pids = children.read_text().split()
+        assert pids
+        p.send(b"\x1b")
+        p.finish(2)
+        assert all(not Path(f"/proc/{pid}").exists() for pid in pids), "Cancelled assessment left a worker alive"
+        continue
+    if scenario == "valid":
+        p.wait(b"Statistical estimate", timeout=130)
+        assert not children.read_text().strip(), "Workers survived into camera review"
+        address_action(p, b"Enter: include camera samples")
+        address_action(p, b"Enter: start collecting")
+        p.wait(b"Rolls:")
+        assert not children.read_text().strip(), "Manual input began with a worker alive"
+        p.send(b"1" * 64)
+        p.enter(b"Enter: Finish collection", b"\r")
+        address_action(p, b"Enter: generate words")
+        backup = copy_backup(p)
+        address_action(p, b"Enter: enter your words")
+        for index, value in enumerate(backup, 1):
+            word(p, index, 12, value)
+        output, _ = p.finish(0)
+        assert b"BACKUP VERIFIED" in output
+    else:
+        p.wait(b"Camera not included", timeout=135)
+        assert not children.read_text().strip(), "Failed camera attempt left a worker alive"
+        address_action(p, b"Enter/1-2: Select", b"1")
+        p.wait(b"Camera: omitted after failure")
+        address_action(p, b"Enter: generate words", b"\x1b")
+        p.finish(2)
+        if scenario == "timeout-assessment":
+            assert b"assessment timed out" in p.all_text
+    assert b"sha256" not in p.all_text and b"commandline" not in p.all_text, "Estimator metadata leaked onto the terminal"
+print("PASS: complete camera/NIST/manual generation, malformed streams, constant samples, stalls, cancellation and total timeout")
 
 
 # Exercise the actual application with a controlling tty. The test container has

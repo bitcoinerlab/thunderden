@@ -12,6 +12,7 @@ import tempfile
 parser = argparse.ArgumentParser()
 parser.add_argument("kernel", type=Path)
 parser.add_argument("test_binary", type=Path)
+parser.add_argument("--entropy", action="store_true", help="Run the entropy assessment/generation guest probe")
 args = parser.parse_args()
 with tempfile.TemporaryDirectory(prefix="thunderden-isolation-") as directory:
     root = Path(directory)
@@ -41,7 +42,11 @@ exec /sbin/poweroff -f
     result = subprocess.run(["qemu-system-x86_64", "-m", "1024", "-smp", "2", "-cpu", "qemu64",
                              "-kernel", str(args.kernel.resolve()), "-initrd", str(overlay),
                              "-append", "console=ttyS0 loglevel=3", "-display", "none", "-serial", "stdio",
-                             "-nic", "none", "-no-reboot"], capture_output=True, timeout=90)
+                             "-device", "virtio-rng-pci", "-nic", "none", "-no-reboot"], capture_output=True, timeout=180 if args.entropy else 90)
     text = result.stdout.decode(errors="replace")
     assert result.returncode == 0 and "ISOLATION_RESULT=0" in text, text + result.stderr.decode(errors="replace")
-    print("PASS: containment, hostile IPC, and real JPEG/QR/UR decoding on the image kernel/runtime")
+    if args.entropy:
+        assert "isolated complete NIST assessment" in text, text
+        print("PASS: isolated complete NIST assessment and real system-RNG generation on the image kernel/runtime")
+    else:
+        print("PASS: containment, hostile IPC, and real JPEG/QR/UR decoding on the image kernel/runtime")

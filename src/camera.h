@@ -15,16 +15,20 @@ class Camera {
     int fd_{-1};
     unsigned width_{}, height_{}, stride_{};
     uint32_t format_{};
+    bool native_{};
     std::vector<uint8_t> frame_, gray_;
 public:
-    Camera();
+    explicit Camera(bool native = false);
     ~Camera();
     Camera(const Camera&) = delete;
     Camera& operator=(const Camera&) = delete;
     bool Capture();
     unsigned Width() const { return width_; }
     unsigned Height() const { return height_; }
+    uint32_t Format() const { return format_; }
     std::span<const uint8_t> Gray() const { return gray_; }
+    // In native mode these are Y or RGB components, never synthesized grayscale.
+    std::span<const uint8_t> Samples() const { return gray_; }
 };
 
 class QRScanner {

@@ -1,0 +1,10 @@
+NIST EntropyAssessment modification, 2026-10-13, Thunder Den:
+Keep upstream warning text in JSON when errorLevel is zero. Numerical methods,
+input ordering and overall-result calculation are unchanged.
+--- a/cpp/shared/test_run_base.h
++++ b/cpp/shared/test_run_base.h
+@@ -29,3 +29,3 @@
+-        if (errorLevel != 0){
++        if (errorLevel != 0 || !errorMsg.empty()){
+             baseJson["errorMessage"] = errorMsg;
+         }

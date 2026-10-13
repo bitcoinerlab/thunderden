@@ -16,6 +16,14 @@ fetch "$URTYPES_TEST_URL" "$URTYPES_TEST_SHA256" urtypes
 fetch "https://sources.buildroot.net/zbar/zbar-$ZBAR_VERSION.tar.bz2" "$ZBAR_SHA256" zbar
 fetch "https://codeload.github.com/fukuchi/libqrencode/tar.gz/v$QRENCODE_VERSION" "$QRENCODE_SHA256" qrencode
 fetch "https://sources.buildroot.net/libv4l/v4l-utils-$V4L_VERSION.tar.xz" "$V4L_SHA256" v4l
+fetch "https://codeload.github.com/usnistgov/SP800-90B_EntropyAssessment/tar.gz/$NIST_ENTROPY_COMMIT" "$NIST_ENTROPY_SHA256" nist-entropy
+fetch "https://codeload.github.com/y-256/libdivsufsort/tar.gz/$DIVSUFSORT_COMMIT" "$DIVSUFSORT_SHA256" divsufsort
+patch -d /opt/nist-entropy -p1 < /work/build/nist-json-warning.patch
+cmake -S /opt/divsufsort -B /tmp/divsufsort-build -G Ninja \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=OFF \
+    -DBUILD_DIVSUFSORT64=ON -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=/usr/local
+cmake --build /tmp/divsufsort-build --parallel 2
+cmake --install /tmp/divsufsort-build
 
 mkdir /tmp/zbar-build
 (
@@ -40,4 +48,4 @@ meson setup /tmp/v4l-build /opt/v4l --prefix=/usr/local --libdir=lib --buildtype
 meson compile -C /tmp/v4l-build -j2
 meson install -C /tmp/v4l-build
 ldconfig
-rm -rf /tmp/zbar-build /tmp/qrencode-build /tmp/v4l-build
+rm -rf /tmp/zbar-build /tmp/qrencode-build /tmp/v4l-build /tmp/divsufsort-build
