@@ -55,6 +55,27 @@ void ValidateMnemonic(std::span<const unsigned char> mnemonic)
     Require((bits[entropy_bytes] & mask) == (checksum[0] & mask), "Invalid mnemonic checksum");
 }
 
+SecretBytes EntropyMnemonic(std::span<const unsigned char> entropy)
+{
+    Require(entropy.size() == 16 || entropy.size() == 32, "Generation requires 128 or 256 bits");
+    SecretBytes checksum(32), words;
+    CSHA256 hash;
+    hash.Write(entropy.data(), entropy.size()).Finalize(checksum.data());
+    memory_cleanse(&hash, sizeof(hash));
+    words.reserve(256);
+    for (size_t word = 0; word < entropy.size() * 3 / 4; ++word) {
+        unsigned index = 0;
+        for (size_t bit = word * 11; bit < (word + 1) * 11; ++bit) {
+            const auto byte = bit < entropy.size() * 8 ? entropy[bit / 8] : checksum[0];
+            index = (index << 1) | ((byte >> (7 - bit % 8)) & 1U);
+        }
+        if (word) words.push_back(' ');
+        words.insert(words.end(), ENGLISH[index].begin(), ENGLISH[index].end());
+    }
+    ValidateMnemonic(words);
+    return words;
+}
+
 SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
                          std::span<const unsigned char> passphrase)
 {

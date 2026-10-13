@@ -23,6 +23,7 @@ inline void Require(bool condition, const char* message)
 }
 unsigned MnemonicWordIndex(std::string_view word);
 void ValidateMnemonic(std::span<const unsigned char> mnemonic);
+SecretBytes EntropyMnemonic(std::span<const unsigned char> entropy);
 SecretBytes MnemonicSeed(std::span<const unsigned char> mnemonic,
                          std::span<const unsigned char> passphrase);
 std::string EncodePublic(const CExtPubKey& key, bool mainnet);
