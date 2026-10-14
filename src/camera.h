@@ -16,7 +16,11 @@ class Camera {
     unsigned width_{}, height_{}, stride_{};
     uint32_t format_{};
     bool native_{};
+    bool streaming_{};
     std::vector<uint8_t> frame_, gray_;
+    std::vector<std::span<uint8_t>> buffers_;
+    void StartStreaming();
+    void Close();
 public:
     explicit Camera(bool native = false);
     ~Camera();

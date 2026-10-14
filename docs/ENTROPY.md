@@ -108,6 +108,8 @@ width (BE32), height (BE32), selection 0 (all positions, row-major), components
 UYVY, then RGB24/BGR24. Disable libv4l format conversion. Y is copied directly;
 BGR is reordered to RGB without channel mixing. Padding is excluded. Other
 formats, including MJPEG-only cameras, are not supported by this first profile.
+Native capture requires V4L2 streaming: it maps and queues driver buffers, then
+dequeues and requeues frames on a nonblocking descriptor. Conversion stays off.
 The QR scanner retains its existing conversion contract.
 
 Within each batch: position, then component, then time. Each immutable batch is

@@ -88,12 +88,13 @@ Optimized-build regressions verify cleanup on success and exceptions.
 
 Native camera capture is incompatible with streaming-only UVC devices.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Medium; camera unavailable
 - **Source:** [2026-10-14 / BOUNDARY-01][report-boundary01]
 
-Actual linked libv4l2 used raw `read()` and never configured streaming in the
-bounded fixture. [Decision and evidence](#td-007--native-camera-streaming).
+Explicit native streaming replaces raw `read()`. Real-library simulated-device
+regressions pass; physical-camera testing remains pending.
+[Decision and evidence](#td-007--native-camera-streaming).
 
 ### TD-008
 
@@ -214,6 +215,11 @@ passed (11.19 seconds). All 17 suites passed across these runs.
 **Fix:** the commit containing this resolution,
 `fix: cleanse mnemonic checksum hash contexts`. No new USB image was built.
 
+**Master backport (2026-10-14):** `3de20f3` on `fix/mnemonic-cleanup`, based on
+`master` at `a008c3b`, adapts `9701096` without the generation feature. The cleanup
+regression failed before the backport and all 13 baseline suites passed after it
+(28.56 seconds). The backport branch is local and has not been merged into master.
+
 ## TD-007 — Native camera streaming
 
 **Decision (2026-10-14):** accept this as a camera integration defect and keep it
@@ -230,6 +236,19 @@ camera source is optional, so this is not evidence that output becomes predictab
 when mandatory Core randomness succeeds. Implement an explicit native streaming
 route or another reviewed solution, add a real-library regression and then verify
 the exact intended laptop/camera physically.
+
+**Resolution (2026-10-14):** native capture now requires streaming capability and
+uses bounded MMAP buffers with explicit queue/start/dequeue/requeue/stop actions.
+Its descriptor is nonblocking, with bounded polling. Setup failures unmap partial
+allocations and close the device; capture errors release the stream on scope exit.
+QR capture retains its existing conversion-enabled read path.
+
+**Verification:** `entropy-camera` exercises real libv4l2 over a synthetic
+streaming-only device, including exact sample bytes, retries, bad buffer metadata,
+capture errors and partial-setup cleanup (18 scenarios). It asserts that raw
+`read()` is never used. Both `entropy-camera` and `camera` passed (0.11 seconds).
+**Fix:** this commit, `fix: stream native camera frames explicitly`. Physical
+camera behavior and image verification remain pending.
 
 ## TD-008 — Assessment JSON boundary
 
