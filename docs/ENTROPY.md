@@ -120,8 +120,12 @@ At T=64 the assessed prefix contains the first 16,384 component histories; it is
 not assumed to represent all positions or the rest of the capture.
 
 Starting parameters are provisional: 8 warm-up frames, T=64, 1,048,576 assessed
-samples, up to 64 MiB hashed, a 20-second capture limit and 120-second total
-camera/assessment limit. Never select a profile or retry a block to maximize the
+samples, up to 64 MiB hashed, a 20-second acquisition window after device setup
+and a 120-second total camera/assessment limit. Frames returned at or after the
+acquisition cutoff are discarded. Already acquired complete batches may finish
+serialization afterward; the parent has a separate 30-second capture watchdog
+covering startup and draining. No frame-time guarantee applies to a hung kernel
+driver. Never select a profile or retry a block to maximize the
 score. Whole batches are serialized; the byte cap may stop at a complete temporal
 history. No differences, filters, LSB extraction or bias correction are applied.
 Device exposure/gain remain at driver defaults; no characterized control profile

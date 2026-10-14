@@ -34,6 +34,8 @@ int main()
         size_t sent = 0;
         while (sent < td::ENTROPY_MAX_SAMPLES && std::chrono::steady_clock::now() < deadline) {
             if (!camera.Capture()) continue;
+            // A bounded poll or driver call can finish after the acquisition cutoff.
+            if (std::chrono::steady_clock::now() >= deadline) break;
             unsigned char count[4]; WriteBE32(count, ++frames); Send(2, count);
             if (frames <= td::ENTROPY_WARMUP_FRAMES) continue;
             const auto samples = camera.Samples();

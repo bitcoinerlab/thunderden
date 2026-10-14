@@ -146,12 +146,13 @@ Candidate geometry is now validated before committing to a camera format.
 
 Twenty-second camera acquisition limit is not a strict cutoff.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Low
 - **Source:** [2026-10-14 / BOUNDARY-06][report-boundary06]
 
-Blocking capture/send can cross the worker deadline; the parent retains a
-separate 30-second watchdog. [Decision and evidence][lower-priority-decisions].
+Late frames are discarded at the acquisition cutoff. Complete timely batches
+may drain afterward under the parent watchdog.
+[Decision and evidence][lower-priority-decisions].
 
 ### TD-013
 
@@ -303,6 +304,15 @@ the current limit specifically as virtual address space. See
 [`memfd_budget.cpp`](evidence/seed-6b22f6d/memfd_budget.cpp).
 
 ## TD-010 to TD-013 — Lower-priority seed-generation findings
+
+**TD-012 resolution (2026-10-14):** the real capture loop checks the acquisition
+cutoff again immediately after receiving a frame. Frames returned at or after
+20 seconds cannot complete or enter a batch. Documentation distinguishes this
+cutoff from the parent's 30-second startup/drain watchdog. A test-only clock and
+camera exercise the real worker loop at 19,999/20,000/20,001 ms, with both normal
+and delayed output draining. The regression failed before the fix; all six cases
+and the native-camera suite pass afterward (0.02 seconds). **Fix:** this commit,
+`fix: discard camera frames returned after the acquisition cutoff`.
 
 **TD-011 resolution (2026-10-14):** each native format candidate must pass all
 geometry and allocation bounds before the preference search stops. Each `S_FMT`
