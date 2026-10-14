@@ -47,7 +47,7 @@ public:
     void SetNetwork(std::string_view network) { network_ = network; }
     void Screen(std::string_view title, const ReviewLines& lines, std::string_view footer);
     int Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction = {},
-        bool cancellable = true, std::string_view status = {}, bool keep_introduction = false);
+        bool cancellable = true, std::string_view status = {}, bool keep_introduction = false, const ReviewLines& details = {});
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
         size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false,
         std::string_view help = {});

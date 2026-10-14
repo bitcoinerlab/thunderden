@@ -13,7 +13,15 @@ then **Generate new recovery words** when asked for recovery words. Choose the
 length and optional sources. To use an existing wallet, choose **Use existing
 recovery words** instead. End the current session before generating another wallet.
 
-Generate 12 or 24 English BIP39 words. Import still accepts 12, 15, 18, 21 or 24.
+Generate 12 or 24 English BIP39 words. The chooser recommends 12 words for strong
+protection and an easier backup; 24 words provide a larger recovery-phrase search
+space, with more words to write down and check. Details explain the 128/256-bit
+lengths. Import still accepts 12, 15, 18, 21 or 24 words.
+
+The flow explains Bitcoin Core's random-number generator once, then introduces
+camera readings and coin tosses or dice rolls as optional additions. Required
+toss/roll counts are shown before selection. Instructions remain available on
+compact screens through paging rather than being silently hidden.
 
 **System randomness is the main source.** Bitcoin Core's strong random number
 generator (RNG) gets fresh randomness from the operating system. It can also use
@@ -42,8 +50,8 @@ rolls does not recover the wallet: back up the generated words and any passphras
 | Dice rolls | 64 rolls | 128 rolls |
 
 For coins, press `H` for heads or `T` for tails. For dice, use one six-sided die
-and press `1` to `6`. Record every physical result, including repeats. Backspace
-corrects the last entry. Press once per result: a held key can record extra entries.
+and press `1` to `6`. Enter every physical result, including repeats. Backspace
+removes the last entry. Press once for each result.
 Enter finishes collection; queued keys cannot approve the next screen. The secure
 buffer holds only the required number of results, then is cleared after hashing.
 
@@ -136,6 +144,18 @@ calibrated NIST RCT/APT health tests. Even data with a high estimate can be enti
 predictable. The camera never replaces mandatory system randomness.
 
 ## Assessment boundary
+
+The interface introduces NIST as the US National Institute of Standards and
+Technology and calls the analysis "randomness checks". Collection and checks have
+separate progress statuses because they can overlap. Successful results show a
+short confirmation; warnings are visibly distinguished and failures offer retry
+or continuation without camera data.
+
+Details show camera values included, values checked for randomness, and the NIST
+estimate in bits per 8-bit camera value. Each value is a brightness or colour
+reading. The checks examine a portion of the collected data. The estimate
+describes only that tested data, not the final strength of the recovery words;
+the interface does not extrapolate a total number of bits added to the wallet.
 
 Use only the official NIST `ea_non_iid` with `-i -a` and eight bits per symbol.
 It runs as a fresh executable, separate from the signer and camera, using sealed

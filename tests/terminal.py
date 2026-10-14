@@ -728,11 +728,11 @@ for mode, entered, expected in (
         ("entropy-dice", b"07" + b"6" * 63 + b"5\x7f1", bytes([5] * 63 + [0]))):
     p = Probe(mode, rows=12, columns=40)
     address_action(p, b"Enter: start collecting")
-    p.wait(b"Tosses:" if mode != "entropy-dice" else b"Rolls:")
+    p.wait(b"Tosses entered:" if mode != "entropy-dice" else b"Rolls entered:")
     if mode == "entropy-coins":
         assert b"H: Heads   T: Tails" in p.all_text, "Coin labels do not match the input keys"
     p.send(entered)
-    p.wait(b"Enter: Finish collection")
+    p.wait(b"Enter: Continue")
     assert p.process.poll() is None, "Reaching the manual target skipped confirmation"
     p.send(b"\r")
     output, _ = p.finish(0)
@@ -741,6 +741,7 @@ for mode, entered, expected in (
 
 def start_generation(p, words=12, camera=False, manual=b"1"):
     address_action(p, b"Enter/1-2: Select", b"1" if words == 12 else b"2")
+    address_action(p, b"Enter: continue")
     address_action(p, b"Enter/1-2: Select", b"2" if camera else b"1")
     address_action(p, b"Enter/1-3: Select", manual)
 
@@ -756,9 +757,28 @@ def copy_backup(p):
     return [value.decode() for _, value in sorted({int(index): value for index, value in found}.items())]
 
 
+for rows, columns in ((12, 40), (24, 80)):
+    p = Probe("entropy-generate", rows=rows, columns=columns)
+    address_action(p, b"Enter/1-2: Select", b"\x1b[B")
+    p.enter(b"> 2: 24 words", b"d\r")
+    address_action(p, b"Enter: return to choices", b"\r\r")
+    p.wait(b"> 2: 24 words")
+    assert b"How your recovery words are created" not in p.all_text, "Details or queued Enter selected a word count"
+    assert b"128 bits" in p.all_text and b"256 bits" in p.all_text
+    p.enter(b"Esc: Back", b"\x1b")
+    p.finish(2)
+
 for count, rows, columns in ((12, 12, 40), (24, 24, 80)):
     p = Probe("entropy-generate", rows=rows, columns=columns)
     start_generation(p, count)
+    rendered = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
+    assert b"phrase even stronger" in rendered
+    assert b"Bitcoin Core's" in rendered and b"random-number generator" in rendered
+    assert b"noise from the sensor" in rendered and b"This step is optional." in rendered
+    assert (b"150 tosses" if count == 12 else b"300 tosses") in rendered
+    # The last option may be below the compact menu's viewport until selected.
+    if columns == 80:
+        assert b"128 rolls" in rendered
     assert b"Write down your recovery words" not in p.all_text
     address_action(p, b"Enter: generate words")
     backup = copy_backup(p)
@@ -790,16 +810,17 @@ assert p.process.returncode == 91 and not output
 assert b"Write down your recovery words" not in p.all_text, "RNG failure exposed a fallback mnemonic"
 print("PASS: manual outcomes, corrections, private backup verification, cancellation and fatal RNG failure")
 
-for scenario in ("valid", "constant", "frozen", "bad-header", "stalled-capture", "cancel-assessment", "timeout-assessment"):
+for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant", 40, 80), ("frozen", 40, 80),
+                               ("bad-header", 40, 80), ("stalled-capture", 40, 80), ("cancel-assessment", 40, 80), ("timeout-assessment", 40, 80)):
     # Build-time hardlinks keep fixtures executable on the read-only test image;
     # the writable /tmp mount deliberately remains noexec.
     probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
-    p = Probe("entropy-generate", executable=str(probe), rows=40)
+    p = Probe("entropy-generate", executable=str(probe), rows=rows, columns=columns)
     start_generation(p, camera=True, manual=b"3" if scenario == "valid" else b"1")
-    address_action(p, b"Enter: start capture")
+    address_action(p, b"Enter: start")
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
     if scenario == "cancel-assessment":
-        p.wait(b"Capture: complete")
+        p.wait(b"Camera: finished")
         pids = children.read_text().split()
         assert pids
         p.send(b"\x1b")
@@ -807,14 +828,23 @@ for scenario in ("valid", "constant", "frozen", "bad-header", "stalled-capture",
         assert all(not Path(f"/proc/{pid}").exists() for pid in pids), "Cancelled assessment left a worker alive"
         continue
     if scenario == "valid":
-        p.wait(b"Statistical estimate", timeout=130)
+        p.wait(b"d: Details", timeout=130)
         assert not children.read_text().strip(), "Workers survived into camera review"
-        address_action(p, b"Enter: include camera samples")
+        assert b"Estimated randomness:" not in p.all_text, "Camera summary exposed technical estimates"
+        p.send(b"d")
+        p.wait(b"d: Summary")
+        address_action(p, b"Enter: use camera data")
+        rendered = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
+        # Compact pages insert navigation text between wrapped lines.
+        assert b"Estimated randomness:" in rendered and b"per 8-bit camera value" in rendered, rendered
+        assert b"Camera values checked for randomness:" in rendered and b"1048576" in rendered
+        assert b"tested camera data" in rendered and b"strength of your recovery words" in rendered
+        assert b"Samples hashed" not in rendered and b"Hashed / assessed" not in rendered
         address_action(p, b"Enter: start collecting")
-        p.wait(b"Rolls:")
+        p.wait(b"Rolls entered:")
         assert not children.read_text().strip(), "Manual input began with a worker alive"
         p.send(b"1" * 64)
-        p.enter(b"Enter: Finish collection", b"\r")
+        p.enter(b"Enter: Continue", b"\r")
         address_action(p, b"Enter: generate words")
         backup = copy_backup(p)
         address_action(p, b"Enter: enter your words")
@@ -826,11 +856,11 @@ for scenario in ("valid", "constant", "frozen", "bad-header", "stalled-capture",
         p.wait(b"Camera not included", timeout=135)
         assert not children.read_text().strip(), "Failed camera attempt left a worker alive"
         address_action(p, b"Enter/1-2: Select", b"1")
-        p.wait(b"Camera: omitted after failure")
+        p.wait(b"Camera readings: not included")
         address_action(p, b"Enter: generate words", b"\x1b")
         p.finish(2)
         if scenario == "timeout-assessment":
-            assert b"assessment timed out" in p.all_text
+            assert b"Camera collection and checks took too long" in p.all_text
     assert b"sha256" not in p.all_text and b"commandline" not in p.all_text, "Estimator metadata leaked onto the terminal"
 print("PASS: complete camera/NIST/manual generation, malformed streams, constant samples, stalls, cancellation and total timeout")
 

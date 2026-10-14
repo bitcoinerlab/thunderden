@@ -8,8 +8,10 @@
 namespace td {
 SecretBytes Terminal::CameraEntropy()
 {
-    if (!Confirm("Add camera samples", {"System randomness is the main source. Camera samples are an optional extra.", "",
-        "A still scene is fine; movement is not required. Capture and statistical assessment may take up to two minutes."}, "start capture")) throw Cancelled{};
+    if (!Confirm("Collect camera randomness", {"A still scene is fine; movement is not required.", "",
+        "We'll collect camera readings and check part of the data for patterns using statistical software from NIST, "
+        "the US National Institute of Standards and Technology.", "",
+        "Allow up to two minutes for collection and checks."}, "start")) throw Cancelled{};
     SecretBytes digest(32);
     std::array<unsigned char, 17> profile{};
     size_t total = 0;
@@ -21,7 +23,7 @@ SecretBytes Terminal::CameraEntropy()
         EntropyWorker camera(EntropyExecutable(false));
         std::unique_ptr<EntropyWorker> assessment;
         const auto view = View();
-        Draw(view, "Camera contribution", {}, "Esc: Cancel"); Flush();
+        Draw(view, "Collect camera randomness", {}, "Esc: Cancel"); Flush();
         const auto start = std::chrono::steady_clock::now();
         auto last_frame = start, painted = start - std::chrono::seconds(1);
         bool have_profile = false, captured = false;
@@ -34,20 +36,22 @@ SecretBytes Terminal::CameraEntropy()
             Require(View() == view, "The screen changed. Start camera collection again.");
             const int key = Key(0);
             if (key == 27 || key == 3) throw Cancelled{};
-            Require(now - start < std::chrono::seconds(ENTROPY_TOTAL_SECONDS), "Camera assessment timed out; contribution omitted");
-            Require(captured || now - last_frame < std::chrono::seconds(10), "Camera stopped producing samples; contribution omitted");
-            Require(captured || now - start < std::chrono::seconds(ENTROPY_CAPTURE_SECONDS + 10), "Camera capture timed out; contribution omitted");
+            Require(now - start < std::chrono::seconds(ENTROPY_TOTAL_SECONDS), "Camera collection and checks took too long");
+            Require(captured || now - last_frame < std::chrono::seconds(10), "The camera stopped sending images");
+            Require(captured || now - start < std::chrono::seconds(ENTROPY_CAPTURE_SECONDS + 10), "Camera collection took too long");
             const auto assessed = assessment ? assessment->PollExit() : std::nullopt;
             if (now - painted >= std::chrono::milliseconds(250)) {
-                Row(view, 0, captured ? "Capture: complete" : "Capture: " + std::to_string(frames) + " frames");
-                Row(view, 1, assessed ? "Assessment: finished" : assessment ? "Assessment: running" : "Assessment: waiting for samples");
-                Row(view, 3, "Samples hashed: " + std::to_string(total));
-                Row(view, 4, "Elapsed: " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now - start).count()) + " seconds");
+                Row(view, 0, captured ? "Camera: finished" : frames ? "Camera: collecting images" : "Camera: starting");
+                const auto checks = Wrap({assessed ? "Randomness checks: finished" : assessment ? "Randomness checks: running"
+                    : "Randomness checks: waiting for camera data"}, view.width);
+                Row(view, 1, checks[0]);
+                Row(view, 2, checks.size() > 1 ? checks[1] : "");
+                Row(view, 4, "Time elapsed: " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now - start).count()) + " seconds");
                 painted = now;
             }
             if (captured) {
                 const auto exit = camera.PollExit();
-                if (exit) Require(*exit == 0, "Camera capture failed; contribution omitted");
+                if (exit) Require(*exit == 0, "Camera collection failed");
                 if (exit && assessed) {
                     report.Seal(); result = ParseAssessment(report.Read(), *assessed); break;
                 }
@@ -85,27 +89,32 @@ SecretBytes Terminal::CameraEntropy()
             } else {
                 warnings = ReadBE32(bytes.data());
                 Require(warnings <= 3 && assessment && total % ENTROPY_BATCH_FRAMES == 0, "Incomplete camera contribution");
-                Require(!warnings, "Camera froze or stayed saturated; contribution omitted");
+                Require(!warnings, "The camera image froze or stayed almost entirely dark or bright");
                 captured = true;
             }
             head = body = 0;
         }
         hash.Finalize(digest.data());
     } // All workers are dead and reaped before any manual input or fresh RNG request.
-    Require(!result.constant, "Camera block was constant (zero estimate); contribution omitted");
+    Require(!result.constant, "The checked camera data had no variation");
     const auto score = std::to_string(result.bits_per_sample);
     const auto format = ReadBE32(profile.data() + 1);
     std::string fourcc;
     for (unsigned shift = 0; shift < 32; shift += 8) fourcc += char(format >> shift);
-    if (!Confirm("Camera contribution", {"Capture: complete", result.warning ? "Assessment: complete with a warning" : "Assessment: complete",
-        "Assessed samples: " + std::to_string(ENTROPY_TEST_SAMPLES), "Estimate: " + score + " bits/sample",
-        "Samples hashed: " + std::to_string(total), "Hashed / assessed: " + std::to_string(double(total) / ENTROPY_TEST_SAMPLES) + "x", "",
-        "Statistical estimate for the assessed block only. More samples do not imply the same increase in entropy. This is not a NIST certification."}, "include camera samples",
-        {"Native sample profile v1. Driver exposure and gain defaults; no noise filtering.",
-            "Native format: " + fourcc,
-            result.warning ? "NIST reported a warning or an estimator was unavailable. Its overall estimate is shown without modification." : "NIST initial non-IID assessment uses all bits of the fixed block.",
-            "Width: " + std::to_string(ReadBE32(profile.data() + 5)), "Height: " + std::to_string(ReadBE32(profile.data() + 9)),
-            profile[14] == 1 ? "Components: native Y" : "Components: R, G, B", "Frames per batch: 64"})) throw Cancelled{};
+    if (!Confirm(result.warning ? "Camera checks returned a warning" : "Camera data ready", {
+        result.warning ? "Camera collection is complete, but NIST reported a warning or could not calculate every estimate."
+            : "Camera collection and statistical checks are complete.", "",
+        "You can now include this data when creating your recovery words."}, "use camera data",
+        {"Each camera value is an 8-bit brightness or colour reading.", "",
+            "Camera values included: " + std::to_string(total),
+            "Camera values checked for randomness: " + std::to_string(ENTROPY_TEST_SAMPLES), "",
+            "Estimated randomness: " + score + " bits per 8-bit camera value", "",
+            "This estimate describes only the tested camera data, not the final strength of your recovery words.",
+            "The checks examine a portion of the collected data.", "",
+            "Image size: " + std::to_string(ReadBE32(profile.data() + 5)) + " x " + std::to_string(ReadBE32(profile.data() + 9)),
+            "Camera output format: " + fourcc,
+            profile[14] == 1 ? "Readings used: brightness" : "Readings used: red, green and blue",
+            "Analysis software: NIST EntropyAssessment"}, result.warning)) throw Cancelled{};
     return CameraContribution(profile, total, digest);
 }
 }

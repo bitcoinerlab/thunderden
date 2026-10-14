@@ -187,13 +187,14 @@ void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::str
 }
 
 int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction,
-    bool cancellable, std::string_view status, bool keep_introduction)
+    bool cancellable, std::string_view status, bool keep_introduction, const ReviewLines& details)
 {
     Require(!choices.empty() && choices.size() <= 9, "Invalid menu");
     Printable(status);
     size_t selected = 0, first = 0, previous_highlight = 0, previous_count = 0;
     std::optional<Layout> previous_view;
     ReviewLines previous_lines;
+    bool redraw = false;
     Flush();
     while (true) {
         const auto view = View();
@@ -233,9 +234,9 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
                     + entries[i][row]);
         }
         lines.emplace_back(""); lines.insert(lines.end(), instruction.begin(), instruction.end());
-        if (!previous_view || *previous_view != view) {
+        if (redraw || !previous_view || *previous_view != view) {
             Draw(view, title, lines, std::string("Up/Down: Choose   Enter/1-") + std::to_string(choices.size())
-                + ": Select" + (cancellable ? "   Esc: Back" : ""), highlight);
+                + ": Select" + (details.empty() ? "" : "   d: Details") + (cancellable ? "   Esc: Back" : ""), highlight);
             // Status occupies the otherwise blank header row, so it is not
             // discarded when a small screen needs to scroll the menu options.
             if (!status.empty()) {
@@ -254,12 +255,18 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
             }
         }
         previous_view = view; previous_lines = lines; previous_highlight = highlight; previous_count = entries[selected].size();
+        redraw = false;
         const int key = Key();
         if ((key == 27 || key == 3) && cancellable) throw Cancelled{};
         if (key == KEY_UP && selected) --selected;
         if (key == KEY_DOWN && selected + 1 < choices.size()) ++selected;
         if (key == '\r' || key == '\n') return selected;
         if (key >= '1' && size_t(key - '1') < choices.size()) return key - '1';
+        if (key == 'd' && !details.empty()) {
+            if (!Pages(title, details, "return to choices", {}, PageMode::Review) && cancellable) throw Cancelled{};
+            redraw = true;
+            Flush();
+        }
     }
 }
 

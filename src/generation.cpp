@@ -7,22 +7,22 @@ SecretBytes Terminal::ManualEntropy(ManualSource source, unsigned words)
 {
     const bool dice = source == ManualSource::Dice;
     const std::string title = dice ? "Add dice rolls" : "Add coin tosses";
-    if (!Confirm(title, {dice ? "Roll one six-sided die. Press 1 to 6 for each result." : "Toss a coin. Press H for heads or T for tails.", "",
-        "System randomness is the main source. These results are an optional extra.", "",
-        "Use real physical results. Keep them private and do not record them with a camera.", "",
-        "Press once per result. Holding a key records extra results; check the count and use Backspace to correct it."}, "start collecting",
+    const auto target = ManualTarget(source, words);
+    if (!Confirm(title, {dice ? "Roll your six-sided die, then press the number it shows." : "Toss your coin, then press H for heads or T for tails.", "",
+        std::string(dice ? "Enter every roll" : "Enter every toss") + ", including repeated results. Continue until you reach "
+            + std::to_string(target) + (dice ? " rolls." : " tosses."), "",
+        "Keep your results private. If you make a typing mistake, Backspace removes the last entry."}, "start collecting",
         {dice ? "The target assumes no face is more than 1-in-4 likely on each roll, even when earlier rolls are known."
             : "The target assumes neither heads nor tails is more than 54-in-100 likely on each toss, even when earlier tosses are known.", "",
             "This is an assumption, not a test of your coin or die. Record every result.", "",
             "Repeating these results will not recover the same wallet. Back up the generated words."})) throw Cancelled{};
     const auto view = View();
-    const auto target = ManualTarget(source, words);
     SecretBytes raw; raw.reserve(target);
-    Draw(view, title, {dice ? "1-6: Record a roll" : "H: Heads   T: Tails", "", "", "Collection target, not a measurement."}, "Backspace: Correct   Esc: Cancel");
+    Draw(view, title, {"", "", dice ? "1-6: Enter a roll" : "H: Heads   T: Tails"}, "Backspace: Undo last entry   Esc: Cancel");
     Flush();
     while (true) {
-        Row(view, 2, std::string(dice ? "Rolls: " : "Tosses: ") + std::to_string(raw.size()) + " / " + std::to_string(target));
-        Row(view, 4, raw.size() == target ? "Enter: Finish collection" : "");
+        Row(view, 0, std::string(dice ? "Rolls entered: " : "Tosses entered: ") + std::to_string(raw.size()) + " of " + std::to_string(target));
+        Row(view, 4, raw.size() == target ? "Enter: Continue" : "");
         const int key = Key();
         Require(View() == view, "The screen changed. Start collection again.");
         if (key == 27 || key == 3) throw Cancelled{};
@@ -68,31 +68,44 @@ void Terminal::BackupWords(std::span<const unsigned char> mnemonic)
 
 SecretBytes NewMnemonic(Terminal& terminal)
 {
-    const unsigned words = terminal.Menu("Generate recovery words", {"12 words", "24 words"}) == 0 ? 12 : 24;
-    const bool use_camera = terminal.Menu("Add camera samples?", {"No camera", "Use camera"}) == 1;
+    const unsigned words = terminal.Menu("How many recovery words?", {"12 words - recommended", "24 words"},
+        "12 words provide strong protection for Bitcoin and are easier to write down and check. "
+        "24 words make your recovery phrase even stronger, but take longer to write down and check.", true, {}, true,
+        {"12 words contain 128 bits of randomness; 24 words contain 256 bits. Both provide strong protection when generated securely."}) == 0 ? 12 : 24;
+    if (!terminal.Confirm("How your recovery words are created", {
+        "Thunder Den uses Bitcoin Core's random-number generator, which combines several sources of randomness from your computer.", "",
+        "This is normally all you need. You can also add randomness using your camera, coin tosses or dice rolls. "
+        "These extra sources may help if another source turns out to be weaker than expected."}, "continue")) throw Cancelled{};
+    const bool use_camera = terminal.Menu("Add randomness from your camera?", {"Skip camera", "Use camera"},
+        "Camera images contain tiny variations, including noise from the sensor. Thunder Den can mix these readings into the randomness used to create your recovery words.",
+        true, {}, true) == 1;
     constexpr ManualSource sources[]{ManualSource::None, ManualSource::Coins, ManualSource::Dice};
-    const auto source = sources[terminal.Menu("Add physical randomness?",
-        {"No physical input", "Coin tosses", "Dice rolls"}, "System randomness is the main source. Physical input is optional.")];
+    const auto source = sources[terminal.Menu("Add coin tosses or dice rolls?",
+        {"Continue without coins or dice", "Coin tosses - " + std::to_string(ManualTarget(ManualSource::Coins, words)) + " tosses",
+            "Dice rolls - " + std::to_string(ManualTarget(ManualSource::Dice, words)) + " rolls"},
+        "You can add another source of randomness by tossing a coin or rolling a six-sided die and entering each result. This step is optional.",
+        true, {}, true)];
     SecretBytes camera, manual;
     while (use_camera) {
         try { camera = terminal.CameraEntropy(); break; }
         catch (const std::exception& error) {
             if (terminal.Menu("Camera not included", {"Continue without camera", "Try camera again"},
-                std::string(error.what()) + ". No camera samples will be used.", true, {}, true) == 0) break;
+                std::string(error.what()) + ". Camera data will not be included. Try again or continue without it.", true, {}, true) == 0) break;
         }
     }
     if (source != ManualSource::None) manual = ManualContribution(source, terminal.ManualEntropy(source, words));
-    if (!terminal.Confirm("Ready to generate", {"Recovery words: " + std::to_string(words), "System randomness: included",
-        source == ManualSource::None ? "Physical input: not selected" : "Physical input: included",
-        !camera.empty() ? "Camera: included" : use_camera ? "Camera: omitted after failure" : "Camera: not selected", "",
-        "The next screen shows your new recovery words. Keep it private and write every word down.", "",
-        "You will re-enter the words to check your backup before using the wallet."}, "generate words")) throw Cancelled{};
+    if (!terminal.Confirm("Ready to generate", {"Recovery words: " + std::to_string(words), "Random-number generator: Bitcoin Core",
+        !camera.empty() ? "Camera readings: included" : use_camera ? "Camera readings: not included" : "Camera readings: not selected",
+        source == ManualSource::None ? "Coins or dice: not selected"
+            : std::string(source == ManualSource::Coins ? "Coin tosses: " : "Dice rolls: ") + std::to_string(ManualTarget(source, words)), "",
+        "The next screen shows your recovery words. Keep them private and write every word down in order.", "",
+        "Afterward, you'll enter them again to check your written backup."}, "generate words")) throw Cancelled{};
     auto mnemonic = GenerateMnemonic(words, camera, source, manual);
     while (true) {
         terminal.BackupWords(mnemonic);
-        if (!terminal.Confirm("Check your backup", {"Enter the words from your written backup in the same order."}, "enter your words")) throw Cancelled{};
+        if (!terminal.Confirm("Check your backup", {"Enter every word from your written backup in the same order."}, "enter your words")) throw Cancelled{};
         if (terminal.Mnemonic(words) == mnemonic) return mnemonic;
-        if (!terminal.Confirm("Backup did not match", {"Check every word and its order. Review the words again before retrying."}, "review the words")) throw Cancelled{};
+        if (!terminal.Confirm("Backup did not match", {"Your entry did not match. Review the words and check your written backup before trying again."}, "review the words")) throw Cancelled{};
     }
 }
 }
