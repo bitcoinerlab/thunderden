@@ -4,7 +4,10 @@
 #include <linux/videodev2.h>
 #include <univalue.h>
 #include <util/strencodings.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <cstdio>
+#include <memory>
 #include <numeric>
 
 namespace {
@@ -14,6 +17,40 @@ template<typename F> void Reject(F action) {
     throw std::runtime_error("Invalid entropy input accepted");
 }
 std::string Text(const td::SecretBytes& bytes) { return {bytes.begin(), bytes.end()}; }
+void AssessmentBoundary(const std::string& valid)
+{
+    const auto page = sysconf(_SC_PAGESIZE);
+    Check(page > 0, "Cannot get page size");
+    const size_t capacity = (65536 + page - 1) / page * page, size = capacity + page;
+    auto* memory = static_cast<unsigned char*>(mmap(nullptr, size, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+    Check(memory != MAP_FAILED, "Cannot map assessment fixture");
+    const auto release = [size](unsigned char* p) { munmap(p, size); };
+    const std::unique_ptr<unsigned char, decltype(release)> mapping(memory, release);
+    Check(mprotect(memory + capacity, page, PROT_NONE) == 0, "Cannot guard assessment fixture");
+    const auto parse = [&](std::string_view text, int status) {
+        Check(text.size() <= capacity, "Assessment fixture too large");
+        auto* start = memory + capacity - text.size();
+        std::copy(text.begin(), text.end(), start);
+        return td::ParseAssessment({start, text.size()}, status);
+    };
+    // Every report ends at inaccessible memory, without a backing string NUL.
+    for (const auto* token : {"-", "0", "-0", "1.", "1e", "1e+", "1E-",
+            "n", "nu", "nul", "t", "tr", "tru", "f", "fa", "fal", "fals",
+            "\"", "\"\\", "\"\\u", "\"\\u0", "\"\\u00", "\"\\u000"})
+        for (int status : {0, 1, 255, 256})
+            Reject([&] { parse(std::string("{\"IID\":false,\"errorLevel\":") + token, status); });
+    for (size_t n = 0; n < valid.size(); ++n)
+        Reject([&] { parse(std::string_view(valid).substr(0, n), 0); });
+    Check(parse(valid, 0).bits_per_sample == 0.25, "Exact-span report rejected");
+    Check(parse(valid + std::string(65536 - valid.size(), ' '), 0).bits_per_sample == 0.25, "Maximum report rejected");
+    Reject([&] { parse(valid + '\0', 0); });
+    Reject([&] { parse(valid + std::string("\0{}", 3), 0); });
+    const std::string constant = "{\"IID\":false,\"errorLevel\":-1,\"errorMessage\":\"Symbol alphabet consists of 1 symbol. No entropy awarded...\"}";
+    Check(parse(constant, 255).constant, "Exact-span constant report rejected");
+    Reject([&] { parse(constant, 0); });
+    Reject([&] { parse(valid, 255); });
+}
 }
 int main()
 {
@@ -114,6 +151,7 @@ int main()
         for (unsigned i = 0; i < 10; ++i) { UniValue item(UniValue::VOBJ); item.pushKV("testCaseDesc", "Fixture method"); cases.push_back(item); }
         UniValue overall(UniValue::VOBJ); overall.pushKV("testCaseDesc", "Overall"); overall.pushKV("dataWordSize", 8); overall.pushKV("hAssessed", 0.25);
         cases.push_back(overall); report.pushKV("testCases", cases);
+        AssessmentBoundary(report.write());
         Check(parse(report.write(), 0).bits_per_sample == 0.25, "Overall result was rescaled");
         Reject([&] { parse(report.write(), 1); });
         for (const auto& bad : {std::string{}, std::string("{}"), report.write().substr(0, 40), std::string(65537, ' ')})

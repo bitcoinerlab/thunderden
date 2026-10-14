@@ -99,12 +99,12 @@ bounded fixture. [Decision and evidence](#td-007--native-camera-streaming).
 
 Exact-sized assessment buffers expose out-of-bounds JSON reads.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Medium
 - **Source:** [2026-10-14 / BOUNDARY-02][report-boundary02]
 
-Guard-page fixtures reproduced SIGSEGV for truncated tokens; no disclosure or
-code execution was demonstrated.
+Fixed with bounded, zero-padded parser storage and early worker-status rejection.
+Guard-page regressions verify exact-span input handling.
 [Decision and evidence](#td-008--assessment-json-boundary).
 
 ### TD-009
@@ -223,6 +223,25 @@ storage or repair the tokenizer's end checks. Add exact-span malformed-input
 regressions. Evidence and all 20 outcomes are in
 [`json_boundary.cpp`](evidence/seed-6b22f6d/json_boundary.cpp) and the
 [boundary report](2026-10-14-opencode-seed-boundaries-6b22f6d.md).
+
+**Resolution (2026-10-14):** `ParseAssessment` now rejects worker statuses other
+than 0 and 255 before parsing. It copies at most 65,536 report bytes into a secure
+buffer with five zero padding bytes for the pinned tokenizer's lookahead. The
+logical input length remains unchanged, so embedded NULs and trailing data are
+not silently discarded. The explicit constant-alphabet exit remains supported.
+
+**Regression:** `AssessmentBoundary` in [`tests/entropy.cpp`](../tests/entropy.cpp)
+places exact-sized input against an inaccessible page. It covers truncated
+numbers, keywords, escapes, every incomplete prefix of a successful report,
+worker statuses 0/1/255/256, embedded NULs, valid constant reports and the maximum
+report size. It reproduced SIGSEGV before the fix and passes afterward.
+
+**Verification:** the optimized native build passed `entropy`,
+`entropy-assessment` and `terminal` (3/3, 170.78 seconds), using
+`ctest --test-dir /build -R '^(entropy|entropy-assessment|terminal)$'
+--output-on-failure`. **Fix:** the commit containing this resolution,
+`fix: bound assessment JSON parser lookahead`. This is a source fix; the existing
+experimental USB image has not been rebuilt.
 
 ## TD-009 — Camera resource accounting
 

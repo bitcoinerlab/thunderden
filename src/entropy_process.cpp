@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 
@@ -118,9 +119,14 @@ size_t EntropyWorker::Read(std::span<unsigned char> bytes)
 
 EntropyAssessment ParseAssessment(std::span<const unsigned char> json, int exit_code)
 {
+    Require(exit_code == 0 || exit_code == 255, "Camera assessment failed");
     Require(!json.empty() && json.size() <= 65536, "Invalid assessment report size");
+    // Pinned UniValue has token lookahead beyond the logical end. Keep zero
+    // padding for its longest lookahead, without extending the parsed span.
+    SecretBytes padded(json.size() + 5);
+    std::copy(json.begin(), json.end(), padded.begin());
     UniValue report;
-    Require(report.read(std::string_view(reinterpret_cast<const char*>(json.data()), json.size())) && report.isObject()
+    Require(report.read(std::string_view(reinterpret_cast<const char*>(padded.data()), json.size())) && report.isObject()
         && report["IID"].isBool() && !report["IID"].get_bool() && report["errorLevel"].isNum(), "Invalid assessment report");
     const auto& level = report["errorLevel"].getValStr();
     const auto& error = report["errorMessage"];
