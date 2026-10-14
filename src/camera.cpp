@@ -37,6 +37,16 @@ std::vector<uint8_t> Grayscale(std::span<const uint8_t> frame, unsigned width,
 
 Camera::Camera(bool native) : native_(native)
 {
+    const auto usable = [native](const v4l2_pix_format& pix) {
+        const bool yuyv = pix.pixelformat == V4L2_PIX_FMT_YUYV || (native && pix.pixelformat == V4L2_PIX_FMT_UYVY);
+        const bool grey = native && pix.pixelformat == V4L2_PIX_FMT_GREY;
+        const size_t channels = grey ? 1 : yuyv ? 2 : 3;
+        const size_t stride = std::max<size_t>(pix.bytesperline, pix.width * channels);
+        return pix.width && pix.width <= (native ? 640U : 1920U) && pix.height && pix.height <= (native ? 480U : 1080U)
+            && (!yuyv || pix.width % 2 == 0)
+            && (yuyv || grey || pix.pixelformat == V4L2_PIX_FMT_RGB24 || pix.pixelformat == V4L2_PIX_FMT_BGR24)
+            && stride <= 16 * 1024 * 1024 / pix.height && pix.sizeimage <= 16 * 1024 * 1024;
+    };
     bool denied = false;
     for (unsigned index = 0; index < 32; ++index) {
         const auto path = "/dev/video" + std::to_string(index);
@@ -67,13 +77,15 @@ Camera::Camera(bool native) : native_(native)
                     v4l2_fmtdesc available{}; available.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; available.index = n;
                     if (v4l2_ioctl(fd, VIDIOC_ENUM_FMT, &available) < 0) break;
                     if (available.pixelformat != preferred || (available.flags & V4L2_FMT_FLAG_EMULATED)) continue;
+                    format = {}; format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; format.fmt.pix.field = V4L2_FIELD_ANY;
                     format.fmt.pix.width = 640; format.fmt.pix.height = 480; format.fmt.pix.pixelformat = preferred;
-                    configured = v4l2_ioctl(fd, VIDIOC_S_FMT, &format) == 0 && format.fmt.pix.pixelformat == preferred;
+                    configured = v4l2_ioctl(fd, VIDIOC_S_FMT, &format) == 0 && format.fmt.pix.pixelformat == preferred
+                        && usable(format.fmt.pix);
                 }
                 if (configured) break;
             }
         } else if (configured) configured = v4l2_ioctl(fd, VIDIOC_S_FMT, &format) == 0;
-        if (!configured) {
+        if (!configured || !usable(format.fmt.pix)) {
             v4l2_close(fd);
             continue;
         }
@@ -82,13 +94,6 @@ Camera::Camera(bool native) : native_(native)
         const bool grey = native && pix.pixelformat == V4L2_PIX_FMT_GREY;
         const size_t channels = grey ? 1 : yuyv ? 2 : 3;
         const size_t stride = std::max<size_t>(pix.bytesperline, pix.width * channels);
-        if (!pix.width || pix.width > 1920 || !pix.height || pix.height > 1080
-            || (native && (pix.width > 640 || pix.height > 480))
-            || (yuyv && pix.width % 2) || (!yuyv && !grey && pix.pixelformat != V4L2_PIX_FMT_RGB24 && pix.pixelformat != V4L2_PIX_FMT_BGR24)
-            || stride > 16 * 1024 * 1024 / pix.height || pix.sizeimage > 16 * 1024 * 1024) {
-            v4l2_close(fd);
-            continue;
-        }
         fd_ = fd;
         width_ = pix.width;
         height_ = pix.height;

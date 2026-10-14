@@ -135,11 +135,11 @@ diagnostic result only. [Decision and evidence][lower-priority-decisions].
 
 Invalid preferred camera geometry prevents same-device format fallback.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Low
 - **Source:** [2026-10-14 / BOUNDARY-05][report-boundary05]
 
-Confirmed control-flow gap; physical occurrence remains untested.
+Candidate geometry is now validated before committing to a camera format.
 [Decision and evidence][lower-priority-decisions].
 
 ### TD-012
@@ -303,6 +303,15 @@ the current limit specifically as virtual address space. See
 [`memfd_budget.cpp`](evidence/seed-6b22f6d/memfd_budget.cpp).
 
 ## TD-010 to TD-013 — Lower-priority seed-generation findings
+
+**TD-011 resolution (2026-10-14):** each native format candidate must pass all
+geometry and allocation bounds before the preference search stops. Each `S_FMT`
+request also starts with a fresh structure, including after a driver error.
+Five real-library simulated-device regressions cover invalid preferred width,
+height, stride, image size and a failed request that mutates the format type.
+The first failed before the fix; all 23 native-camera scenarios and the existing
+QR camera suite pass afterward (0.12 seconds). **Fix:** this commit,
+`fix: validate camera geometry before selecting a format`.
 
 **Decision (2026-10-14):** keep all four open pending focused corrections:
 

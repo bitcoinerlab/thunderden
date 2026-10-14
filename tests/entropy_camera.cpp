@@ -13,6 +13,7 @@
 
 namespace {
 unsigned scenario = 0, mappings = 0, reads = 0, dequeued = 0, requeued = 0, stopped = 0;
+unsigned grey_requests = 0, yuyv_requests = 0;
 int device = -1;
 bool streaming = false;
 v4l2_pix_format negotiated{};
@@ -59,11 +60,21 @@ extern "C" long syscall(long number, ...) noexcept
             auto& format = *static_cast<v4l2_fmtdesc*>(value);
             if (format.index > 1) { errno = EINVAL; return -1; }
             format.pixelformat = format.index ? V4L2_PIX_FMT_YUYV : V4L2_PIX_FMT_GREY;
-            format.flags = format.index ? 0 : V4L2_FMT_FLAG_EMULATED; return 0;
+            format.flags = format.index || scenario >= 18 ? 0 : V4L2_FMT_FLAG_EMULATED; return 0;
         }
         if (request == VIDIOC_S_FMT) {
+            if (static_cast<v4l2_format*>(value)->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) { errno = EINVAL; return -1; }
             auto& pix = static_cast<v4l2_format*>(value)->fmt.pix;
+            if (pix.pixelformat == V4L2_PIX_FMT_GREY && scenario >= 18) {
+                ++grey_requests;
+                pix.width = scenario == 18 ? 800 : 640; pix.height = scenario == 19 ? 600 : 480;
+                pix.bytesperline = scenario == 20 ? 16 * 1024 * 1024 : 640;
+                pix.sizeimage = scenario == 21 ? 17 * 1024 * 1024 : 640 * 480;
+                if (scenario == 22) { static_cast<v4l2_format*>(value)->type = V4L2_BUF_TYPE_VIDEO_OUTPUT; errno = EINVAL; return -1; }
+                negotiated = pix; return 0;
+            }
             if (pix.pixelformat != V4L2_PIX_FMT_YUYV) { errno = EINVAL; return -1; }
+            ++yuyv_requests;
             pix.width = scenario == 3 ? 3 : 2; pix.height = 2; pix.bytesperline = 6; pix.sizeimage = 12;
             if (scenario == 4) pix.pixelformat = V4L2_PIX_FMT_MJPEG;
             negotiated = pix; return 0;
@@ -129,8 +140,9 @@ extern "C" long syscall(long number, ...) noexcept
 int main()
 {
     try {
-        for (scenario = 0; scenario < 18; ++scenario) {
+        for (scenario = 0; scenario < 23; ++scenario) {
             negotiated = {}; reads = dequeued = requeued = stopped = 0;
+            grey_requests = yuyv_requests = 0;
             bool failed = false;
             try {
                 td::Camera camera(true);
@@ -140,10 +152,11 @@ int main()
                 if (captured) td::Require(std::vector<unsigned char>(camera.Samples().begin(), camera.Samples().end())
                     == std::vector<unsigned char>({10,20,30,40}), "Native sample bytes changed");
             } catch (const std::exception&) { failed = true; }
-            const bool success = scenario == 0 || scenario == 9 || scenario == 10 || scenario == 11;
+            const bool success = scenario == 0 || scenario == 9 || scenario == 10 || scenario == 11 || scenario >= 18;
             td::Require(failed != success, "Native streaming scenario failed");
             td::Require(device == -1 && mappings == 0 && !streaming && !reads, "Native resources leaked or raw read used");
             if (scenario == 0 || scenario == 9) td::Require(dequeued == 1 && requeued == 1 && stopped == 1, "Native buffer lifecycle failed");
+            if (scenario >= 18) td::Require(grey_requests == 1 && yuyv_requests == 1, "Invalid preferred format prevented fallback");
         }
         std::puts("PASS: real libv4l2 streaming, native bytes, retries, malformed buffers and partial-setup cleanup");
     } catch (const std::exception& e) { std::fprintf(stderr, "scenario %u: %s\n", scenario, e.what()); return 1; }
