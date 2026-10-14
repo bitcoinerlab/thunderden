@@ -1,10 +1,11 @@
 # Recovery-word generation
 
-Experimental work on `feature/seed-generation`, based on
-`a008c3bc2a66827ce3bf23ce3f3611229f74a4f6` (preview 7).
+Included in `v0.0.1-preview.8`, merged into `master` on 2026-10-14.
 The implementation follows the supplied entropy-generation specification v0.1,
 with manual input simplified to ordinary coin tosses or dice rolls.
-It requires independent review and physical-camera testing before merging.
+Independent AI review reports and fixes are recorded in the
+[audit findings](../audits/FINDINGS.md). Physical-camera validation and a fresh
+independent review of the corrected revision remain pending.
 
 ## Sources and backup
 

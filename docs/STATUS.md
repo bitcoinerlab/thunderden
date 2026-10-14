@@ -11,14 +11,14 @@ with the text-setup development image; the report and scope are recorded below.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.7`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7),
+[`v0.0.1-preview.8`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8),
 with its checksum and installed-file inventory. BIOS/UEFI boot checks passed;
 USB write/read-back checks are recorded per image below. Broader laptop/camera coverage and a fresh
 full clean-build comparison remain outstanding.
 Current executable sizes refer to the latest recorded build below.
-Preview 7 adds direct address verification, clearer QR reviews and mandatory
-high-index change disclosure. It also includes the pinned Liana installation
-guide and [audit follow-up record](../audits/FINDINGS.md).
+Preview 8 adds recovery-word generation with mandatory Bitcoin Core randomness,
+optional camera/coin/dice input and full backup re-entry. It includes the
+[seed-generation audit fixes](../audits/FINDINGS.md) and clearer generation screens.
 
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
@@ -26,9 +26,9 @@ separate from the automated checks below.
 
 ## Architecture
 
-The experimental `feature/seed-generation` branch adds generation with mandatory
-system randomness and optional camera/manual contributions. It is not part of
-preview 7. See [design and use](ENTROPY.md) and [measured results](ENTROPY_BENCHMARKS.md).
+Recovery-word generation is included from preview 8, with mandatory system
+randomness and optional camera/manual contributions. See [design and use](ENTROPY.md)
+and [measured results](ENTROPY_BENCHMARKS.md).
 
 Native code links pinned, unmodified Bitcoin Core libraries for keys, descriptors,
 Miniscript, PSBT review and signing. Recovery input uses English words and printable
@@ -38,7 +38,8 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-preview 7 Buildroot executables are a 2,636,080-byte signer and a 96,368-byte scanner, with
+preview 8 Buildroot executables are a 2,685,616-byte signer, a 100,464-byte QR scanner,
+a 30,808-byte camera entropy worker and a 211,848-byte NIST assessment worker, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -46,6 +47,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 
 - [x] Verify reuse of Core BIP32/key code without its node/wallet engines.
 - [x] Implement English/ASCII BIP39 and in-memory key sessions as a native library.
+- [x] Generate 12/24 recovery words with optional supplemental inputs and full backup re-entry.
 - [x] Implement native policy validation, wallet IDs and HMAC authorization.
 - [x] Implement immutable native transaction review and approval-gated signing.
 - [x] Implement the local interface and UR v2 transport.
@@ -594,6 +596,38 @@ The image contains no OCR executable, models or OpenCV. Dependencies were reused
 from the non-OCR build cache; a fresh full clean-build comparison and physical-camera
 validation of the new address screens remain pending. The compact-PSBT fee risk
 remains as documented in [FEES.md](FEES.md) and audit finding TD-001.
+
+The eighth published preview, `v0.0.1-preview.8`, uses an image built on 2026-10-14
+from application source commit `b0ab76d5cd99722fb478af10a2264f706ae09125`.
+It generates 12 or 24 BIP39 words using mandatory Bitcoin Core randomness, with
+optional camera, coin or dice contributions. The camera is selected by default;
+manual input defaults to continuing without coins or dice. Generated words require
+complete backup re-entry before use. Existing 12/15/18/21/24-word import is retained.
+The signer still reports application version `0.0.1`. The image is 67,108,864 bytes
+and its SHA-256 is:
+
+```text
+43f3a7b9bcb5febea564f2f02a4137cb176c73a31392abe98581865094b94d4d
+```
+
+All 18 native suites passed, none skipped, in 196.99 seconds. Coverage includes
+mandatory RNG failure, supplemental input, worker confinement, camera timing and
+format fallback, assessment report validation, backup re-entry, cancellation,
+compact-screen guidance and existing signing/QR flows. The compiled source matches
+the application revision. Image content, permissions, kernel restrictions, checksum
+and repeat-assembly checks passed. BIOS and UEFI QEMU boot checks passed, including
+public account QR decoding, review navigation and session restart. The image was
+written to USB serial `55630D9D`; the full 64 MiB read-back matched, and the drive was
+safely powered off. Release documentation is added above the application revision
+without changing application code or build inputs.
+
+The image includes the fixes recorded for TD-006–TD-008 and TD-010–TD-013.
+Independent AI audits reviewed the earlier `6b22f6d` revision; a fresh independent
+audit of the corrected revision and physical-camera validation remain pending.
+Camera statistics describe the checked data, not a guaranteed contribution to the
+wallet's randomness. This build reused the pinned toolchain/dependency cache;
+a fresh full clean-build comparison remains pending. TD-009 remains open, as does
+the compact-PSBT fee risk (TD-001); see [audit findings](../audits/FINDINGS.md).
 
 Transaction fixtures use synthetic previous transactions and Core script
 verification, not chain/mempool acceptance. Dependency/syscall checks run the

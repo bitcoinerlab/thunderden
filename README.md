@@ -2,9 +2,9 @@
 
 **Turn a spare laptop into an airgapped Bitcoin signer.**
 
-Thunder Den's image boots from USB and runs in memory. Import your existing
-recovery words, review transactions on the laptop and exchange data through QR
-codes.
+Thunder Den's image boots from USB and runs in memory. Generate new recovery words
+or import your existing ones, review transactions on the laptop and exchange data
+through QR codes.
 
 Thunder Den is designed so you can use AI to check its claims against the code
 before you use it. Its own signer and worker code, build scripts, boot settings
@@ -21,9 +21,9 @@ See [implementation status](docs/STATUS.md) for completed checks and remaining w
 
 ## Download and boot
 
-**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.7/thunderden.img)**
-· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.7/thunderden.img.sha256)
-· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7)
+**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img)**
+· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img.sha256)
+· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8)
 
 This image boots x86-64 (Intel/AMD) laptops with BIOS or UEFI. You can prepare the
 USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot it.
@@ -56,8 +56,8 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 ## Features
 
 - English BIP39 recovery words with an optional printable ASCII passphrase.
-- This experimental branch also [generates 12/24 words](docs/ENTROPY.md), with
-  mandatory system randomness and optional camera or physical input; not in preview 7.
+- [Generate 12 or 24 recovery words](docs/ENTROPY.md) using Bitcoin Core randomness,
+  with optional camera, coin or dice input and full backup re-entry.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.
 - BIP-388 wallet policies with seed-bound registration proofs.
 - BIP44, BIP49, BIP84 and BIP86 defaults without prior registration.
