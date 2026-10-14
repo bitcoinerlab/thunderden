@@ -723,12 +723,14 @@ def export_review(p):
 
 
 for mode, entered, expected in (
-        ("entropy-coins", b"t" * 150, bytes(150)),
-        ("entropy-dice", b"07" + b"6" * 63 + b"5\x7f1", bytes([5] * 63 + [0])),
-        ("entropy-pairs", b"ttYYtYYtt\x7f" + b"ty" * 126, bytes([0, 1] + [0] * 126))):
+        ("entropy-coins", b"h" * 149 + b"t\x7fhT", bytes(150)),
+        ("entropy-coins", b"yY" + b"hHtT" * 37 + b"hThH", bytes([0,0,1,1]) * 37 + bytes([0,1])),
+        ("entropy-dice", b"07" + b"6" * 63 + b"5\x7f1", bytes([5] * 63 + [0]))):
     p = Probe(mode, rows=12, columns=40)
     address_action(p, b"Enter: start collecting")
     p.wait(b"Tosses:" if mode != "entropy-dice" else b"Rolls:")
+    if mode == "entropy-coins":
+        assert b"H: Heads   T: Tails" in p.all_text, "Coin labels do not match the input keys"
     p.send(entered)
     p.wait(b"Enter: Finish collection")
     assert p.process.poll() is None, "Reaching the manual target skipped confirmation"
@@ -740,7 +742,7 @@ for mode, entered, expected in (
 def start_generation(p, words=12, camera=False, manual=b"1"):
     address_action(p, b"Enter/1-2: Select", b"1" if words == 12 else b"2")
     address_action(p, b"Enter/1-2: Select", b"2" if camera else b"1")
-    address_action(p, b"Enter/1-4: Select", manual)
+    address_action(p, b"Enter/1-3: Select", manual)
 
 
 def copy_backup(p):
@@ -786,14 +788,14 @@ address_action(p, b"Enter: generate words")
 output, _ = p.process.communicate(timeout=5)
 assert p.process.returncode == 91 and not output
 assert b"Write down your recovery words" not in p.all_text, "RNG failure exposed a fallback mnemonic"
-print("PASS: manual outcomes, corrections, pair extraction, private backup verification, cancellation and fatal RNG failure")
+print("PASS: manual outcomes, corrections, private backup verification, cancellation and fatal RNG failure")
 
 for scenario in ("valid", "constant", "frozen", "bad-header", "stalled-capture", "cancel-assessment", "timeout-assessment"):
     # Build-time hardlinks keep fixtures executable on the read-only test image;
     # the writable /tmp mount deliberately remains noexec.
     probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
     p = Probe("entropy-generate", executable=str(probe), rows=40)
-    start_generation(p, camera=True, manual=b"4" if scenario == "valid" else b"1")
+    start_generation(p, camera=True, manual=b"3" if scenario == "valid" else b"1")
     address_action(p, b"Enter: start capture")
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
     if scenario == "cancel-assessment":

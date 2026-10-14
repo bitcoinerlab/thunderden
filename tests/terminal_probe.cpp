@@ -22,8 +22,7 @@ int main(int argc, char** argv)
                 td::Require(entropy_rng_calls == 1, "Generation did not request fresh randomness exactly once");
                 std::puts("BACKUP VERIFIED");
             } else {
-                const auto source = mode == "entropy-dice" ? td::ManualSource::Dice
-                    : mode == "entropy-pairs" ? td::ManualSource::CoinPairs : td::ManualSource::Coins;
+                const auto source = mode == "entropy-dice" ? td::ManualSource::Dice : td::ManualSource::Coins;
                 const auto samples = terminal.ManualEntropy(source, 12);
                 std::puts(HexStr(samples).c_str()); // Public test inputs only.
             }

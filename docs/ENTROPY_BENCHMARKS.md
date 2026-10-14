@@ -124,9 +124,15 @@ Physical camera throughput, old-laptop timing, lighting behavior and the final
 on-device generation/backup workflow remain for the maintainer's trial. Independent
 review of the new secret/process boundaries is also pending before merge.
 
-## Test image and added footprint
+After simplifying manual input, all 16 suites passed again (182.50 seconds).
+The follow-up H/T key change passed the entropy and terminal suites (153.54 seconds),
+including mixed-case keys, corrections, collection limits and the complete
+camera/dice/backup flow. Manual input now holds one target-sized buffer; runtime
+source is 4,778 lines, 11 fewer than the initial implementation below.
 
-The local 64 MiB test image uses application source `77bf073` and has SHA-256:
+## Initial test image and added footprint
+
+The initial 64 MiB test image uses application source `77bf073` and has SHA-256:
 
 ```text
 e40261df09e323ec6ebf8063fdf2c3f60f4113dca1088926ffb95ef6b3c95bea

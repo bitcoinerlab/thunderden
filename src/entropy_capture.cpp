@@ -8,8 +8,8 @@
 namespace td {
 SecretBytes Terminal::CameraEntropy()
 {
-    if (!Confirm("Add camera samples", {"The camera adds optional samples. A still scene is fine; movement is not required.", "",
-        "Capture and statistical assessment may take up to two minutes. System randomness is still required."}, "start capture")) throw Cancelled{};
+    if (!Confirm("Add camera samples", {"System randomness is the main source. Camera samples are an optional extra.", "",
+        "A still scene is fine; movement is not required. Capture and statistical assessment may take up to two minutes."}, "start capture")) throw Cancelled{};
     SecretBytes digest(32);
     std::array<unsigned char, 17> profile{};
     size_t total = 0;

@@ -2,7 +2,8 @@
 
 Experimental work on `feature/seed-generation`, based on
 `a008c3bc2a66827ce3bf23ce3f3611229f74a4f6` (preview 7).
-The implementation follows the supplied entropy-generation specification v0.1.
+The implementation follows the supplied entropy-generation specification v0.1,
+with manual input simplified to ordinary coin tosses or dice rolls.
 It requires independent review and physical-camera testing before merging.
 
 ## Sources and backup
@@ -13,37 +14,55 @@ length and optional sources. To use an existing wallet, choose **Use existing
 recovery words** instead. End the current session before generating another wallet.
 
 Generate 12 or 24 English BIP39 words. Import still accepts 12, 15, 18, 21 or 24.
-Bitcoin Core 31.1 supplies 32 fresh bytes through `GetStrongRandBytes`; an OS RNG
-failure terminates the process. There is no fallback or production test RNG.
-Camera samples and physical coin tosses or six-sided die rolls are optional.
+
+**System randomness is the main source.** Bitcoin Core's strong random number
+generator (RNG) gets fresh randomness from the operating system. It can also use
+CPU hardware randomness when available.
+
+Camera samples, coin tosses and dice rolls are **optional extras**. They may help
+if a source is weaker than expected. The system RNG is still used every time.
+**If it reports an error, generation stops**, even if extra sources were selected.
+For example, a failed camera can be left out; it cannot replace a failed system RNG.
+
+Core 31.1 supplies 32 fresh bytes through `GetStrongRandBytes` for each generation.
 All camera/assessment workers finish before manual input or final randomness.
 Re-enter the generated words to verify the backup before a key session is created.
 Words and contributions are not exported, logged or written to persistent storage.
 
-These sources share the computer and software; independence is not established.
-The camera receives no guaranteed entropy credit. Statistical estimates describe
-the tested block, not secrecy from an attacker or NIST certification. A compromised
-signer, OS or firmware can defeat generation. Repeating physical rolls does not
-recover a wallet: retain the generated words and any passphrase.
+All inputs pass through the same computer. More sources do not protect against
+compromised signer software, OS or firmware. A camera score is a diagnostic, not
+a guarantee of randomness or NIST certification. Repeating the same tosses or
+rolls does not recover the wallet: back up the generated words and any passphrase.
 
 ## Manual collection
 
-- Coins: `T` = heads, `Y` = tails; store outcomes as bytes 0/1. Collect 150/300
-  tosses. The model assumes each outcome has conditional probability at most
-  0.54, giving approximately 133.35/266.69 bits under that assumption.
-- Coin pairs (von Neumann): discard 00/11, map 01 to 0 and 10 to 1. Collect
-  128/256 accepted bits, stored as bytes 0/1. Independence and constant bias are
-  assumptions, not conclusions of a short test. Fair coins average 512/1024 tosses.
-- Die: keys 1–6 become bytes 0–5. Collect 64/128 rolls. These targets were approved
-  by the maintainer on 2026-10-13. The model assumes each face's conditional
-  probability is at most 1/4; this is not measured for the user's die.
+| Method | 12 words | 24 words |
+| --- | ---: | ---: |
+| Coin tosses | 150 tosses | 300 tosses |
+| Dice rolls | 64 rolls | 128 rolls |
 
-Use real physical outcomes. Backspace corrects the last outcome and recalculates
-coin pairs. Repeated outcomes are valid and never filtered. A terminal cannot
-distinguish held-key autorepeat from repeated presses: press once per outcome,
-check the count, and correct extra entries. Enter explicitly finishes collection;
-queued keys cannot approve the next screen. Raw transcripts are bounded at 16,384
-outcomes. Their secure buffers are discarded after contribution hashing.
+For coins, press `H` for heads or `T` for tails. For dice, use one six-sided die
+and press `1` to `6`. Record every physical result, including repeats. Backspace
+corrects the last entry. Press once per result: a held key can record extra entries.
+Enter finishes collection; queued keys cannot approve the next screen. The secure
+buffer holds only the required number of results, then is cleared after hashing.
+
+### What the targets assume
+
+- **Coins:** a fair coin is 50/50. Our model allows up to a 54% chance for either
+  result. For example, 54% heads and 46% tails fits; 60/40 is outside the assumption.
+- **Dice:** a fair die gives each face about 16.7%. Our model allows up to 25% for
+  any face. For example, 25% for six and 15% for each other face adds up to 100%.
+
+These are chances for the **next result**, even when earlier results are known.
+They are not limits on the counts you record: 18 sixes in 64 rolls can happen by
+chance. Nor do balanced totals prove randomness: a repeating heads/tails pattern
+is predictable. Thunder Den does not measure these assumptions for your coin or die.
+
+For technical review, the bound is `H_min >= -n * log2(q)`, where `q` limits each
+outcome's probability given its history and the attacker's information. The coin
+targets give about 133.35/266.69 bits under the 0.54 model; dice give 128/256 under
+the 0.25 model. These are model bounds, not measured security guarantees.
 
 ## Versioned mixing
 
@@ -63,17 +82,19 @@ F = SHA256(D("ThunderDen/entropy/final/v1")
     || FIELD(3, manual_record) || FIELD(4, fresh_32_byte_system_randomness))
 ```
 
-Word count and manual type are single bytes. Types are 0 none, 1 coins, 2 coin
-pairs, 3 die. An omitted source record is one zero byte; an included record is
+Coins are encoded as bytes (heads = 0, tails = 1); dice faces 1–6 as bytes 0–5.
+Word count and manual type are single bytes. Types are 0 none, 1 coins and 3 dice;
+the retired type 2 is rejected. The remaining v1 tags and vectors are unchanged.
+An omitted source record is one zero byte; an included record is
 its nonzero type (1 for camera), followed by its 32-byte contribution digest.
 Take the first 16 bytes of F for 12 words, or all 32 for 24 words, then add the
 BIP39 checksum and use the existing pinned English wordlist. Hash contexts and
 managed secret buffers are erased; complete physical-memory erasure is not claimed.
 The later 64-byte PBKDF2 seed does not increase the mnemonic's 128/256-bit entropy.
 
-A fixed SHA-256 is not a universal statistical extractor. Unpredictability relies
-on its cryptographic properties and a secret, unpredictable contribution. Extra
-bytes or independent-looking sources do not justify adding security-bit counts.
+SHA-256 mixes the inputs; it does not create randomness. The design relies on
+Core's strong RNG and SHA-256. It does not claim a mathematical entropy guarantee
+for every possible input, or add up security bits from the different sources.
 Tests include independently calculated specification vectors; these public inputs
 are never a source of generation randomness.
 

@@ -9,10 +9,9 @@ SecretBytes NewMnemonic(Terminal& terminal);
 struct EntropyHash : CSHA256 {
     ~EntropyHash() { memory_cleanse(this, sizeof(*this)); }
 };
-enum class ManualSource : unsigned char { None, Coins, CoinPairs, Dice };
-inline constexpr size_t MAX_MANUAL_TOSSES = 16384;
+// Keep the v1 source tags stable; the retired tag 2 is not accepted.
+enum class ManualSource : unsigned char { None = 0, Coins = 1, Dice = 3 };
 unsigned ManualTarget(ManualSource source, unsigned words);
-SecretBytes ManualSamples(ManualSource source, std::span<const unsigned char> raw);
 SecretBytes ManualContribution(ManualSource source, std::span<const unsigned char> samples);
 SecretBytes CameraContribution(std::span<const unsigned char> profile, uint64_t count, std::span<const unsigned char> digest);
 SecretBytes MixEntropy(unsigned words, std::span<const unsigned char> camera, ManualSource source,

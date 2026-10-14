@@ -5,34 +5,33 @@
 namespace td {
 SecretBytes Terminal::ManualEntropy(ManualSource source, unsigned words)
 {
-    const bool dice = source == ManualSource::Dice, pairs = source == ManualSource::CoinPairs;
-    const std::string title = dice ? "Add die rolls" : pairs ? "Add coin tosses (pairs)" : "Add coin tosses";
-    if (!Confirm(title, {dice ? "Roll one six-sided die. Press 1 to 6 for each result." : "Toss a coin. Press T for heads or Y for tails.", "",
+    const bool dice = source == ManualSource::Dice;
+    const std::string title = dice ? "Add dice rolls" : "Add coin tosses";
+    if (!Confirm(title, {dice ? "Roll one six-sided die. Press 1 to 6 for each result." : "Toss a coin. Press H for heads or T for tails.", "",
+        "System randomness is the main source. These results are an optional extra.", "",
         "Use real physical results. Keep them private and do not record them with a camera.", "",
         "Press once per result. Holding a key records extra results; check the count and use Backspace to correct it."}, "start collecting",
-        {pairs ? "Coin pairs reduce constant bias only under independent tosses. Equal pairs are discarded. Fair coins average four tosses per accepted bit."
-            : dice ? "The collection target assumes each face has conditional probability at most 1/4. This is not measured for your die."
-            : "The collection target assumes each outcome has conditional probability at most 0.54. This is not measured for your coin.", "",
-            "System randomness is always required. Repeating these results will not recover the same wallet. Back up the generated words."})) throw Cancelled{};
+        {dice ? "The target assumes no face is more than 1-in-4 likely on each roll, even when earlier rolls are known."
+            : "The target assumes neither heads nor tails is more than 54-in-100 likely on each toss, even when earlier tosses are known.", "",
+            "This is an assumption, not a test of your coin or die. Record every result.", "",
+            "Repeating these results will not recover the same wallet. Back up the generated words."})) throw Cancelled{};
     const auto view = View();
     const auto target = ManualTarget(source, words);
-    SecretBytes raw; raw.reserve(MAX_MANUAL_TOSSES);
-    Draw(view, title, {dice ? "1-6: Record a roll" : "T: Heads   Y: Tails"}, "Backspace: Correct   Esc: Cancel");
+    SecretBytes raw; raw.reserve(target);
+    Draw(view, title, {dice ? "1-6: Record a roll" : "H: Heads   T: Tails", "", "", "Collection target, not a measurement."}, "Backspace: Correct   Esc: Cancel");
     Flush();
     while (true) {
-        auto samples = ManualSamples(source, raw);
-        Row(view, 2, std::string(dice ? "Rolls: " : "Tosses: ") + std::to_string(raw.size()) + (pairs ? "" : " / " + std::to_string(target)));
-        Row(view, 3, pairs ? "Accepted bits: " + std::to_string(samples.size()) + " / " + std::to_string(target) : "Collection target, not a measurement.");
-        Row(view, 4, samples.size() == target ? "Enter: Finish collection" : raw.size() == MAX_MANUAL_TOSSES ? "Limit reached. Correct or cancel." : "");
+        Row(view, 2, std::string(dice ? "Rolls: " : "Tosses: ") + std::to_string(raw.size()) + " / " + std::to_string(target));
+        Row(view, 4, raw.size() == target ? "Enter: Finish collection" : "");
         const int key = Key();
         Require(View() == view, "The screen changed. Start collection again.");
         if (key == 27 || key == 3) throw Cancelled{};
-        if ((key == '\r' || key == '\n') && samples.size() == target) return samples;
+        if ((key == '\r' || key == '\n') && raw.size() == target) return raw;
         if (key == 127 || key == 8) {
             if (!raw.empty()) { raw.back() = 0; raw.pop_back(); }
-        } else if (samples.size() < target && raw.size() < MAX_MANUAL_TOSSES) {
+        } else if (raw.size() < target) {
             if (dice && key >= '1' && key <= '6') raw.push_back(key - '1');
-            if (!dice && (key == 't' || key == 'T' || key == 'y' || key == 'Y')) raw.push_back(key == 'y' || key == 'Y');
+            if (!dice && (key == 'h' || key == 'H' || key == 't' || key == 'T')) raw.push_back(key == 't' || key == 'T');
         }
     }
 }
@@ -71,8 +70,9 @@ SecretBytes NewMnemonic(Terminal& terminal)
 {
     const unsigned words = terminal.Menu("Generate recovery words", {"12 words", "24 words"}) == 0 ? 12 : 24;
     const bool use_camera = terminal.Menu("Add camera samples?", {"No camera", "Use camera"}) == 1;
-    const auto source = static_cast<ManualSource>(terminal.Menu("Add physical randomness?",
-        {"No physical input", "Coin tosses", "Coin pairs (von Neumann)", "Six-sided die"}, "System randomness is always included."));
+    constexpr ManualSource sources[]{ManualSource::None, ManualSource::Coins, ManualSource::Dice};
+    const auto source = sources[terminal.Menu("Add physical randomness?",
+        {"No physical input", "Coin tosses", "Dice rolls"}, "System randomness is the main source. Physical input is optional.")];
     SecretBytes camera, manual;
     while (use_camera) {
         try { camera = terminal.CameraEntropy(); break; }

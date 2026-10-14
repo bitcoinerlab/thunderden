@@ -45,19 +45,23 @@ int main()
         Check(HexStr(td::MixEntropy(12, {}, ManualSource::None, {}, random)) == "3516466a8e1c9b59d942448a9de9b95b", "Independent 12-word mixing vector");
         Check(HexStr(td::MixEntropy(24, {}, ManualSource::None, {}, random)) == "d7faee9d2c34fa852449bfc28948df7c84fdb761031b2e7d4e879079b4e7ce8b", "Independent 24-word mixing vector");
         td::ValidateMnemonic(td::EntropyMnemonic(td::MixEntropy(12, {}, ManualSource::None, {}, td::SecretBytes(32))));
-        const td::SecretBytes pairs{0,0,1,1,0,1,1,0,1};
-        Check(td::ManualSamples(ManualSource::CoinPairs, pairs) == td::SecretBytes({0,1}), "Von Neumann pairs and incomplete pair");
-        Check(td::ManualSamples(ManualSource::Coins, pairs) == pairs, "Repeated coin results removed");
-        const td::SecretBytes dice{0,1,2,3,4,5};
-        Check(td::ManualSamples(ManualSource::Dice, dice) == dice, "Dice encoding changed");
-        Reject([&] { td::ManualSamples(ManualSource::Coins, dice); });
-        Reject([&] { td::ManualSamples(ManualSource::Dice, td::SecretBytes{6}); });
-        Reject([&] { td::ManualSamples(ManualSource::Coins, td::SecretBytes(td::MAX_MANUAL_TOSSES + 1)); });
+        Reject([&] { td::ManualContribution(ManualSource::Coins, td::SecretBytes{2}); });
+        Reject([&] { td::ManualContribution(ManualSource::Dice, td::SecretBytes{6}); });
+        for (unsigned invalid : {0,2,4,255}) {
+            Reject([&] { td::ManualTarget(static_cast<ManualSource>(invalid), 12); });
+            Reject([&] { td::ManualContribution(static_cast<ManualSource>(invalid), td::SecretBytes{0,1}); });
+            Reject([&] { td::MixEntropy(12, {}, static_cast<ManualSource>(invalid), td::SecretBytes(32), random); });
+        }
+        for (auto source : {ManualSource::Coins, ManualSource::Dice}) {
+            const auto maximum = td::ManualTarget(source, 24);
+            td::ManualContribution(source, td::SecretBytes(maximum));
+            Reject([&] { td::ManualContribution(source, td::SecretBytes(maximum + 1)); });
+            Reject([&] { td::ManualContribution(source, {}); });
+        }
         for (unsigned words : {12,24}) {
             Check(td::ManualTarget(ManualSource::Coins, words) == 150 * words / 12, "Coin target");
-            Check(td::ManualTarget(ManualSource::CoinPairs, words) == 128 * words / 12, "Pair target");
             Check(td::ManualTarget(ManualSource::Dice, words) == 64 * words / 12, "Dice target");
-            for (auto source : {ManualSource::Coins, ManualSource::CoinPairs, ManualSource::Dice}) {
+            for (auto source : {ManualSource::Coins, ManualSource::Dice}) {
                 const auto contribution = td::ManualContribution(source, td::SecretBytes{0,1});
                 for (auto camera : {td::SecretBytes{}, td::SecretBytes(32)}) {
                     const auto entropy = td::MixEntropy(words, camera, source, contribution, random);
@@ -84,11 +88,10 @@ int main()
         Check(HexStr(profile) == "0159455247000000030000000100010003", "Camera profile encoding");
         const auto camera_digest = td::CameraContribution(profile, 9, digest);
         Check(HexStr(camera_digest) == "cd5b2fd8586a061df8b79693322f5fcd15a9ceddc2191e8206229b94bd4e6f4b", "Independent camera envelope vector");
-        const char* manual_vectors[]{"80b27529b068505788b154c3bb40168b03108754e7a069ace8413a6b8c6da4e4",
-            "9e2b4594f74704a6f93a3385612762c37701ef8315b74acf24258d7361fe4c2e",
-            "dd388c612799ccdd0a6af198e19a0d8a4e09f997a0980d1cd855bf4d383dec44"};
-        for (unsigned type = 1; type <= 3; ++type)
-            Check(HexStr(td::ManualContribution(static_cast<ManualSource>(type), td::SecretBytes{0,1})) == manual_vectors[type - 1], "Independent manual envelope vector");
+        Check(HexStr(td::ManualContribution(ManualSource::Coins, td::SecretBytes{0,1}))
+            == "80b27529b068505788b154c3bb40168b03108754e7a069ace8413a6b8c6da4e4", "Independent coin envelope vector");
+        Check(HexStr(td::ManualContribution(ManualSource::Dice, td::SecretBytes{0,1}))
+            == "dd388c612799ccdd0a6af198e19a0d8a4e09f997a0980d1cd855bf4d383dec44", "Independent dice envelope vector");
         const auto manual_digest = td::ManualContribution(ManualSource::Dice, td::SecretBytes{0,1});
         Check(HexStr(td::MixEntropy(12, camera_digest, ManualSource::Dice, manual_digest, random)) == "e9596b99edb5fc6c99d7dce5fae54b84", "Combined 12-word vector");
         Check(HexStr(td::MixEntropy(24, camera_digest, ManualSource::Dice, manual_digest, random)) == "f9188a457909e17abaf78a30bfd47e8eb6635941ddf168f5c5b971ee8018e552", "Combined 24-word vector");
@@ -127,6 +130,6 @@ int main()
         Check(parse(report.write(), 0).warning, "Assessment warning lost");
         Check(parse("{\"IID\":false,\"errorLevel\":-1,\"errorMessage\":\"Symbol alphabet consists of 1 symbol. No entropy awarded...\"}", 255).constant,
             "Constant-data exit was not distinguished");
-        std::puts("PASS: BIP39 reference vectors, versioned mixing, source presence, manual alphabets and pair extraction");
+        std::puts("PASS: BIP39 reference vectors, versioned mixing, source presence, manual alphabets and limits");
     } catch (const std::exception& error) { std::fprintf(stderr, "%s\n", error.what()); return 1; }
 }
