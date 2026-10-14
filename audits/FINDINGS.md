@@ -23,10 +23,111 @@ reviewer. **Unreviewed** means a project disposition has not yet been recorded.
 | TD-003 | High-index change lacks mandatory recovery-risk disclosure | Medium | [2026-10-12 / F-03](2026-10-12-gpt-6-astra-a5c2f5c.md#f-03--high-index-change-can-make-ordinary-recovery-miss-funds) | Resolved | Fixed in [`f93b234`](https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6). [Decision and verification](#td-003--change-index-disclosure). |
 | TD-004 | Documented Liana/bridge installation follows moving versions | Medium | [2026-10-12 / F-04](2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow) | Resolved | Fixed in [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e). [Decision and verification](#td-004--pinned-online-installation). |
 | TD-005 | Unsigned boot and laptop/firmware trust can defeat signer protections | High impact, conditional | [2026-10-12 / L-01](2026-10-12-gpt-6-astra-a5c2f5c.md#l-01--unsigned-boot-and-general-purpose-laptop-trust-remain-critical) | Unreviewed | Report describes an architectural limitation; no physical exploit was attempted. Assess the supported trust boundary and proposed improvements. |
+| TD-006 | Mnemonic validation leaves complete entropy in an uncleansed stack hash context | Medium, conditional | [2026-10-14 / CRYPTO-01](2026-10-14-opencode-seed-crypto-6b22f6d.md#crypto-01-complete-mnemonic-entropy-remains-in-an-uncleansed-stack-hash-context) | Open | Independently reproduced with public 16-/32-byte fixtures. Requires a separate memory-exposure path; none was demonstrated. [Decision and evidence](#td-006--mnemonic-validation-stack-residue). |
+| TD-007 | Native camera capture is incompatible with streaming-only UVC devices | Medium; camera unavailable | [2026-10-14 / BOUNDARY-01](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-01--native-capture-is-incompatible-with-streaming-only-uvc-cameras) | Open | Actual linked libv4l2 used raw `read()` and never configured streaming in the bounded fixture. [Decision and evidence](#td-007--native-camera-streaming). |
+| TD-008 | Exact-sized assessment buffers expose out-of-bounds JSON reads | Medium | [2026-10-14 / BOUNDARY-02](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-02--exact-sized-assessment-buffers-expose-out-of-bounds-json-reads) | Open | Guard-page fixtures reproduced SIGSEGV for truncated tokens; no disclosure or code execution was demonstrated. [Decision and evidence](#td-008--assessment-json-boundary). |
+| TD-009 | Camera address-space limit does not bound anonymous-file memory | Medium, conditional denial of service | [2026-10-14 / BOUNDARY-03](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-03--address-space-limits-do-not-bound-anonymous-file-memory) | Open | Bounded fixture allocated a 40 MiB memfd under a 32 MiB address-space limit. Requires worker compromise; no decoder exploit was demonstrated. [Decision and evidence](#td-009--camera-resource-accounting). |
+| TD-010 | Assessment parser does not validate the claimed complete test battery | Low | [2026-10-14 / BOUNDARY-04](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-04--report-shape-is-weaker-than-the-complete-battery-claim) | Open | Existing success fixture accepts ten unidentified method objects plus `Overall`; diagnostic result only. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
+| TD-011 | Invalid preferred camera geometry prevents same-device format fallback | Low | [2026-10-14 / BOUNDARY-05](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-05--invalid-preferred-geometry-prevents-same-device-fallback) | Open | Confirmed control-flow gap; physical occurrence remains untested. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
+| TD-012 | Twenty-second camera acquisition limit is not a strict cutoff | Low | [2026-10-14 / BOUNDARY-06](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-06--twenty-seconds-is-not-a-strict-acquisition-cutoff) | Open | Blocking capture/send can cross the worker deadline; the parent retains a separate 30-second watchdog. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
+| TD-013 | New confinement tests contradict documented unsupported-host skip behavior | Low | [2026-10-14 / BOUNDARY-07](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-07--unsupported-host-tests-contradict-documented-skip-behavior) | Open | Source-level test/documentation mismatch; production remains intentionally fail-closed. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
 
 For each disposition, record the rationale and supporting evidence here. A
 resolution should link the fix commit and regression test or verification result.
 The original report retains the full threat model, prerequisites and limitations.
+
+## TD-006 — Mnemonic validation stack residue
+
+**Decision (2026-10-14):** accept this as a defense-in-depth implementation
+defect and keep it open. `ValidateMnemonic` hashes 16 or 32 bytes of reconstructed
+entropy in a temporary `CSHA256` object without wiping that object. A public-fixture
+probe observed the complete input in the returned stack context and no matching
+hash-context cleanse; the encoder's explicit wipe was observed as a positive
+control. This defect predates the generation branch, but generation invokes the
+validator on newly created recovery words.
+
+The finding does not establish practical extraction. An attacker still needs a
+separate memory-disclosure, physical-memory or swap/hibernation path, and none was
+demonstrated. That prerequisite does not justify a documentation claim that all
+secret hash contexts are erased. Fix the cleanup with scope-bound exception-safe
+handling, add an optimized-build regression, and narrow the claim.
+
+**Evidence:** [`residue_probe.cpp`](evidence/seed-6b22f6d/residue_probe.cpp) rebuilt
+and reproduced both 16- and 32-byte observations against the reviewed native
+image on 2026-10-14. See the [full report](2026-10-14-opencode-seed-crypto-6b22f6d.md)
+for independent BIP39, mixing, Core RNG failure and backup/session checks and their
+limitations.
+
+## TD-007 — Native camera streaming
+
+**Decision (2026-10-14):** accept this as a camera integration defect and keep it
+open. Native mode disables libv4l conversion but continues to rely on `v4l2_read()`
+to start streaming. The actual linked library instead delegated to raw `read()`
+for the synthetic streaming-only UVC interface; no streaming setup was attempted:
+
+```text
+registered=1 read_result=-1 errno=22 raw_read_calls=1 streaming_setup_calls=0
+```
+
+The fixture establishes the API mismatch but is not a physical-webcam test. The
+camera source is optional, so this is not evidence that output becomes predictable
+when mandatory Core randomness succeeds. Implement an explicit native streaming
+route or another reviewed solution, add a real-library regression and then verify
+the exact intended laptop/camera physically.
+
+## TD-008 — Assessment JSON boundary
+
+**Decision (2026-10-14):** accept the trusted-process memory-safety defect and keep
+it open. Exact-sized, non-NUL-backed reports ending in truncated number/keyword
+tokens caused guard-page SIGSEGVs inside the pinned parser for worker exit codes
+0 and 1. Adding a backing NUL outside the same logical span made every control
+reject normally. The malformed worker-output prerequisite is meaningful because
+the parser is a trust boundary, although no information disclosure or code
+execution was demonstrated.
+
+Reject irrelevant failed statuses before parsing and provide parser-safe backing
+storage or repair the tokenizer's end checks. Add exact-span malformed-input
+regressions. Evidence and all 20 outcomes are in
+[`json_boundary.cpp`](evidence/seed-6b22f6d/json_boundary.cpp) and the
+[boundary report](2026-10-14-opencode-seed-boundaries-6b22f6d.md).
+
+## TD-009 — Camera resource accounting
+
+**Decision (2026-10-14):** keep this conditional containment gap open. The worker's
+`RLIMIT_AS` bounds virtual address space, not memfd backing pages. After applying
+the production camera confinement policy, a bounded fixture wrote and released a
+40 MiB memfd under a lowered 32 MiB address-space limit in a container capped at
+128 MiB with swap disabled:
+
+```text
+address_space_limit=33554432 memfd_bytes=41943040 allocated_bytes=41943040
+```
+
+This does not demonstrate an OOM or worker compromise. Restrict unnecessary
+anonymous-file creation/writing or apply suitable broader accounting, and describe
+the current limit specifically as virtual address space. See
+[`memfd_budget.cpp`](evidence/seed-6b22f6d/memfd_budget.cpp).
+
+## TD-010 to TD-013 — Lower-priority seed-generation findings
+
+**Decision (2026-10-14):** keep all four open pending focused corrections:
+
+- **TD-010:** validate expected assessment case identities and relevant result
+  fields, or narrow the complete-battery claim. This diagnostic never supplies
+  guaranteed entropy credit.
+- **TD-011:** validate each negotiated format's geometry before ending the format
+  preference search. Physical occurrence remains to be established.
+- **TD-012:** define and enforce whether 20 seconds is a strict acquisition cutoff
+  or a soft worker target distinct from the parent's 30-second watchdog.
+- **TD-013:** retain production's fail-closed Landlock requirement while making
+  test capability handling or the documented host requirement accurate.
+
+**Combined verification:** the existing native suite passed all 16 suites with no
+skips (181.40 seconds). That confirms no ordinary regression in the reviewed build;
+it did not expose the findings above. Archived public probes rebuilt cleanly and
+reproduced TD-006 through TD-009 on 2026-10-14. The implementation remains at
+`6b22f6dfb27371f0fb160e4ca8f068f72cfa335e`; no audit fix is implied by these
+records.
 
 ## TD-003 — Change-index disclosure
 

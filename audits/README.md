@@ -9,12 +9,15 @@ to evaluate, not security certifications.
 
 | Date | Reviewer | Reviewed revision | Report |
 | --- | --- | --- | --- |
+| 2026-10-14 | OpenCode fresh-context general-agent reviewer | `6b22f6dfb27371f0fb160e4ca8f068f72cfa335e` | [Seed-generation cryptographic review](2026-10-14-opencode-seed-crypto-6b22f6d.md) |
+| 2026-10-14 | OpenCode fresh-context explore-agent reviewer; coordinator validation | `6b22f6dfb27371f0fb160e4ca8f068f72cfa335e` | [Seed-generation process and camera boundary review](2026-10-14-opencode-seed-boundaries-6b22f6d.md) |
 | 2026-10-12 | OpenCode / OpenAI GPT-6 Astra | [`a5c2f5c`](https://github.com/bitcoinerlab/thunderden/tree/a5c2f5c7f0b39bdba485d9bfd2550d44c2d804e7) | [Independent security review](2026-10-12-gpt-6-astra-a5c2f5c.md) |
 
-The first report reviews the non-OCR `master` baseline. Its source references and
-line numbers refer to that revision. Its findings are initially **Unreviewed** in
-the tracker; archiving the report does not constitute acceptance of its proposed
-changes.
+The 2026-10-12 report reviews the non-OCR `master` baseline. The 2026-10-14
+reports review the experimental seed-generation branch before any audit fixes.
+Source references and line numbers refer to the recorded revision. Archiving a
+report does not constitute certification or acceptance of all proposed changes;
+the tracker records current project dispositions.
 
 ## Adding a report
 
