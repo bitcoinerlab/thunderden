@@ -135,18 +135,36 @@ EntropyAssessment ParseAssessment(std::span<const unsigned char> json, int exit_
         && error.get_str() == "Symbol alphabet consists of 1 symbol. No entropy awarded...") return {0, true, true};
     Require(exit_code == 0 && level == "0" && report["testCases"].isArray(), "Camera assessment failed");
     const auto& cases = report["testCases"].getValues();
-    Require(cases.size() == 11, "Incomplete assessment cases");
-    std::optional<double> estimate;
-    for (const auto& item : cases) {
-        Require(item.isObject() && item["testCaseDesc"].isStr(), "Invalid assessment case");
-        if (item["testCaseDesc"].get_str() != "Overall") continue;
-        Require(!estimate && item["dataWordSize"].isNum() && item["dataWordSize"].get_real() == 8
-            && item["hAssessed"].isNum(), "Invalid overall assessment");
-        const double h = item["hAssessed"].get_real();
-        Require(std::isfinite(h) && h >= 0 && h <= 8, "Invalid entropy estimate");
-        estimate = h;
+    constexpr std::array<std::string_view, 11> names{"Most Common Value", "Collision Test (for bit strings only)",
+        "Markov Test (for bit strings only)", "Compression Test (for bit strings only)", "T-Tuple Test", "LRS Test",
+        "Multi Most Common in Window Test", "Lag Prediction Test", "Multi Markov Model with Counting Test (MultiMMC)", "LZ78Y Test", "Overall"};
+    Require(cases.size() == names.size(), "Incomplete assessment cases");
+    const auto& overall = cases.back();
+    Require(overall.isObject() && overall["dataWordSize"].isNum() && overall["dataWordSize"].get_real() == 8
+        && overall["hAssessed"].isNum(), "Invalid overall assessment");
+    const bool bitstring = overall.exists("hBitstring");
+    bool warning = !error.isNull();
+    for (size_t i = 0; i < cases.size(); ++i) {
+        const auto& item = cases[i];
+        Require(item.isObject() && item["testCaseDesc"].isStr() && item["testCaseDesc"].get_str() == names[i], "Unexpected assessment case");
+        for (bool bits : {false, true}) {
+            const char* key = i == 4 ? (bits ? "binTTupleRes" : "tTupleRes")
+                : i == 5 ? (bits ? "binLrsRes" : "lrsRes") : bits ? "hBitstring" : "hOriginal";
+            const bool expected = bits ? bitstring : !bitstring || i == 0 || i >= 4;
+            Require(expected || !item.exists(key), "Unexpected assessment result");
+            if (!expected) continue;
+            if (!item.exists(key)) {
+                // Upstream may omit an unavailable compression/tuple/predictor estimate.
+                Require(i > 2 && i < 10, "Missing assessment result");
+                warning = true; continue;
+            }
+            Require(item[key].isNum(), "Invalid assessment result");
+            const double value = item[key].get_real();
+            Require(std::isfinite(value) && value >= 0 && value <= (bits || !bitstring ? 1 : 8), "Invalid assessment estimate");
+        }
     }
-    Require(estimate.has_value(), "Missing overall assessment");
-    return {*estimate, !error.isNull(), false};
+    const double estimate = overall["hAssessed"].get_real();
+    Require(std::isfinite(estimate) && estimate >= 0 && estimate <= (bitstring ? 8 : 1), "Invalid entropy estimate");
+    return {estimate, warning, false};
 }
 }

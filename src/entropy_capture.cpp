@@ -103,7 +103,7 @@ SecretBytes Terminal::CameraEntropy()
         "Statistical estimate for the assessed block only. More samples do not imply the same increase in entropy. This is not a NIST certification."}, "include camera samples",
         {"Native sample profile v1. Driver exposure and gain defaults; no noise filtering.",
             "Native format: " + fourcc,
-            result.warning ? "NIST reported a diagnostic warning. Its overall estimate is shown without modification." : "NIST initial non-IID assessment uses all bits of the fixed block.",
+            result.warning ? "NIST reported a warning or an estimator was unavailable. Its overall estimate is shown without modification." : "NIST initial non-IID assessment uses all bits of the fixed block.",
             "Width: " + std::to_string(ReadBE32(profile.data() + 5)), "Height: " + std::to_string(ReadBE32(profile.data() + 9)),
             profile[14] == 1 ? "Components: native Y" : "Components: R, G, B", "Frames per batch: 64"})) throw Cancelled{};
     return CameraContribution(profile, total, digest);

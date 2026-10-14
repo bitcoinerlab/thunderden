@@ -142,6 +142,11 @@ It runs as a fresh executable, separate from the signer and camera, using sealed
 sample input and a bounded anonymous JSON output. No sample hash or full JSON is
 displayed or logged. The signer uses the existing bounded JSON parser to read the
 global `Overall.hAssessed` JSON result; it does not link NIST or jsoncpp.
+The parser requires the pinned eleven-case sequence and validates the applicable
+literal/bitstring result fields and numeric ranges. Upstream can omit an
+unavailable compression, tuple or predictor estimate; that produces a warning,
+not an unqualified complete result. Missing mandatory results are rejected.
+Schema checks do not prove that a compromised worker ran the estimators.
 One OpenMP thread is allowed in production; process limits forbid additional
 threads/processes. The assessment has a separate memory/CPU/output budget; scanner
 confinement is not weakened. Cancellation kills and waits for every worker.

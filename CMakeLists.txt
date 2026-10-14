@@ -160,7 +160,7 @@ foreach(program core-key-probe core-key-edges)
 endforeach()
 target_link_options(core-key-edges PRIVATE -Wl,--wrap=secp256k1_ec_seckey_tweak_add)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_test(NAME entropy-assessment COMMAND Python3::Interpreter -B "${CMAKE_SOURCE_DIR}/tests/entropy_assessment.py" "$<TARGET_FILE:thunderden-assess>")
+add_test(NAME entropy-assessment COMMAND Python3::Interpreter -B "${CMAKE_SOURCE_DIR}/tests/entropy_assessment.py" "$<TARGET_FILE:thunderden-assess>" "$<TARGET_FILE:entropy-tests>")
 add_test(NAME core-keys COMMAND Python3::Interpreter -B "${CMAKE_SOURCE_DIR}/tests/core_keys.py")
 add_test(NAME native-runtime COMMAND Python3::Interpreter -B
   "${CMAKE_SOURCE_DIR}/tests/native_runtime.py" "$<TARGET_FILE:transaction-tests>" "$<TARGET_FILE:thunderden-signer>")

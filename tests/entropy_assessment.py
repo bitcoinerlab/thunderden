@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import time
 
 SEALS = fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL
@@ -59,7 +60,7 @@ def assess(binary, data, *, sealed=True, threads=1, official=False, timeout=130)
                 os.close(fd)
 
 
-def tests(binary):
+def tests(binary, parser_binary=None):
     for count, sealed in ((1048575, True), (2097153, True), (1048576, False)):
         summary, report = assess(binary, bytes(count), sealed=sealed)
         assert summary['exit_code'] != 0 and not report, 'Invalid sample descriptor accepted'
@@ -73,6 +74,14 @@ def tests(binary):
     assert len(report['testCases']) == 11 and report['IID'] is False and report['errorLevel'] == 0
     assert report['sha256'] == hashlib.sha256(data).hexdigest(), 'NIST did not receive the immutable sample bytes'
     assert 0 <= summary['bits_per_sample'] <= 8
+    if parser_binary:
+        for samples in (data, bytes(value & 1 for value in data)):
+            if samples != data:
+                summary, report = assess(binary, samples)
+                assert summary['exit_code'] == 0 and not summary['timeout'], summary
+            parsed = subprocess.run([parser_binary, '--assessment-report'], input=json.dumps(report),
+                                    text=True, capture_output=True, check=True)
+            assert float(parsed.stdout) == summary['bits_per_sample'], 'Signer changed the official score'
     print('PASS: sealed RAM-only input, invalid descriptors, constant-data status, complete official battery and exact sample bytes')
     print(json.dumps(summary, sort_keys=True))
 
@@ -80,4 +89,6 @@ def tests(binary):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('binary', type=Path)
-    tests(parser.parse_args().binary)
+    parser.add_argument('parser_binary', type=Path, nargs='?')
+    args = parser.parse_args()
+    tests(args.binary, args.parser_binary)

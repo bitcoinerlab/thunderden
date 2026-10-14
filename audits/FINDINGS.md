@@ -124,12 +124,13 @@ Requires worker compromise; no decoder exploit was demonstrated.
 
 Assessment parser does not validate the claimed complete test battery.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Low
 - **Source:** [2026-10-14 / BOUNDARY-04][report-boundary04]
 
-Existing success fixture accepts ten unidentified method objects plus `Overall`;
-diagnostic result only. [Decision and evidence][lower-priority-decisions].
+The pinned test-case sequence and applicable result fields are validated.
+Unavailable optional estimates produce a warning.
+[Decision and evidence][lower-priority-decisions].
 
 ### TD-011
 
@@ -304,6 +305,17 @@ the current limit specifically as virtual address space. See
 [`memfd_budget.cpp`](evidence/seed-6b22f6d/memfd_budget.cpp).
 
 ## TD-010 to TD-013 — Lower-priority seed-generation findings
+
+**TD-010 resolution (2026-10-14):** the parser requires the pinned eleven-case
+sequence, preventing missing, duplicate or unknown case identities. Applicable
+literal/bitstring estimates must be finite and within their symbol bounds.
+Missing mandatory estimates fail; omissions permitted by upstream's conditional
+algorithms produce a warning. The unmodified overall score remains diagnostic.
+Schema tests rejected malformed cases only after the fix. Actual NIST reports
+for public byte-alphabet and binary-alphabet inputs both pass the signer parser
+with unchanged scores. `entropy`, `entropy-assessment` and `terminal` passed
+(3/3, 166.46 seconds). **Fix:** this commit,
+`fix: validate the pinned assessment report schema`.
 
 **TD-012 resolution (2026-10-14):** the real capture loop checks the acquisition
 cutoff again immediately after receiving a frame. Frames returned at or after

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <cstdio>
 #include <memory>
+#include <iostream>
 #include <numeric>
 
 namespace {
@@ -52,9 +53,15 @@ void AssessmentBoundary(const std::string& valid)
     Reject([&] { parse(valid, 255); });
 }
 }
-int main()
+int main(int argc, char** argv)
 {
     try {
+        if (argc == 2 && std::string_view(argv[1]) == "--assessment-report") {
+            const std::string text(std::istreambuf_iterator<char>(std::cin), {});
+            const auto result = td::ParseAssessment({reinterpret_cast<const unsigned char*>(text.data()), text.size()}, 0);
+            std::printf("%.17g\n", result.bits_per_sample);
+            return 0;
+        }
         using td::ManualSource;
         const auto zero12 = td::EntropyMnemonic(td::SecretBytes(16));
         Check(Text(zero12) == "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", "BIP39 128-bit vector");
@@ -146,11 +153,39 @@ int main()
         const auto parse = [&](const std::string& text, int status) {
             return td::ParseAssessment({reinterpret_cast<const unsigned char*>(text.data()), text.size()}, status);
         };
-        UniValue report(UniValue::VOBJ), cases(UniValue::VARR);
-        report.pushKV("IID", false); report.pushKV("errorLevel", 0);
-        for (unsigned i = 0; i < 10; ++i) { UniValue item(UniValue::VOBJ); item.pushKV("testCaseDesc", "Fixture method"); cases.push_back(item); }
-        UniValue overall(UniValue::VOBJ); overall.pushKV("testCaseDesc", "Overall"); overall.pushKV("dataWordSize", 8); overall.pushKV("hAssessed", 0.25);
-        cases.push_back(overall); report.pushKV("testCases", cases);
+        const std::array<const char*, 11> names{"Most Common Value", "Collision Test (for bit strings only)",
+            "Markov Test (for bit strings only)", "Compression Test (for bit strings only)", "T-Tuple Test", "LRS Test",
+            "Multi Most Common in Window Test", "Lag Prediction Test", "Multi Markov Model with Counting Test (MultiMMC)", "LZ78Y Test", "Overall"};
+        const auto assemble = [](const std::vector<UniValue>& methods) {
+            UniValue report(UniValue::VOBJ), cases(UniValue::VARR);
+            report.pushKV("IID", false); report.pushKV("errorLevel", 0);
+            for (const auto& item : methods) cases.push_back(item);
+            report.pushKV("testCases", cases); return report;
+        };
+        std::vector<UniValue> methods;
+        for (unsigned i = 0; i < names.size(); ++i) {
+            UniValue item(UniValue::VOBJ); item.pushKV("testCaseDesc", names[i]);
+            if (i == 0 || i >= 4) item.pushKV(i == 4 ? "tTupleRes" : i == 5 ? "lrsRes" : "hOriginal", 0.25);
+            item.pushKV(i == 4 ? "binTTupleRes" : i == 5 ? "binLrsRes" : "hBitstring", 0.5);
+            if (i == 10) { item.pushKV("dataWordSize", 8); item.pushKV("hAssessed", 0.25); }
+            methods.push_back(item);
+        }
+        auto report = assemble(methods);
+        for (unsigned i = 0; i < names.size(); ++i) {
+            auto bad = methods; bad[i].pushKV("testCaseDesc", "Fixture method");
+            Reject([&] { parse(assemble(bad).write(), 0); });
+            bad = methods; bad[i] = methods[(i + 1) % names.size()];
+            Reject([&] { parse(assemble(bad).write(), 0); });
+            bad = methods; bad[i] = UniValue(UniValue::VOBJ); bad[i].pushKV("testCaseDesc", names[i]);
+            if (i <= 2 || i == 10) Reject([&] { parse(assemble(bad).write(), 0); });
+            else Check(parse(assemble(bad).write(), 0).warning, "Unavailable estimator was not reported");
+        }
+        auto missing = methods; missing.pop_back(); Reject([&] { parse(assemble(missing).write(), 0); });
+        auto extra = methods; extra.push_back(methods[0]); Reject([&] { parse(assemble(extra).write(), 0); });
+        for (const auto& invalid : {UniValue{}, UniValue("bad"), UniValue(-1), UniValue(1.1)}) {
+            auto bad = methods; bad[0].pushKV("hBitstring", invalid);
+            Reject([&] { parse(assemble(bad).write(), 0); });
+        }
         AssessmentBoundary(report.write());
         Check(parse(report.write(), 0).bits_per_sample == 0.25, "Overall result was rescaled");
         Reject([&] { parse(report.write(), 1); });
