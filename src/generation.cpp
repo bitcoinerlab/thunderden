@@ -76,9 +76,9 @@ SecretBytes NewMnemonic(Terminal& terminal)
         "Thunder Den uses Bitcoin Core's random-number generator, which combines several sources of randomness from your computer.", "",
         "This is normally all you need. You can also add randomness using your camera, coin tosses or dice rolls. "
         "These extra sources may help if another source turns out to be weaker than expected."}, "continue")) throw Cancelled{};
-    const bool use_camera = terminal.Menu("Add randomness from your camera?", {"Skip camera", "Use camera"},
+    const bool use_camera = terminal.Menu("Add randomness from your camera?", {"Use camera", "Skip camera"},
         "Camera images contain tiny variations, including noise from the sensor. Thunder Den can mix these readings into the randomness used to create your recovery words.",
-        true, {}, true) == 1;
+        true, {}, true) == 0;
     constexpr ManualSource sources[]{ManualSource::None, ManualSource::Coins, ManualSource::Dice};
     const auto source = sources[terminal.Menu("Add coin tosses or dice rolls?",
         {"Continue without coins or dice", "Coin tosses - " + std::to_string(ManualTarget(ManualSource::Coins, words)) + " tosses",

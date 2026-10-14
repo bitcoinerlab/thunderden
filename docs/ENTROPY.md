@@ -19,9 +19,11 @@ space, with more words to write down and check. Details explain the 128/256-bit
 lengths. Import still accepts 12, 15, 18, 21 or 24 words.
 
 The flow explains Bitcoin Core's random-number generator once, then introduces
-camera readings and coin tosses or dice rolls as optional additions. Required
-toss/roll counts are shown before selection. Instructions remain available on
-compact screens through paging rather than being silently hidden.
+camera readings and coin tosses or dice rolls as optional additions. The camera
+chooser defaults to "Use camera", with "Skip camera" second. Manual input still
+defaults to "Continue without coins or dice". Required toss/roll counts are shown
+before selection. Instructions remain available on compact screens through paging
+rather than being silently hidden.
 
 **System randomness is the main source.** Bitcoin Core's strong random number
 generator (RNG) gets fresh randomness from the operating system. It can also use
@@ -148,16 +150,16 @@ predictable. The camera never replaces mandatory system randomness.
 ## Assessment boundary
 
 The interface introduces NIST as the US National Institute of Standards and
-Technology and calls the analysis "randomness checks". Collection and checks have
-separate progress statuses because they can overlap. Successful results show a
-short confirmation; warnings are visibly distinguished and failures offer retry
+Technology and explains that the randomness checks help estimate how unpredictable
+the checked data is. Collection and checks have separate progress statuses because
+they can overlap. Successful results show a short confirmation; warnings are
+visibly distinguished and failures offer retry
 or continuation without camera data.
 
 The summary shows estimated randomness in checked data, in bits per camera value,
 and the number of camera values included. A visible prompt offers Details with
-`D` (or `d`) or Enter to continue and use the camera data. Details explain the
-8-bit brightness or colour readings, show the number of values checked for
-randomness, and state that the checks examined a portion of the collected data.
+`D` (or `d`) or Enter to continue and use the camera data. Details state how many
+of the collected camera values the randomness checks examined in one sentence.
 The estimate describes that tested data; the interface does not extrapolate a
 total number of bits added to the wallet.
 

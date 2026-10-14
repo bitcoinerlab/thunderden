@@ -10,7 +10,7 @@ SecretBytes Terminal::CameraEntropy()
 {
     if (!Confirm("Collect camera randomness", {"A still scene is fine; movement is not required.", "",
         "We'll collect camera readings and check part of the data for patterns using statistical software from NIST, "
-        "the US National Institute of Standards and Technology.", "",
+        "the US National Institute of Standards and Technology. This helps estimate how unpredictable the checked data is.", "",
         "Allow up to two minutes for collection and checks."}, "start")) throw Cancelled{};
     SecretBytes digest(32);
     std::array<unsigned char, 17> profile{};
@@ -106,9 +106,7 @@ SecretBytes Terminal::CameraEntropy()
     if (result.warning) summary.insert(summary.begin(), {
         "Camera collection is complete, but NIST reported a warning or could not calculate every estimate.", ""});
     if (!Confirm(result.warning ? "Camera checks returned a warning" : "Camera data ready", summary, "use camera data",
-        {"Each camera value is an 8-bit brightness or colour reading.", "",
-            "Camera values checked for randomness: " + std::to_string(ENTROPY_TEST_SAMPLES), "",
-            "The checks examined a portion of the collected data.", "",
+        {"The randomness checks examined " + std::to_string(ENTROPY_TEST_SAMPLES) + " of the collected camera values.", "",
             "Image size: " + std::to_string(ReadBE32(profile.data() + 5)) + " x " + std::to_string(ReadBE32(profile.data() + 9)),
             "Camera output format: " + fourcc,
             profile[14] == 1 ? "Readings used: brightness" : "Readings used: red, green and blue",

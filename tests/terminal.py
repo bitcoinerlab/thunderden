@@ -739,10 +739,11 @@ for mode, entered, expected in (
     assert bytes.fromhex(output.decode().strip()) == expected
 
 
-def start_generation(p, words=12, camera=False, manual=b"1"):
+def start_generation(p, words=12, camera=False, manual=b"\r"):
     address_action(p, b"Enter/1-2: Select", b"1" if words == 12 else b"2")
     address_action(p, b"Enter: continue")
-    address_action(p, b"Enter/1-2: Select", b"2" if camera else b"1")
+    address_action(p, b"Enter/1-2: Select", b"\r" if camera else b"2")
+    assert b"> 1: Use camera" in p.all_text and b"2: Skip camera" in p.all_text
     address_action(p, b"Enter/1-3: Select", manual)
 
 
@@ -819,7 +820,7 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
     # the writable /tmp mount deliberately remains noexec.
     probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
     p = Probe("entropy-generate", executable=str(probe), rows=rows, columns=columns)
-    start_generation(p, camera=True, manual=b"3" if scenario == "valid" else b"1")
+    start_generation(p, camera=True, manual=b"3" if scenario == "valid" else b"\r")
     address_action(p, b"Enter: start")
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
     if scenario == "cancel-assessment":
@@ -837,15 +838,15 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
         summary = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
         assert b"Estimated randomness in checked data:" in summary and b"bits per camera value" in summary
         assert b"Camera values included:" in summary
-        assert b"Camera values checked for randomness:" not in summary, "Checked count belongs in Details"
+        assert b"The randomness checks examined" not in summary, "Checked count belongs in Details"
         assert b"Press D for details, or Enter to continue and use the camera data." in summary
         p.wait(b"d: Summary")
         address_action(p, b"Enter: use camera data")
         rendered = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
         # Compact pages insert navigation text between wrapped lines.
-        assert b"Each camera value is an 8-bit" in rendered and b"brightness or colour reading." in rendered
-        assert b"Camera values checked for randomness:" in rendered and b"1048576" in rendered
-        assert b"The checks examined a portion" in rendered
+        assert b"The randomness checks examined" in rendered and b"1048576" in rendered
+        assert b"of the collected camera values." in rendered
+        assert b"Each camera value is an 8-bit" not in rendered
         assert b"final strength of your recovery words" not in rendered
         assert b"Samples hashed" not in rendered and b"Hashed / assessed" not in rendered
         address_action(p, b"Enter: start collecting")
