@@ -16,21 +16,154 @@ reviewer. **Unreviewed** means a project disposition has not yet been recorded.
 
 ## Findings
 
-| ID | Finding | Report priority | Source | Status | Decision / evidence |
-| --- | --- | --- | --- | --- | --- |
-| TD-001 | Compact multi-input SegWit signing can conceal a higher real fee | High | [2026-10-12 / F-01](2026-10-12-gpt-6-astra-a5c2f5c.md#f-01--compact-multi-input-segwit-fee-attack-remains-possible) | Unreviewed | Report cites an existing executable attack regression and an intentional compatibility tradeoff. Assess the signing-policy recommendation. |
-| TD-002 | Direct wallet workflows lack general trusted receive-address verification | High | [2026-10-12 / F-02](2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows) | Open | Address-QR verification implemented in [`801b8c7`](https://github.com/bitcoinerlab/thunderden/commit/801b8c7bf35b66a5de73e01576a5334c81f1a616). [Decision and verification](#td-002--direct-address-verification); physical-camera verification pending. |
-| TD-003 | High-index change lacks mandatory recovery-risk disclosure | Medium | [2026-10-12 / F-03](2026-10-12-gpt-6-astra-a5c2f5c.md#f-03--high-index-change-can-make-ordinary-recovery-miss-funds) | Resolved | Fixed in [`f93b234`](https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6). [Decision and verification](#td-003--change-index-disclosure). |
-| TD-004 | Documented Liana/bridge installation follows moving versions | Medium | [2026-10-12 / F-04](2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow) | Resolved | Fixed in [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e). [Decision and verification](#td-004--pinned-online-installation). |
-| TD-005 | Unsigned boot and laptop/firmware trust can defeat signer protections | High impact, conditional | [2026-10-12 / L-01](2026-10-12-gpt-6-astra-a5c2f5c.md#l-01--unsigned-boot-and-general-purpose-laptop-trust-remain-critical) | Unreviewed | Report describes an architectural limitation; no physical exploit was attempted. Assess the supported trust boundary and proposed improvements. |
-| TD-006 | Mnemonic validation leaves complete entropy in an uncleansed stack hash context | Medium, conditional | [2026-10-14 / CRYPTO-01](2026-10-14-opencode-seed-crypto-6b22f6d.md#crypto-01-complete-mnemonic-entropy-remains-in-an-uncleansed-stack-hash-context) | Open | Independently reproduced with public 16-/32-byte fixtures. Requires a separate memory-exposure path; none was demonstrated. [Decision and evidence](#td-006--mnemonic-validation-stack-residue). |
-| TD-007 | Native camera capture is incompatible with streaming-only UVC devices | Medium; camera unavailable | [2026-10-14 / BOUNDARY-01](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-01--native-capture-is-incompatible-with-streaming-only-uvc-cameras) | Open | Actual linked libv4l2 used raw `read()` and never configured streaming in the bounded fixture. [Decision and evidence](#td-007--native-camera-streaming). |
-| TD-008 | Exact-sized assessment buffers expose out-of-bounds JSON reads | Medium | [2026-10-14 / BOUNDARY-02](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-02--exact-sized-assessment-buffers-expose-out-of-bounds-json-reads) | Open | Guard-page fixtures reproduced SIGSEGV for truncated tokens; no disclosure or code execution was demonstrated. [Decision and evidence](#td-008--assessment-json-boundary). |
-| TD-009 | Camera address-space limit does not bound anonymous-file memory | Medium, conditional denial of service | [2026-10-14 / BOUNDARY-03](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-03--address-space-limits-do-not-bound-anonymous-file-memory) | Open | Bounded fixture allocated a 40 MiB memfd under a 32 MiB address-space limit. Requires worker compromise; no decoder exploit was demonstrated. [Decision and evidence](#td-009--camera-resource-accounting). |
-| TD-010 | Assessment parser does not validate the claimed complete test battery | Low | [2026-10-14 / BOUNDARY-04](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-04--report-shape-is-weaker-than-the-complete-battery-claim) | Open | Existing success fixture accepts ten unidentified method objects plus `Overall`; diagnostic result only. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
-| TD-011 | Invalid preferred camera geometry prevents same-device format fallback | Low | [2026-10-14 / BOUNDARY-05](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-05--invalid-preferred-geometry-prevents-same-device-fallback) | Open | Confirmed control-flow gap; physical occurrence remains untested. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
-| TD-012 | Twenty-second camera acquisition limit is not a strict cutoff | Low | [2026-10-14 / BOUNDARY-06](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-06--twenty-seconds-is-not-a-strict-acquisition-cutoff) | Open | Blocking capture/send can cross the worker deadline; the parent retains a separate 30-second watchdog. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
-| TD-013 | New confinement tests contradict documented unsupported-host skip behavior | Low | [2026-10-14 / BOUNDARY-07](2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-07--unsupported-host-tests-contradict-documented-skip-behavior) | Open | Source-level test/documentation mismatch; production remains intentionally fail-closed. [Decision and evidence](#td-010-to-td-013--lower-priority-seed-generation-findings). |
+### TD-001
+
+Compact multi-input SegWit signing can conceal a higher real fee.
+
+- **Status:** Unreviewed
+- **Report priority:** High
+- **Source:** [2026-10-12 / F-01][report-f01]
+
+Report cites an existing executable attack regression and an intentional
+compatibility tradeoff. Assess the signing-policy recommendation.
+
+### TD-002
+
+Direct wallet workflows lack general trusted receive-address verification.
+
+- **Status:** Open
+- **Report priority:** High
+- **Source:** [2026-10-12 / F-02][report-f02]
+
+Address-QR verification implemented in [`801b8c7`][commit-801b8c7].
+[Decision and verification](#td-002--direct-address-verification);
+physical-camera verification pending.
+
+### TD-003
+
+High-index change lacks mandatory recovery-risk disclosure.
+
+- **Status:** Resolved
+- **Report priority:** Medium
+- **Source:** [2026-10-12 / F-03][report-f03]
+
+Fixed in [`f93b234`][commit-f93b234].
+[Decision and verification](#td-003--change-index-disclosure).
+
+### TD-004
+
+Documented Liana/bridge installation follows moving versions.
+
+- **Status:** Resolved
+- **Report priority:** Medium
+- **Source:** [2026-10-12 / F-04][report-f04]
+
+Fixed in [`b1bd501`][commit-b1bd501].
+[Decision and verification](#td-004--pinned-online-installation).
+
+### TD-005
+
+Unsigned boot and laptop/firmware trust can defeat signer protections.
+
+- **Status:** Unreviewed
+- **Report priority:** High impact, conditional
+- **Source:** [2026-10-12 / L-01][report-l01]
+
+Report describes an architectural limitation; no physical exploit was attempted.
+Assess the supported trust boundary and proposed improvements.
+
+### TD-006
+
+Mnemonic validation leaves complete entropy in an uncleansed stack hash context.
+
+- **Status:** Open
+- **Report priority:** Medium, conditional
+- **Source:** [2026-10-14 / CRYPTO-01][report-crypto01]
+
+Independently reproduced with public 16-/32-byte fixtures. Requires a separate
+memory-exposure path; none was demonstrated.
+[Decision and evidence](#td-006--mnemonic-validation-stack-residue).
+
+### TD-007
+
+Native camera capture is incompatible with streaming-only UVC devices.
+
+- **Status:** Open
+- **Report priority:** Medium; camera unavailable
+- **Source:** [2026-10-14 / BOUNDARY-01][report-boundary01]
+
+Actual linked libv4l2 used raw `read()` and never configured streaming in the
+bounded fixture. [Decision and evidence](#td-007--native-camera-streaming).
+
+### TD-008
+
+Exact-sized assessment buffers expose out-of-bounds JSON reads.
+
+- **Status:** Open
+- **Report priority:** Medium
+- **Source:** [2026-10-14 / BOUNDARY-02][report-boundary02]
+
+Guard-page fixtures reproduced SIGSEGV for truncated tokens; no disclosure or
+code execution was demonstrated.
+[Decision and evidence](#td-008--assessment-json-boundary).
+
+### TD-009
+
+Camera address-space limit does not bound anonymous-file memory.
+
+- **Status:** Open
+- **Report priority:** Medium, conditional denial of service
+- **Source:** [2026-10-14 / BOUNDARY-03][report-boundary03]
+
+Bounded fixture allocated a 40 MiB memfd under a 32 MiB address-space limit.
+Requires worker compromise; no decoder exploit was demonstrated.
+[Decision and evidence](#td-009--camera-resource-accounting).
+
+### TD-010
+
+Assessment parser does not validate the claimed complete test battery.
+
+- **Status:** Open
+- **Report priority:** Low
+- **Source:** [2026-10-14 / BOUNDARY-04][report-boundary04]
+
+Existing success fixture accepts ten unidentified method objects plus `Overall`;
+diagnostic result only. [Decision and evidence][lower-priority-decisions].
+
+### TD-011
+
+Invalid preferred camera geometry prevents same-device format fallback.
+
+- **Status:** Open
+- **Report priority:** Low
+- **Source:** [2026-10-14 / BOUNDARY-05][report-boundary05]
+
+Confirmed control-flow gap; physical occurrence remains untested.
+[Decision and evidence][lower-priority-decisions].
+
+### TD-012
+
+Twenty-second camera acquisition limit is not a strict cutoff.
+
+- **Status:** Open
+- **Report priority:** Low
+- **Source:** [2026-10-14 / BOUNDARY-06][report-boundary06]
+
+Blocking capture/send can cross the worker deadline; the parent retains a
+separate 30-second watchdog. [Decision and evidence][lower-priority-decisions].
+
+### TD-013
+
+New confinement tests contradict documented unsupported-host skip behavior.
+
+- **Status:** Open
+- **Report priority:** Low
+- **Source:** [2026-10-14 / BOUNDARY-07][report-boundary07]
+
+Source-level test/documentation mismatch; production remains intentionally
+fail-closed. [Decision and evidence][lower-priority-decisions].
+
+## Follow-up evidence
 
 For each disposition, record the rationale and supporting evidence here. A
 resolution should link the fix commit and regression test or verification result.
@@ -146,7 +279,8 @@ missing disclosure rather than guaranteeing wallet discovery.
 [`tests/transactions.cpp`](../tests/transactions.cpp) failed against the prior
 implementation with `Mandatory review hid the change index` for verified change
 at index 1,000,000,000. The implementation is in
-[`src/review.cpp`](../src/review.cpp) and [`src/application.cpp`](../src/application.cpp).
+[`src/review.cpp`](../src/review.cpp) and
+[`src/application.cpp`](../src/application.cpp).
 
 **Verification:** targeted transaction and terminal tests pass. Coverage includes
 BIP84, BIP86 and 2-of-2 P2WSH; indices 6, 50,000, 50,001, 1,000,000,000 and
@@ -164,13 +298,13 @@ docker compose --progress quiet run --build --rm test
 
 All 11 suites passed, with none skipped (25.02 seconds of test execution). This
 checks native behavior, not physical-device recovery or a new release image.
-**Fix commit:** [`f93b234`](https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6)
+**Fix commit:** [`f93b234`][commit-f93b234]
 (`fix: disclose high-index change recovery risk`). TD-003 is resolved at this
 source revision; this is not a claim that the fix is in a published USB image.
 The original audit report remains unchanged.
 
 **Release availability (2026-10-13):** the change-index disclosure is included in
-[preview 7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7).
+[preview 7][release-preview7].
 
 ## TD-004 — Pinned online installation
 
@@ -198,7 +332,7 @@ These are source/pin and published-package checks, not a new Rust build or a
 physical wallet/signing validation. The existing integration test scope remains
 in [STATUS.md](../docs/STATUS.md#liana-integration).
 
-**Fix commit:** [`b1bd501`](https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e)
+**Fix commit:** [`b1bd501`][commit-b1bd501]
 (`docs: pin Liana integration installation versions`). TD-004 is resolved at this
 documentation revision. The original audit is unchanged.
 
@@ -209,7 +343,8 @@ documentation revision. The original audit is unchanged.
 selected standard account or the compatible multisig wallet already approved in
 RAM. Search both receiving and change branches in 1,000-index windows, with a
 stable progress display, stop/resume, account selection and exact-index lookup.
-The [protocol guide](../docs/PROTOCOL.md#plain-address-checks) describes supported contexts and limits.
+The [protocol guide](../docs/PROTOCOL.md#plain-address-checks) describes supported
+contexts and limits.
 
 The signer independently validates the destination and compares public scripts
 derived by Bitcoin Core. URI amounts/labels are not payment instructions. A
@@ -235,10 +370,47 @@ no OCR executable, models or OpenCV. The public fixture producer
 `address-check-tests --fixtures` supplies 12-word regtest examples and two multisig
 setup QRs for a physical trial; every generated QR matrix is decoded before export.
 
-**Implementation checkpoint (2026-10-13):** [`801b8c7`](https://github.com/bitcoinerlab/thunderden/commit/801b8c7bf35b66a5de73e01576a5334c81f1a616)
-(`feat: verify scanned addresses against wallet accounts`) records the implementation
-and automated verification above. Physical-camera verification remains pending;
-this entry remains Open. The original report is unchanged.
+**Implementation checkpoint (2026-10-13):** [`801b8c7`][commit-801b8c7]
+(`feat: verify scanned addresses against wallet accounts`) records the
+implementation and automated verification above. Physical-camera verification
+remains pending; this entry remains Open. The original report is unchanged.
 
-**Release availability (2026-10-13):** [preview 7](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7)
+**Release availability (2026-10-13):** [preview 7][release-preview7]
 includes address verification and the review/layout polish from `b6b9c16`.
+
+[report-f01]:
+  2026-10-12-gpt-6-astra-a5c2f5c.md#f-01--compact-multi-input-segwit-fee-attack-remains-possible
+[report-f02]:
+  2026-10-12-gpt-6-astra-a5c2f5c.md#f-02--receiving-is-insufficiently-protected-in-the-direct-workflows
+[report-f03]:
+  2026-10-12-gpt-6-astra-a5c2f5c.md#f-03--high-index-change-can-make-ordinary-recovery-miss-funds
+[report-f04]:
+  2026-10-12-gpt-6-astra-a5c2f5c.md#f-04--lianabridge-setup-is-not-pinned-by-the-readme-workflow
+[report-l01]:
+  2026-10-12-gpt-6-astra-a5c2f5c.md#l-01--unsigned-boot-and-general-purpose-laptop-trust-remain-critical
+[report-crypto01]:
+  2026-10-14-opencode-seed-crypto-6b22f6d.md#crypto-01-complete-mnemonic-entropy-remains-in-an-uncleansed-stack-hash-context
+[report-boundary01]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-01--native-capture-is-incompatible-with-streaming-only-uvc-cameras
+[report-boundary02]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-02--exact-sized-assessment-buffers-expose-out-of-bounds-json-reads
+[report-boundary03]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-03--address-space-limits-do-not-bound-anonymous-file-memory
+[report-boundary04]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-04--report-shape-is-weaker-than-the-complete-battery-claim
+[report-boundary05]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-05--invalid-preferred-geometry-prevents-same-device-fallback
+[report-boundary06]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-06--twenty-seconds-is-not-a-strict-acquisition-cutoff
+[report-boundary07]:
+  2026-10-14-opencode-seed-boundaries-6b22f6d.md#boundary-07--unsupported-host-tests-contradict-documented-skip-behavior
+[lower-priority-decisions]:
+  #td-010-to-td-013--lower-priority-seed-generation-findings
+[commit-801b8c7]:
+  https://github.com/bitcoinerlab/thunderden/commit/801b8c7bf35b66a5de73e01576a5334c81f1a616
+[commit-f93b234]:
+  https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6
+[commit-b1bd501]:
+  https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e
+[release-preview7]:
+  https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7
