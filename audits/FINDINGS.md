@@ -112,12 +112,12 @@ Guard-page regressions verify exact-span input handling.
 
 Camera address-space limit does not bound anonymous-file memory.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Medium, conditional denial of service
 - **Source:** [2026-10-14 / BOUNDARY-03][report-boundary03]
 
-Bounded fixture allocated a 40 MiB memfd under a 32 MiB address-space limit.
-Requires worker compromise; no decoder exploit was demonstrated.
+QR and camera workers now deny anonymous-file growth with a hard zero file-size
+limit. Native regressions pass; the correction is not yet released.
 [Decision and evidence](#td-009--camera-resource-accounting).
 
 ### TD-010
@@ -327,6 +327,36 @@ This does not demonstrate an OOM or worker compromise. Restrict unnecessary
 anonymous-file creation/writing or apply suitable broader accounting, and describe
 the current limit specifically as virtual address space. See
 [`memfd_budget.cpp`](evidence/seed-6b22f6d/memfd_budget.cpp).
+
+**Correction (2026-10-14, after preview 8):** `ConfineScanner` now sets both
+`RLIMIT_FSIZE` limits to zero before applying the shared worker confinement.
+This covers the QR scanner and native camera-entropy worker. Their pipe output
+does not need regular-file growth. The assessment worker retains its separate
+64 KiB report allowance.
+
+This closes the demonstrated anonymous-file growth route. The 256 MiB
+`RLIMIT_AS` remains a virtual-address-space limit, not comprehensive accounting
+of kernel memory. [Isolation documentation](../docs/ISOLATION.md) states that
+boundary explicitly.
+
+**Regression:** [`tests/isolation.cpp`](../tests/isolation.cpp) attempts memfd
+growth with `write`, `pwrite`, `ftruncate` and `fallocate`, including
+`FALLOC_FL_KEEP_SIZE`. Each operation must fail with `EFBIG` and leave both file
+size and allocated blocks at zero, even with `SIGXFSZ` ignored. A separate probe
+requires denial of attempts to raise the hard file-size limit. All six probes
+failed against the pre-fix implementation; the original bounded 40 MiB probe
+also reproduced the accounting gap against preview 8's native build.
+
+**Verification:** the rebuilt MinSizeRel application passed all 18 native suites,
+none skipped (191.77 seconds), with `ctest --test-dir /build --output-on-failure`.
+This includes all six new probes, confined JPEG/QR decoding, camera-generation
+flows, worker cleanup and actual NIST report generation. Tests used read-only
+source/build mounts, writable test tmpfs mounts, disabled networking, dropped
+capabilities and no new privileges.
+
+**Fix:** the commit containing this resolution,
+`fix: bound camera worker anonymous-file growth`. Not included in preview 8 or
+the flashed USB image.
 
 ## TD-010 to TD-013 — Lower-priority seed-generation findings
 

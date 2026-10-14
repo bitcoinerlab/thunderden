@@ -76,7 +76,13 @@ void ConfineWorker(rlim_t memory_bytes)
 }
 }
 
-void ConfineScanner() { ConfineWorker(256 * 1024 * 1024); }
+void ConfineScanner()
+{
+    // Pipe output needs no regular files; RLIMIT_AS does not bound memfd backing pages.
+    const rlimit output{0, 0};
+    Require(setrlimit(RLIMIT_FSIZE, &output) == 0, "Cannot bound scanner file growth");
+    ConfineWorker(256 * 1024 * 1024);
+}
 
 void ConfineAssessment()
 {

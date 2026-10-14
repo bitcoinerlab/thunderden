@@ -4,6 +4,7 @@
 #include "scan.h"
 
 #include <linux/capability.h>
+#include <linux/falloc.h>
 #include <linux/landlock.h>
 #include <linux/videodev2.h>
 #include <libv4l-plugin.h>
@@ -15,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/ptrace.h>
 #include <sys/syscall.h>
 #include <sys/uio.h>
@@ -187,7 +189,29 @@ int Worker(const std::string& mode)
         result = syscall(SYS_process_vm_readv, parent, &local, 1, &remote, 1, 0);
     } else if (mode == "signal") result = syscall(SYS_kill, parent, SIGUSR1);
     else if (mode == "fork") { result = syscall(SYS_clone, SIGCHLD, nullptr, nullptr, nullptr, 0); expected_errno = EAGAIN; }
-    else if (mode == "raise-limit") { rlimit unlimited{RLIM_INFINITY, RLIM_INFINITY}; result = syscall(SYS_prlimit64, 0, RLIMIT_AS, &unlimited, nullptr); }
+    else if (mode == "raise-limit" || mode == "raise-file-limit") {
+        rlimit unlimited{RLIM_INFINITY, RLIM_INFINITY};
+        result = syscall(SYS_prlimit64, 0, mode == "raise-limit" ? RLIMIT_AS : RLIMIT_FSIZE, &unlimited, nullptr);
+    } else if (mode.starts_with("memfd-")) {
+        Check(signal(SIGXFSZ, SIG_IGN) != SIG_ERR, "Cannot ignore file-size signal");
+        const int file = memfd_create("public-resource-fixture", MFD_CLOEXEC);
+        Check(file >= 0, "Cannot create anonymous-file fixture");
+        const char value = 0;
+        if (mode == "memfd-write") result = write(file, &value, 1);
+        else if (mode == "memfd-pwrite") result = pwrite(file, &value, 1, 4096);
+        else if (mode == "memfd-truncate") result = ftruncate(file, 4096);
+        else if (mode == "memfd-allocate") result = fallocate(file, 0, 0, 4096);
+        else {
+            Check(mode == "memfd-allocate-keep-size", "Unknown anonymous-file probe");
+            result = fallocate(file, FALLOC_FL_KEEP_SIZE, 0, 4096);
+        }
+        Check(result == -1 && errno == EFBIG, "Worker grew anonymous-file storage");
+        struct stat info{};
+        Check(fstat(file, &info) == 0 && info.st_size == 0 && info.st_blocks == 0,
+            "Denied anonymous-file growth allocated storage");
+        close(file);
+        return 0;
+    }
     else {
         Check(mode == "decode" || mode == "limit" || mode == "mjpeg" || mode == "wallet" || mode == "address", "Unknown probe mode");
         char value;
@@ -320,7 +344,8 @@ void Parent(const std::string& executable)
             Check(previews > 1, "Healthy frames did not keep the scanner alive");
         }
         Check(waitpid(-1, nullptr, WNOHANG) == -1 && errno == ECHILD, "Worker was not reaped");
-        for (const auto mode : {"open", "write-file", "exec", "ptrace", "read-parent", "signal", "fork", "raise-limit"}) {
+        for (const auto mode : {"open", "write-file", "exec", "ptrace", "read-parent", "signal", "fork", "raise-limit",
+                "memfd-write", "memfd-pwrite", "memfd-truncate", "memfd-allocate", "memfd-allocate-keep-size", "raise-file-limit"}) {
             const pid_t pid = fork();
             Check(pid >= 0, "Probe fork failed");
             if (!pid) {

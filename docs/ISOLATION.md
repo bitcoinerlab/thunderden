@@ -103,9 +103,10 @@ keyboard/display descriptors. They cannot read the parent's memory, control its
 terminal or approve an action. All workers are killed if necessary and reaped
 before camera review, physical input or recovery-word display.
 
-The camera uses the existing 256 MiB scanner confinement policy. Its binary pipe
-has a BE32 kind and BE32 byte length: profile (17 bytes), frame count (4), samples
-(at most 65,536 per record), or completion flags (4). The parent validates the
+The camera uses the existing 256 MiB virtual-address-space limit and zero file-size
+limit of the scanner policy. Its binary pipe has a BE32 kind and BE32 byte length:
+profile (17 bytes), frame count (4), samples (at most 65,536 per record), or
+completion flags (4). The parent validates the
 profile, bounds the complete sample stream to 64 MiB and requires complete
 records for its ten-second activity deadline. Capture has a separate elapsed
 budget; the complete capture/assessment operation has a 120-second wall limit.
@@ -161,12 +162,18 @@ validation work; current coverage is listed in [Implementation status](STATUS.md
   Address searching runs after the camera worker has exited and can be stopped
   between public derivations. It does not call signing operations.
 - Per-scanner resource limits are 256 MiB of address space, 64 file descriptors
-  and no additional child processes or threads. A parent-side ten-second
-  no-frame deadline covers startup and stalled capture/decoding.
+  and no additional child processes or threads. A hard zero `RLIMIT_FSIZE` prevents
+  regular-file growth, including anonymous RAM files (`memfd`), while pipe output
+  remains available. This closes the demonstrated anonymous-file backing-store
+  bypass of `RLIMIT_AS`; it is not comprehensive kernel-memory accounting.
+  The separate assessment policy retains its 64 KiB file-size limit for reports.
+  A parent-side ten-second no-frame deadline covers startup and stalled
+  capture/decoding.
 - [Isolation tests](../tests/isolation.cpp) check fresh process state, restricted
   privileges, denied application-file writes, real JPEG/QR/UR decoding under
   confinement, malformed and partial pipe records, cancellation, process cleanup,
-  memory limits, no-frame timeouts, fixed failure reports and denied filesystem
+  address-space limits, denied anonymous-file growth and file-limit increases,
+  no-frame timeouts, fixed failure reports and denied filesystem
   and parent-process access. JPEG conversion uses the real conversion libraries
   with mocked camera-driver controls.
 - [Build and tests](BUILD.md) describes the default native suites and optional
