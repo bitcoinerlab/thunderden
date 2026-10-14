@@ -1,14 +1,9 @@
 #pragma once
 #include "keys.h"
-#include <crypto/sha256.h>
 
 namespace td {
 class Terminal;
 SecretBytes NewMnemonic(Terminal& terminal);
-// Secret hash state is erased, including on cancellation and exceptions.
-struct EntropyHash : CSHA256 {
-    ~EntropyHash() { memory_cleanse(this, sizeof(*this)); }
-};
 // Keep the v1 source tags stable; the retired tag 2 is not accepted.
 enum class ManualSource : unsigned char { None = 0, Coins = 1, Dice = 3 };
 unsigned ManualTarget(ManualSource source, unsigned words);

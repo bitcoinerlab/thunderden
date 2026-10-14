@@ -76,12 +76,12 @@ Assess the supported trust boundary and proposed improvements.
 
 Mnemonic validation leaves complete entropy in an uncleansed stack hash context.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Medium, conditional
 - **Source:** [2026-10-14 / CRYPTO-01][report-crypto01]
 
-Independently reproduced with public 16-/32-byte fixtures. Requires a separate
-memory-exposure path; none was demonstrated.
+Fixed by using scope-bound hash cleanup for mnemonic validation and generation.
+Optimized-build regressions verify cleanup on success and exceptions.
 [Decision and evidence](#td-006--mnemonic-validation-stack-residue).
 
 ### TD-007
@@ -191,6 +191,29 @@ image on 2026-10-14. See the [full report](2026-10-14-opencode-seed-crypto-6b22f
 for independent BIP39, mixing, Core RNG failure and backup/session checks and their
 limitations.
 
+**Resolution (2026-10-14):** both mnemonic checksum paths now use the existing
+`EntropyHash` cleanup type, shared through `keys.h`. Each temporary hash is erased
+at the end of its expression, before checksum comparison or further word
+processing, including when hashing throws. The design document now limits its
+cleanup statement to the specific contexts and managed buffers covered.
+
+**Regression:** [`tests/mnemonic_cleanup.cpp`](../tests/mnemonic_cleanup.cpp)
+links the real optimized application/Core code with test-only observers for hash
+finalization and cleansing. It verifies that the complete context is zeroed
+while its storage is still alive, without inspecting abandoned stack memory.
+Cases cover valid and invalid checksums for 12/15/18/21/24 words, 12-/24-word
+generation, and injected exceptions in both checksum paths. The test failed
+before the fix with `Mnemonic hash context was not fully cleansed` and passes
+afterward. Production symbol checks exclude both test wrappers.
+
+**Verification:** rebuilt the MinSizeRel native targets and ran
+`ctest --test-dir /build --output-on-failure`. Sixteen suites passed; `isolation`
+correctly rejected the writable build bind mount used by that command. Rerunning
+only `isolation` with `/build` read-only and a writable `/build/Testing` tmpfs
+passed (11.19 seconds). All 17 suites passed across these runs.
+**Fix:** the commit containing this resolution,
+`fix: cleanse mnemonic checksum hash contexts`. No new USB image was built.
+
 ## TD-007 — Native camera streaming
 
 **Decision (2026-10-14):** accept this as a camera integration defect and keep it
@@ -239,9 +262,9 @@ report size. It reproduced SIGSEGV before the fix and passes afterward.
 **Verification:** the optimized native build passed `entropy`,
 `entropy-assessment` and `terminal` (3/3, 170.78 seconds), using
 `ctest --test-dir /build -R '^(entropy|entropy-assessment|terminal)$'
---output-on-failure`. **Fix:** the commit containing this resolution,
-`fix: bound assessment JSON parser lookahead`. This is a source fix; the existing
-experimental USB image has not been rebuilt.
+--output-on-failure`. **Fix commit:** [`85520a3`][commit-85520a3]
+(`fix: bound assessment JSON parser lookahead`). This is a source fix; the
+existing experimental USB image has not been rebuilt.
 
 ## TD-009 — Camera resource accounting
 
@@ -431,5 +454,7 @@ includes address verification and the review/layout polish from `b6b9c16`.
   https://github.com/bitcoinerlab/thunderden/commit/f93b234d3aa966b485c20523d34b605144569fd6
 [commit-b1bd501]:
   https://github.com/bitcoinerlab/thunderden/commit/b1bd50175fa92e3a98c9a6f1b0b078a0b5b7f22e
+[commit-85520a3]:
+  https://github.com/bitcoinerlab/thunderden/commit/85520a311e1c1cf182a67a465ea3feb7b99e6909
 [release-preview7]:
   https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.7

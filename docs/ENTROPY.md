@@ -88,8 +88,10 @@ the retired type 2 is rejected. The remaining v1 tags and vectors are unchanged.
 An omitted source record is one zero byte; an included record is
 its nonzero type (1 for camera), followed by its 32-byte contribution digest.
 Take the first 16 bytes of F for 12 words, or all 32 for 24 words, then add the
-BIP39 checksum and use the existing pinned English wordlist. Hash contexts and
-managed secret buffers are erased; complete physical-memory erasure is not claimed.
+BIP39 checksum and use the existing pinned English wordlist. The SHA-256 contexts
+used for entropy mixing and mnemonic checksums are erased on scope exit, including
+exceptions. Managed secret buffers are erased on deallocation. This does not
+establish erasure of every cryptographic-library temporary or physical-memory copy.
 The later 64-byte PBKDF2 seed does not increase the mnemonic's 128/256-bit entropy.
 
 SHA-256 mixes the inputs; it does not create randomness. The design relies on

@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory() as directory:
 
 application = Path(sys.argv[2])
 app_symbols = subprocess.check_output(["nm", "-C", "--defined-only", application], text=True)
-for absent in ("CConnman::", "PeerManager", "CRPCTable::", "HTTPServer", "CWallet::", "leveldb::", "__wrap_secp256k1", "__wrap__Z18GetStrongRandBytes", "NistMain"):
+for absent in ("CConnman::", "PeerManager", "CRPCTable::", "HTTPServer", "CWallet::", "leveldb::", "__wrap_secp256k1", "__wrap__Z18GetStrongRandBytes", "__wrap__ZN7CSHA2568Finalize", "__wrap__Z14memory_cleanse", "NistMain"):
     assert absent not in app_symbols, absent
 closure = subprocess.check_output(["ldd", application], text=True)
 allowed = {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <key.h>
+#include <crypto/sha256.h>
 #include <support/allocators/secure.h>
 
 #include <array>
@@ -16,6 +17,11 @@ using Digest = std::array<unsigned char, 32>;
 using Fingerprint = std::array<unsigned char, 4>;
 using Path = std::vector<uint32_t>;
 std::string PathText(const Path& path);
+
+// Secret hash state is erased, including on cancellation and exceptions.
+struct EntropyHash : CSHA256 {
+    ~EntropyHash() { memory_cleanse(this, sizeof(*this)); }
+};
 
 inline void Require(bool condition, const char* message)
 {
