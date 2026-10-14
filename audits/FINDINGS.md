@@ -173,6 +173,29 @@ For each disposition, record the rationale and supporting evidence here. A
 resolution should link the fix commit and regression test or verification result.
 The original report retains the full threat model, prerequisites and limitations.
 
+### Seed-branch correction checkpoints — 2026-10-14
+
+- TD-006: `9701096`; baseline backport `3de20f3` on `fix/mnemonic-cleanup`.
+- TD-007: `10fc89d` — explicit native camera streaming.
+- TD-011: `8ccff06` — validate geometry before selecting a format.
+- TD-012: `734c46b` — discard frames returned at or after the acquisition cutoff.
+- TD-010: `f1c4643` — validate the pinned assessment report schema.
+- TD-013: `e09a8a2` — document the full suite's Landlock requirement.
+
+The combined feature source at `e09a8a2` was rebuilt in MinSizeRel and passed
+all 18 native suites, none skipped (184.26 seconds). Tests ran with read-only
+source/build mounts, writable `/tmp` and `/build/Testing` tmpfs mounts, dropped
+capabilities, no new privileges and networking disabled:
+
+```sh
+ctest --test-dir /build --output-on-failure
+```
+
+The independent master-based backport passed all 13 baseline suites, none
+skipped (28.56 seconds). Both branches remain local; master has not been advanced.
+TD-009 is deferred to a separate master-based correction. No USB image was
+rebuilt, and physical camera validation remains pending.
+
 ## TD-006 — Mnemonic validation stack residue
 
 **Decision (2026-10-14):** accept this as a defense-in-depth implementation
@@ -344,7 +367,8 @@ The first failed before the fix; all 23 native-camera scenarios and the existing
 QR camera suite pass afterward (0.12 seconds). **Fix:** this commit,
 `fix: validate camera geometry before selecting a format`.
 
-**Decision (2026-10-14):** keep all four open pending focused corrections:
+**Initial decision (2026-10-14, before the corrections above):** keep all four
+open pending focused corrections:
 
 - **TD-010:** validate expected assessment case identities and relevant result
   fields, or narrow the complete-battery claim. This diagnostic never supplies
@@ -356,10 +380,10 @@ QR camera suite pass afterward (0.12 seconds). **Fix:** this commit,
 - **TD-013:** retain production's fail-closed Landlock requirement while making
   test capability handling or the documented host requirement accurate.
 
-**Combined verification:** the existing native suite passed all 16 suites with no
+**Original audit verification:** the existing native suite passed all 16 suites with no
 skips (181.40 seconds). That confirms no ordinary regression in the reviewed build;
 it did not expose the findings above. Archived public probes rebuilt cleanly and
-reproduced TD-006 through TD-009 on 2026-10-14. The implementation remains at
+reproduced TD-006 through TD-009 on 2026-10-14. That audit reviewed
 `6b22f6dfb27371f0fb160e4ca8f068f72cfa335e`; no audit fix is implied by these
 records.
 
