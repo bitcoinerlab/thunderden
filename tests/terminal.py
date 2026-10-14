@@ -760,7 +760,7 @@ def copy_backup(p):
 for rows, columns in ((12, 40), (24, 80)):
     p = Probe("entropy-generate", rows=rows, columns=columns)
     address_action(p, b"Enter/1-2: Select", b"\x1b[B")
-    p.enter(b"> 2: 24 words", b"d\r")
+    p.enter(b"> 2: 24 words", b"D\r" if columns == 40 else b"d\r")
     address_action(p, b"Enter: return to choices", b"\r\r")
     p.wait(b"> 2: 24 words")
     assert b"How your recovery words are created" not in p.all_text, "Details or queued Enter selected a word count"
@@ -781,6 +781,9 @@ for count, rows, columns in ((12, 12, 40), (24, 24, 80)):
         assert b"128 rolls" in rendered
     assert b"Write down your recovery words" not in p.all_text
     address_action(p, b"Enter: generate words")
+    rendered = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
+    assert b"The next screen will show" in rendered
+    assert b"no camera" in rendered and b"is pointed at it." in rendered
     backup = copy_backup(p)
     assert len(backup) == count
     address_action(p, b"Enter: enter your words")
@@ -830,15 +833,20 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
     if scenario == "valid":
         p.wait(b"d: Details", timeout=130)
         assert not children.read_text().strip(), "Workers survived into camera review"
-        assert b"Estimated randomness:" not in p.all_text, "Camera summary exposed technical estimates"
-        p.send(b"d")
+        address_action(p, b"Enter: use camera data", b"D" if columns == 40 else b"d")
+        summary = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
+        assert b"Estimated randomness in checked data:" in summary and b"bits per camera value" in summary
+        assert b"Camera values included:" in summary
+        assert b"Camera values checked for randomness:" not in summary, "Checked count belongs in Details"
+        assert b"Press D for details, or Enter to continue and use the camera data." in summary
         p.wait(b"d: Summary")
         address_action(p, b"Enter: use camera data")
         rendered = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
         # Compact pages insert navigation text between wrapped lines.
-        assert b"Estimated randomness:" in rendered and b"per 8-bit camera value" in rendered, rendered
+        assert b"Each camera value is an 8-bit" in rendered and b"brightness or colour reading." in rendered
         assert b"Camera values checked for randomness:" in rendered and b"1048576" in rendered
-        assert b"tested camera data" in rendered and b"strength of your recovery words" in rendered
+        assert b"The checks examined a portion" in rendered
+        assert b"final strength of your recovery words" not in rendered
         assert b"Samples hashed" not in rendered and b"Hashed / assessed" not in rendered
         address_action(p, b"Enter: start collecting")
         p.wait(b"Rolls entered:")

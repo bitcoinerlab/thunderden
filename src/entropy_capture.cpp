@@ -101,20 +101,19 @@ SecretBytes Terminal::CameraEntropy()
     const auto format = ReadBE32(profile.data() + 1);
     std::string fourcc;
     for (unsigned shift = 0; shift < 32; shift += 8) fourcc += char(format >> shift);
-    if (!Confirm(result.warning ? "Camera checks returned a warning" : "Camera data ready", {
-        result.warning ? "Camera collection is complete, but NIST reported a warning or could not calculate every estimate."
-            : "Camera collection and statistical checks are complete.", "",
-        "You can now include this data when creating your recovery words."}, "use camera data",
+    ReviewLines summary{"Estimated randomness in checked data:", score + " bits per camera value", "",
+        "Camera values included: " + std::to_string(total)};
+    if (result.warning) summary.insert(summary.begin(), {
+        "Camera collection is complete, but NIST reported a warning or could not calculate every estimate.", ""});
+    if (!Confirm(result.warning ? "Camera checks returned a warning" : "Camera data ready", summary, "use camera data",
         {"Each camera value is an 8-bit brightness or colour reading.", "",
-            "Camera values included: " + std::to_string(total),
             "Camera values checked for randomness: " + std::to_string(ENTROPY_TEST_SAMPLES), "",
-            "Estimated randomness: " + score + " bits per 8-bit camera value", "",
-            "This estimate describes only the tested camera data, not the final strength of your recovery words.",
-            "The checks examine a portion of the collected data.", "",
+            "The checks examined a portion of the collected data.", "",
             "Image size: " + std::to_string(ReadBE32(profile.data() + 5)) + " x " + std::to_string(ReadBE32(profile.data() + 9)),
             "Camera output format: " + fourcc,
             profile[14] == 1 ? "Readings used: brightness" : "Readings used: red, green and blue",
-            "Analysis software: NIST EntropyAssessment"}, result.warning)) throw Cancelled{};
+            "Analysis software: NIST EntropyAssessment"}, result.warning,
+        "Press D for details, or Enter to continue and use the camera data.")) throw Cancelled{};
     return CameraContribution(profile, total, digest);
 }
 }

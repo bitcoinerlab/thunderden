@@ -98,8 +98,9 @@ SecretBytes NewMnemonic(Terminal& terminal)
         !camera.empty() ? "Camera readings: included" : use_camera ? "Camera readings: not included" : "Camera readings: not selected",
         source == ManualSource::None ? "Coins or dice: not selected"
             : std::string(source == ManualSource::Coins ? "Coin tosses: " : "Dice rolls: ") + std::to_string(ManualTarget(source, words)), "",
-        "The next screen shows your recovery words. Keep them private and write every word down in order.", "",
-        "Afterward, you'll enter them again to check your written backup."}, "generate words")) throw Cancelled{};
+        "The next screen will show your recovery words.", "",
+        "Before continuing, make sure no one else can see the screen and no camera is pointed at it.", "",
+        "Write down every word in order. Afterward, you'll enter them again to check your written backup."}, "generate words")) throw Cancelled{};
     auto mnemonic = GenerateMnemonic(words, camera, source, manual);
     while (true) {
         terminal.BackupWords(mnemonic);

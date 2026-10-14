@@ -34,7 +34,7 @@ class Terminal {
     void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
         std::string_view footer, int selected = -1, std::string_view pager = {}, bool warning = false);
     bool Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
-        const ReviewLines& details, PageMode mode, bool warning = false);
+        const ReviewLines& details, PageMode mode, bool warning = false, std::string_view summary_prompt = {});
 public:
     Terminal();
     explicit Terminal(int owned_fd);
@@ -59,7 +59,8 @@ public:
         std::string_view wallet, uint32_t& next, uint32_t end);
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {},
         bool warning = false, std::string_view confirmation_note = {});
-    bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {}, bool warning = false);
+    bool Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details = {},
+        bool warning = false, std::string_view summary_prompt = {});
     bool Revisit(const ReviewScreen& review);
     void Notice(std::string_view title, const ReviewLines& lines);
     bool SessionEnded();

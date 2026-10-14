@@ -35,6 +35,8 @@ For example, a failed camera can be left out; it cannot replace a failed system 
 Core 31.1 supplies 32 fresh bytes through `GetStrongRandBytes` for each generation.
 All camera/assessment workers finish before manual input or final randomness.
 Re-enter the generated words to verify the backup before a key session is created.
+Before revealing the words, the interface asks the user to keep other people and
+cameras from seeing the screen and to write every word down in order.
 Words and contributions are not exported, logged or written to persistent storage.
 
 All inputs pass through the same computer. More sources do not protect against
@@ -151,11 +153,13 @@ separate progress statuses because they can overlap. Successful results show a
 short confirmation; warnings are visibly distinguished and failures offer retry
 or continuation without camera data.
 
-Details show camera values included, values checked for randomness, and the NIST
-estimate in bits per 8-bit camera value. Each value is a brightness or colour
-reading. The checks examine a portion of the collected data. The estimate
-describes only that tested data, not the final strength of the recovery words;
-the interface does not extrapolate a total number of bits added to the wallet.
+The summary shows estimated randomness in checked data, in bits per camera value,
+and the number of camera values included. A visible prompt offers Details with
+`D` (or `d`) or Enter to continue and use the camera data. Details explain the
+8-bit brightness or colour readings, show the number of values checked for
+randomness, and state that the checks examined a portion of the collected data.
+The estimate describes that tested data; the interface does not extrapolate a
+total number of bits added to the wallet.
 
 Use only the official NIST `ea_non_iid` with `-i -a` and eight bits per symbol.
 It runs as a fresh executable, separate from the signer and camera, using sealed

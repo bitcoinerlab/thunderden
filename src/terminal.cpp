@@ -262,7 +262,7 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
         if (key == KEY_DOWN && selected + 1 < choices.size()) ++selected;
         if (key == '\r' || key == '\n') return selected;
         if (key >= '1' && size_t(key - '1') < choices.size()) return key - '1';
-        if (key == 'd' && !details.empty()) {
+        if ((key == 'd' || key == 'D') && !details.empty()) {
             if (!Pages(title, details, "return to choices", {}, PageMode::Review) && cancellable) throw Cancelled{};
             redraw = true;
             Flush();
@@ -401,7 +401,7 @@ SecretBytes Terminal::Mnemonic(unsigned count)
 }
 
 bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
-    const ReviewLines& details, PageMode mode, bool warning)
+    const ReviewLines& details, PageMode mode, bool warning, std::string_view summary_prompt)
 {
     const auto view = View();
     const auto wrapped = Wrap(lines, view.width);
@@ -416,8 +416,9 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
     }
     const auto next = Wrap({"Press Enter to read the next page."}, view.width);
     const auto finish = Wrap({"Press Enter to " + std::string(action) + "."}, view.width);
+    const auto summary_finish = summary_prompt.empty() ? finish : Wrap({std::string(summary_prompt)}, view.width);
     const auto return_to_review = Wrap({"Press Enter to return to the review."}, view.width);
-    const size_t reserved = std::max({next.size(), finish.size(), separate ? return_to_review.size() : size_t{0}}) + 1;
+    const size_t reserved = std::max({next.size(), finish.size(), summary_finish.size(), separate ? return_to_review.size() : size_t{0}}) + 1;
     Require(view.height > reserved, "Not enough room for this review");
     const size_t height = view.height - reserved;
     size_t page_by_view[2]{};
@@ -433,7 +434,7 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
         const bool last = page + 1 == pages;
         const bool inspecting = detailed && separate;
         visible.emplace_back("");
-        const auto& instruction = last ? (inspecting ? return_to_review : finish) : next;
+        const auto& instruction = last ? (inspecting ? return_to_review : detailed ? finish : summary_finish) : next;
         visible.insert(visible.end(), instruction.begin(), instruction.end());
         const std::string pager = pages > 1 ? "Page " + std::to_string(page + 1) + "/" + std::to_string(pages) : "";
         std::string footer = (last ? "Enter: " + (inspecting ? std::string("Return to review") : std::string(action)) : "Right/n/Enter: Next")
@@ -448,7 +449,7 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
         if (mode == PageMode::Idle) {
             if (key == 4) return false; // EOF stops the launcher rather than starting a session.
         } else if (key == 27 || key == 3 || key == 'q') return false;
-        if (key == 'd' && !details.empty()) { detailed = !detailed; continue; }
+        if ((key == 'd' || key == 'D') && !details.empty()) { detailed = !detailed; continue; }
         if ((key == 'b' || key == KEY_LEFT) && page) --page;
         if (key == 'n' || key == KEY_RIGHT || key == '\r' || key == '\n') {
             if (!last) ++page;
@@ -479,9 +480,10 @@ void Terminal::Notice(std::string_view title, const ReviewLines& lines)
     Pages(title, lines, "continue", {}, PageMode::Error);
 }
 
-bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details, bool warning)
+bool Terminal::Confirm(std::string_view title, const ReviewLines& lines, std::string_view action, const ReviewLines& details,
+    bool warning, std::string_view summary_prompt)
 {
-    return Pages(title, lines, action, details, PageMode::Confirm, warning);
+    return Pages(title, lines, action, details, PageMode::Confirm, warning, summary_prompt);
 }
 
 bool Terminal::Revisit(const ReviewScreen& review)
