@@ -170,7 +170,9 @@ validation work; current coverage is listed in [Implementation status](STATUS.md
   and parent-process access. JPEG conversion uses the real conversion libraries
   with mocked camera-driver controls.
 - [Build and tests](BUILD.md) describes the default native suites and optional
-  checks on the image's own kernel and libraries. Host containment tests report
-  a skip when Landlock ABI 6 is unavailable. Guest checks use a separate test-only
+  checks on the image's own kernel and libraries. The full host suite requires
+  usable Landlock ABI 6. Only `isolation` reports a skip when that ABI is absent;
+  entropy confinement/assessment and their terminal cases fail. Production workers
+  always fail closed. Guest checks use a separate test-only
   overlay; development tools and test executables are kept outside the installed
   signer image.

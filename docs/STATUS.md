@@ -251,12 +251,15 @@ in the published preview 5 image.
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` runs sixteen suites on this branch on Linux/amd64:
-`entropy`, `entropy-camera`, `entropy-confinement`, `entropy-assessment`,
+`docker compose run --build --rm test` runs eighteen suites on this branch on Linux/amd64:
+`entropy`, `mnemonic-cleanup`, `entropy-camera`, `entropy-capture`,
+`entropy-confinement`, `entropy-assessment`,
 `address-check`, `qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
 `application`, `export-compat`, `terminal`, `camera` and `isolation`.
-Actual native confinement tests require Landlock ABI 6 and are reported as skipped
-on hosts without it; scanner operation never falls back to an unconfined mode.
+The full suite requires Landlock ABI 6 enabled and usable inside the container.
+Only `isolation` reports an unsupported ABI as skipped. Entropy confinement,
+assessment and their terminal cases fail on unsupported hosts; production workers
+never fall back to an unconfined mode.
 
 The ARM64 development image also compiles successfully, including the application
 and test executables. This compilation check ran under emulation on an AMD64 host;

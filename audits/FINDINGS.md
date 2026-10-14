@@ -159,12 +159,13 @@ may drain afterward under the parent watchdog.
 
 New confinement tests contradict documented unsupported-host skip behavior.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** Low
 - **Source:** [2026-10-14 / BOUNDARY-07][report-boundary07]
 
-Source-level test/documentation mismatch; production remains intentionally
-fail-closed. [Decision and evidence][lower-priority-decisions].
+Build, status and isolation documentation now state the full suite's Landlock
+requirement and identify the single suite that skips an unsupported ABI.
+[Decision and evidence][lower-priority-decisions].
 
 ## Follow-up evidence
 
@@ -305,6 +306,14 @@ the current limit specifically as virtual address space. See
 [`memfd_budget.cpp`](evidence/seed-6b22f6d/memfd_budget.cpp).
 
 ## TD-010 to TD-013 — Lower-priority seed-generation findings
+
+**TD-013 resolution (2026-10-14):** the build, status and isolation guides now
+require usable Landlock ABI 6 for the full suite. They explicitly distinguish
+the older `isolation` suite's skip handling from the entropy tests' failures on
+unsupported hosts. This is the minimal documentation correction; production
+remains fail-closed. Checked against the CTest skip configuration and test entry
+points. No unsupported-host run is claimed. **Fix:** this commit,
+`docs: clarify the native suite Landlock requirement`.
 
 **TD-010 resolution (2026-10-14):** the parser requires the pinned eleven-case
 sequence, preventing missing, duplicate or unknown case identities. Applicable

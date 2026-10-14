@@ -179,11 +179,14 @@ derivation, wallet policies, signing, QR exchange, the terminal interface and
 scanner isolation. They use public test data and simulated devices; no USB drive
 or webcam is needed. Test programs are not installed in the boot image.
 
-The tests run in a restricted container. Some isolation checks may be skipped
-when the host kernel lacks Landlock ABI 6 support, normally available with
-Landlock enabled on Linux 6.12 or later. The USB image includes its own kernel
-with that support. See [STATUS.md](STATUS.md) for coverage and physical-hardware
-checks still to do.
+The full suite requires Landlock ABI 6 enabled and usable inside the restricted
+container, normally with Linux 6.12 or later. Only the older `isolation` suite
+reports a skip when that ABI is unavailable. `entropy-confinement`,
+`entropy-assessment` and the camera-assessment cases in `terminal` fail on an
+unsupported host; the full suite is not expected to pass there. Docker uses the
+host kernel (or Docker VM kernel), not the kernel bundled in the USB image.
+The USB image includes its own supported kernel. See [STATUS.md](STATUS.md) for
+coverage and physical-hardware checks still to do.
 
 After building the test image, rerun the same compiled tests with detailed output:
 
