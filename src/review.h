@@ -22,5 +22,4 @@ inline constexpr uint32_t CHANGE_INDEX_WARNING_THRESHOLD = 50000;
 bool HasHighChangeIndex(const TransactionReview& review);
 ReviewLines TransactionLines(const TransactionReview& review);
 ReviewLines TransactionDetails(const TransactionReview& review);
-ReviewLines FeeWarning();
 }

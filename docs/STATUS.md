@@ -1,13 +1,14 @@
 # Implementation status
 
-As of 2026-10-14, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-15, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
 device and its image approved for release. The earlier BIP44 single-signature
 workflow was also user-tested on a physical computer.
 The [Keeper Jade QR multisig workflow](KEEPER.md) was user-tested on iOS/testnet4
-with the text-setup development image; the report and scope are recorded below.
+with the text-setup development image; that test predates the stricter fee policy
+below. See the guide for current limitations.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
@@ -23,6 +24,27 @@ optional camera/coin/dice input and full backup re-entry. It includes the
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
 separate from the automated checks below.
+
+## Fee verification (unreleased)
+
+Current source rejects insufficiently verified fees in `ReviewedTransaction::Sign`
+before approval or signature generation. The former warning override is removed;
+the error directs Sparrow users to its setup guide. Single-input SegWit/multisig,
+sufficiently binding Taproot signatures and authenticated multi-input requests
+remain supported. See [TD-001](../audits/FINDINGS.md#td-001).
+
+All 18 rebuilt native suites passed without skips in 193.19 seconds. Regressions
+cover both attack requests, no approval/signing calls, empty command error replies,
+blocking interactive errors at 40/80 columns and successful safe compact signing.
+
+The recommended Sparrow setup is now **2.5.5+ with Krux**. A user-supplied recording
+of its normal Show QR output decoded to a two-input PSBT with both valid previous
+transactions. A physical scan/signing test of the new policy remains pending.
+Keeper v2.6.3 source exports compact PSBTs through the ordinary Jade QR route;
+general multi-input SegWit compatibility therefore needs a full-data export route.
+
+This change is not included in preview 8 or the previously flashed USB image.
+The integration records below retain their original test scope and signing policy.
 
 ## Architecture
 
@@ -294,7 +316,8 @@ native ARM64 test execution remains unverified.
 - False change hints, mismatched scripts/Taproot commitments, incorrect previous
   outputs, duplicate inputs, amount limits, malformed PSBTs/signatures and
   unsupported signing rules.
-- External input disclosure, authenticated or explicitly unverified fee accounting,
+- External input disclosure, authenticated fee accounting and refusal of unsafe
+  compact requests,
   compact SegWit/Taproot signing and untrusted-signature-independent size estimates.
 - Verified Core source remains unchanged by configuration/build. Selected
   node/RPC/wallet/LevelDB symbols are absent from the signing test executable.

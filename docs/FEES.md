@@ -1,8 +1,10 @@
-# Previous transactions and the fee warning
+# Previous transactions and fee verification
 
 Wallet apps such as Sparrow often omit previous transactions to make QR codes
-smaller. Thunder Den can sign compact SegWit PSBTs, but some requests need a
-warning because their fee cannot be fully checked.
+smaller. Thunder Den refuses signing when missing data could conceal a higher
+real fee. Safe compact requests remain supported; there is no warning override.
+
+This policy is in current source. Preview 8 permitted these requests after a warning.
 
 ## What is missing?
 
@@ -16,7 +18,7 @@ amount and locking script. A PSBT can provide:
   belongs to the referenced transaction.
 
 The PSBT still needs usable output information for every input. Invalid or
-conflicting data is rejected; the warning cannot override those checks.
+conflicting data is rejected.
 Legacy inputs still require full previous transactions.
 
 ## When are compact inputs protected?
@@ -34,8 +36,10 @@ Thunder Den uses `SIGHASH_ALL` for legacy and SegWit-v0 signatures, and
 
 Thunder Den checks this for the selected wallet's eligible signing inputs. Where
 their commitments cover every missing amount, the review explains that incorrect
-amounts would invalidate signatures. Otherwise it conservatively shows the red
-fee warning, including when some partial signatures are already present.
+amounts would invalidate signatures. Otherwise `ReviewedTransaction::Sign` rejects
+the request **before approval or private-key signing**, including when some partial
+signatures are already present. Every signature it may release must protect all
+amounts that lack full previous transactions.
 
 ## What can a malicious wallet app do?
 
@@ -49,29 +53,24 @@ really contain 100,000 sats each, and the transaction's outputs total 100,000 sa
 | Outputs | 100,000 | 100,000 | 100,000 |
 | Fee | **100,000** | **100** | **100** |
 
-For SegWit v0, the first request can produce a usable signature for A and the
-second a usable signature for B. A malicious app can combine them into the
-high-fee transaction. It may claim that signing failed to persuade you to retry.
-Signatures can also come from different signers or earlier sessions; seeing the
-warning only once is not proof of safety.
+Without the refusal, the first SegWit-v0 request could produce a usable signature
+for A and the second for B. A malicious app could combine them into the high-fee
+transaction, claiming that signing failed to persuade you to retry. Signatures
+can also come from different signers or earlier sessions. Current source blocks
+both requests without producing signatures.
 
 See [BIP174's signer explanation](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki#signer).
 
 ## What should I do?
 
-If your app unexpectedly reports a signing error and asks you to sign again,
-stop and check what happened before retrying. If only the camera scan failed and
-the signed QR is still displayed, scan that same QR again instead of signing anew.
+Ask your wallet app to include full previous transactions. For Sparrow, use
+**2.5.5 or later with the Krux profile**; see
+[setup and troubleshooting](SPARROW.md#cannot-verify-transaction-fee).
+Keeper currently has [limited compatibility](KEEPER.md).
 
-Choose **Continue to review** only if you accept the fee-verification limitation.
-The review keeps the fee and affected totals marked **unverified**, including the
-final confirmation and the saved review beside the reply QR. Press Esc to cancel.
-Continuing does not authenticate the missing amounts or prevent the attack.
+If only a camera scan failed and the signed QR is still displayed, scan that same
+QR again instead of signing anew. Multiple wallet signing passes are supported
+when each pass has sufficient fee assurance.
 
-Some workflows legitimately need several signing passes, including
-[transactions using more than one wallet](SPARROW.md#transactions-using-more-than-one-wallet).
-An expected next pass is different from an unexplained error asking you to retry.
-
-If your wallet app can include full previous transactions, that avoids relying on
-unverified amounts. Successful local finalization alone does not authenticate
-missing data, prove that outputs are unspent, or establish chain acceptance.
+Successful local finalization alone does not authenticate missing amounts, prove
+that outputs are unspent, or establish chain acceptance.

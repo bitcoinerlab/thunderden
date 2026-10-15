@@ -115,11 +115,21 @@ int main(int argc, char** argv)
             const td::QRMessage request{"crypto-psbt", td::CborBytes({reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()})};
             std::optional<td::ReviewScreen> completed;
             unsigned scans = 0;
-            auto response = td::SignRequest(terminal, alice, loaded, request, [&] { ++scans; return setup; },
-                [&](const auto& review) {
-                    if (mode.starts_with("workflow-change")) std::printf("CHANGE %s\n", review.outputs[0].address.c_str());
-                    return td::ApproveTransaction(terminal, review, completed);
-                });
+            std::optional<td::QRMessage> response;
+            try {
+                response = td::SignRequest(terminal, alice, loaded, request, [&] { ++scans; return setup; },
+                    [&](const auto& review) {
+                        if (mode.ends_with("-fee")) throw std::runtime_error("Unverified fee reached interactive approval");
+                        if (mode.starts_with("workflow-change")) std::printf("CHANGE %s\n", review.outputs[0].address.c_str());
+                        return td::ApproveTransaction(terminal, review, completed);
+                    });
+            } catch (const std::invalid_argument& error) {
+                td::Require(mode.ends_with("-fee") && !completed && !response, "Unexpected workflow failure");
+                // Match the main loop's error display; dismissal cannot retry signing.
+                terminal.Notice("Could not complete this step", {"Check the details below before trying again.", "", error.what()});
+                std::puts("BLOCKED");
+                return 0;
+            }
             td::Require(scans <= 1, "Setup caused an unnecessary transaction rescan");
             if (mode == "workflow-inferred" || mode == "workflow-unmatched" || mode.starts_with("workflow-preload"))
                 td::Require(scans == 0, "Request made an unnecessary setup scan");

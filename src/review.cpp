@@ -164,7 +164,7 @@ ReviewLines TransactionLines(const TransactionReview& review)
     }
     if (change_count) lines.push_back("Verified change: " + Amount(change) + " (" + std::to_string(change_count)
         + (change_count == 1 ? " output)" : " outputs)"));
-    if (review.fee_unverified) lines.push_back("The actual fee may be higher than shown. Continuing does not verify these amounts.");
+    if (review.fee_unverified) lines.push_back("The actual fee may be higher than shown. Signing is blocked until the fee can be verified.");
     else if (std::any_of(review.inputs.begin(), review.inputs.end(), [](const auto& input) { return !input.full_previous; }))
         lines.push_back("Compact input data: incorrect amounts would make the signatures added here invalid.");
     const bool all_final = std::all_of(review.inputs.begin(), review.inputs.end(), [](const auto& input) { return input.sequence == 0xffffffff; });
@@ -229,14 +229,4 @@ ReviewLines TransactionDetails(const TransactionReview& review)
     return lines;
 }
 
-ReviewLines FeeWarning()
-{
-    return {
-        "Wallet apps such as Sparrow may omit previous transactions to keep QR codes small.", "",
-        "This means ThunderDen cannot fully verify the fee.", "",
-        "This is usually fine, but repeated signing requests can be abused to hide a higher fee.", "",
-        "If your wallet unexpectedly asks you to sign again, stop and check why. Otherwise, this warning is expected and you can continue.", "",
-        "Learn more: github.com/bitcoinerlab/thunderden/blob/master/docs/FEES.md",
-    };
-}
 }

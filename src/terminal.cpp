@@ -467,8 +467,7 @@ bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::st
     if (!Pages(title, lines, "continue", details, PageMode::Review, warning)) return false;
     try {
         const auto answer = Input(title, {"You have reached the end of this review.",
-            confirmation_note.empty() ? warning ? "The fee uses unverified input amounts. Confirm only if you accept this risk."
-                : "Confirm only if the details match what you intended." : std::string(confirmation_note)},
+            confirmation_note.empty() ? "Confirm only if the details match what you intended." : std::string(confirmation_note)},
             "Type " + std::string(confirmation) + " then Enter: ", 32,
             nullptr, {}, {}, warning);
         return std::string_view(reinterpret_cast<const char*>(answer.data()), answer.size()) == confirmation;

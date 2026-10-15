@@ -205,13 +205,13 @@ inputs. A single-input SegWit-v0 spend can use compact data safely against this 
 attack: a wrong amount makes its signature invalid. Taproot DEFAULT likewise
 protects all amounts, including in a mixed-input transaction.
 
-An unverified-fee request requires an explicit red warning confirmation followed
-by the normal review and typed `SIGN`. The warning is not an error notice: Esc
-cancels, and navigation alone does not accept the last warning page. The red
-heading and qualified fee/input totals persist through Details, final confirmation
-and revisiting the reply. Accepting the warning does not authenticate the missing
-amounts or stop the known multi-input fee attack. [Fee guidance](FEES.md) explains
-the tradeoff in plain English.
+`ReviewedTransaction::Sign` rejects an unverified-fee request before invoking the
+approval callback or deriving private signing keys. This applies to direct PSBT
+and command-format requests. The interactive flow shows an error linking to
+Sparrow troubleshooting; there is no override. Single-input SegWit (including
+multisig), sufficiently binding Taproot signatures and other requests whose
+missing amounts are covered by every signature remain supported.
+[Fee guidance](FEES.md) explains the policy in plain English.
 
 Derivation hints propose address positions; only an exact match against the
 authorized policy's derived script establishes ownership. Receive/self-payment

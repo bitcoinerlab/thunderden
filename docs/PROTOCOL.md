@@ -77,10 +77,11 @@ Every input needs valid previous-output data. Legacy/unclassified inputs require
 never permits conflicting amounts or scripts. For inputs it signs, Thunder Den accepts only `SIGHASH_ALL` outside Taproot
 and `SIGHASH_DEFAULT` for Taproot. Derivation metadata supplies candidate wallet
 positions; exact policy-script matches establish ownership and change. See
-[Signing](DESIGN.md#signing) for the validation and fee-assurance rules. Fees and
-affected totals remain qualified when input amounts are not protected by full
-previous transactions or the selected signatures' commitments. Signing those
-requests requires the explicit [fee warning](FEES.md), then transaction approval.
+[Signing](DESIGN.md#signing) for the validation and fee-assurance rules. Signing is
+refused before approval if any signature to be released leaves an input amount
+unprotected by full previous transactions or its signature commitments. There is
+no override; see [fee verification](FEES.md). Command-format requests use the same
+check and return invalid-request status `2` with an empty body.
 
 This route preserves standard PSBT QR exchange for wallets such as Sparrow using
 UR mode. It does not require the command format below. Each pass signs one policy

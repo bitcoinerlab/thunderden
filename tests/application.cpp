@@ -217,7 +217,27 @@ void Signing(const td::Keys& keys)
     Check(Status(td::HandleQRRequest(Message(root.data), keys, {{}, {}, {}, [](const auto&) {
         throw std::runtime_error("Unexpected approval"); return true;
     }})) == 2, "Wrong proof accepted");
-    std::puts("PASS: policy request -> complete review -> approval -> independently verified signed PSBT response");
+    for (unsigned purpose : {49, 84}) {
+        const auto account = td::DefaultPolicy(keys, purpose, 0);
+        for (size_t correct = 0; correct < 2; ++correct) {
+            auto attack = fixture::Spend({&account, &account}, true);
+            attack.tx->vout[0].nValue = 100000;
+            attack.inputs[1 - correct].witness_utxo.nValue = 100;
+            const auto bytes = fixture::Serialize(attack);
+            auto request = Envelope(account, 4);
+            request.Bytes(td::Digest{});
+            request.Bytes({reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()});
+            bool approved = false;
+            const auto rejected = td::HandleQRRequest(Message(request.data), keys,
+                {{}, {}, {}, [&](const auto&) { approved = true; return true; }});
+            Check(!approved && Status(rejected) == 2, "Fee attack reached QR-command approval");
+            const auto payload = td::UnwrapBytes(rejected.message.cbor);
+            td::CborReader response(payload);
+            Check(Header(response) == 2, "Fee attack returned a successful QR reply");
+            response.Tuple(0); response.End(); // Error replies must not contain a PSBT or signatures.
+        }
+    }
+    std::puts("PASS: policy request -> complete review -> approval -> independently verified signed PSBT; fee attacks return empty errors");
 }
 
 void CameraFrames()
@@ -394,13 +414,20 @@ void TextMultisig(const td::Keys& alice)
             auto choices = td::FindSigningWallets(raw, alice, nullptr);
             Check(psbt.m_xpubs.empty() && choices.wallets.empty() && choices.needs_wallet && choices.multisig && !choices.setup,
                 "Compact PSBT did not require wallet setup");
+            td::ApprovedWallet approved{policy, *td::ApproveWallet(policy, alice, [](const auto&, const auto&) { return true; })};
+            choices = td::FindSigningWallets(raw, alice, &approved);
+            Check(choices.wallets.size() == 1, "Compact PSBT did not match the approved wallet");
+            Reject([&] { choices.wallets[0].transaction->Sign(alice, [](const auto&) -> bool {
+                throw std::runtime_error("Compact multi-input request reached approval after wallet registration");
+            }); });
+            raw = fixture::Serialize(fixture::Spend({&policy, &policy}));
             for (unsigned i = 0; i < threshold; ++i) {
                 const auto proof = td::ApproveWallet(policy, *signers[i], [](const auto&, const auto&) { return true; });
                 td::ApprovedWallet loaded{policy, *proof};
                 choices = td::FindSigningWallets(raw, *signers[i], &loaded);
                 Check(choices.wallets.size() == 1 && choices.wallets[0].inputs == 2,
-                    "Compact PSBT did not match the approved wallet");
-                Check(choices.wallets[0].transaction->Review().fee_unverified, "Compact multi-input fee lost its warning");
+                    "Full PSBT did not match the approved wallet");
+                Check(!choices.wallets[0].transaction->Review().fee_unverified, "Full multi-input fee was not verified");
                 const auto result = choices.wallets[0].transaction->Sign(*signers[i], [](const auto&) { return true; });
                 Check(result && result->added_signatures == 2 && result->complete == (i + 1 == threshold),
                     "Text setup signing changed the threshold or signature count");
@@ -408,12 +435,12 @@ void TextMultisig(const td::Keys& alice)
             }
             std::string error;
             PartiallySignedTransaction signed_psbt;
-            Check(DecodeRawPSBT(signed_psbt, raw, error), "Cannot decode signed compact PSBT");
+            Check(DecodeRawPSBT(signed_psbt, raw, error), "Cannot decode signed PSBT");
             for (const auto& input : signed_psbt.inputs) Check(input.partial_sigs.size() == threshold, "Cosigner signatures were lost");
-            Check(FinalizePSBT(signed_psbt), "Signed compact PSBT did not finalize");
+            Check(FinalizePSBT(signed_psbt), "Signed PSBT did not finalize");
             const auto txdata = PrecomputePSBTData(signed_psbt);
             for (size_t i = 0; i < signed_psbt.inputs.size(); ++i)
-                Check(PSBTInputSignedAndVerified(signed_psbt, i, &txdata), "Invalid compact transaction signature");
+                Check(PSBTInputSignedAndVerified(signed_psbt, i, &txdata), "Invalid transaction signature");
         }
     }
 
@@ -499,7 +526,7 @@ void TextMultisig(const td::Keys& alice)
         throw std::runtime_error("Spoofed text setup reached approval");
     }); });
     SelectParams(ChainType::REGTEST);
-    std::puts("PASS: text bytes registration, M-of-N policies, compact signing, signature verification and malformed setup rejection");
+    std::puts("PASS: text bytes registration, M-of-N policies, fee refusal, full-data signing and malformed setup rejection");
 }
 
 void ExportVectors(const td::Keys& keys)

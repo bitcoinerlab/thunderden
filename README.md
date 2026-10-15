@@ -16,7 +16,7 @@ designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key
 derivation, descriptor handling and transaction signing.
 
 **Status: Under active development. Use at your own risk.** The signer is usable
-with [Sparrow](#use-with-sparrow), [Keeper](#use-with-keeper) and [our Liana fork](#use-with-liana).
+with [Sparrow](#use-with-sparrow) and [our Liana fork](#use-with-liana).
 See [implementation status](docs/STATUS.md) for completed checks and remaining work.
 
 ## Download and boot
@@ -71,8 +71,8 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 ## Use with Sparrow
 
 [Sparrow](https://sparrowwallet.com/) exchanges QR codes directly with Thunder Den
-for single-signature and sorted-multisig wallets. In Sparrow, choose
-**Airgapped Hardware Wallet → SeedSigner** for Thunder Den's keystore.
+for single-signature and sorted-multisig wallets. Use **Sparrow 2.5.5 or later** and
+choose **Airgapped Hardware Wallet → Krux** for Thunder Den's keystore.
 
 Share the public key, create the wallet in Sparrow, then scan its transaction QR
 on Thunder Den. Multisig setup can be approved directly from a complete PSBT.
@@ -81,16 +81,8 @@ The preview 5 image was user-tested with Sparrow multisig on a real device. See 
 
 ## Use with Keeper
 
-In [Bitcoin Keeper](https://bitcoinkeeper.app/), select **Jade → QR** for Thunder Den.
-Its standard account QR imports through that profile. For multisig signing, scan
-Keeper's PSBT first; when Thunder Den requests wallet setup, tap **Vault details**
-on Keeper's signing screen and scan its registration QR. Review and approve with
-`REGISTER`, then continue to transaction review and `SIGN`.
-
-You can also scan that registration QR directly from Thunder Den's main
-menu. After approval, **Loaded wallet** appears for the session. The inline flow
-was user-tested on iOS/testnet4. See the [Keeper guide](docs/KEEPER.md) for the steps,
-supported formats and validation scope.
+**Bitcoin Keeper:** see the [compatibility guide](docs/KEEPER.md) for supported
+workflows and current limitations.
 
 ## Use with Liana
 

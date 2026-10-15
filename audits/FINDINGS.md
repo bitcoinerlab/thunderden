@@ -20,12 +20,35 @@ reviewer. **Unreviewed** means a project disposition has not yet been recorded.
 
 Compact multi-input SegWit signing can conceal a higher real fee.
 
-- **Status:** Unreviewed
+- **Status:** Resolved
 - **Report priority:** High
 - **Source:** [2026-10-12 / F-01][report-f01]
 
-Report cites an existing executable attack regression and an intentional
-compatibility tradeoff. Assess the signing-policy recommendation.
+**Decision (2026-10-15):** reject requests with insufficient fee assurance, rather
+than permit a warning override. `ReviewedTransaction::Sign` now refuses before
+approval or private-key signing if any signature it may release leaves an input
+amount unauthenticated. Safe compact cases remain permitted.
+
+The existing two-request fee attack is now a rejection regression for native and
+nested SegWit: neither request reaches approval or ECDSA/Schnorr signing calls.
+QR-command regressions require status `2` with an empty body. Interactive tests
+require a blocking error and the Sparrow troubleshooting link, including alongside
+high-index change. Safe single-input multisig, mixed full/compact data and Taproot
+commitments are checked, including invalidation after restoring a falsified amount.
+The direct and QR-command regressions failed against the pre-fix source.
+
+**Verification:** all 18 rebuilt native suites passed, none skipped (193.19
+seconds), using `ctest --test-dir /build --output-on-failure` in the
+`thunderden-v2-test` container with read-only source/build mounts, writable test
+tmpfs mounts, disabled networking, dropped capabilities and no new privileges.
+The interactive refusal/link checks passed at 40 and 80 columns.
+
+**Fix:** the commit containing this resolution,
+`fix: refuse signing when transaction fees cannot be verified`.
+
+Sparrow guidance now requires 2.5.5+ and Krux; Keeper's current multi-input SegWit
+limitation is documented. See [fee policy](../docs/FEES.md). This fix is not in
+preview 8 or the flashed USB image; physical validation of the new flow is pending.
 
 ### TD-002
 

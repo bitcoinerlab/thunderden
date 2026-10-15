@@ -469,80 +469,66 @@ p = Probe("workflow-replace-invalid-text", rows=40)
 output, _ = p.finish(0)
 assert b"KEPT" in output and b"Switch wallet setup" not in p.all_text
 
-for stop in ("warning", "review", "sign"):
-    p = Probe("workflow-fee", rows=40)
-    p.wait(b"Wallet apps such as Sparrow")
-    p.wait(b"Enter: continue to review")
-    assert b"\x1b[0;31;40mFee not fully verified" in p.all_text
-    if stop == "warning":
-        p.send(b"\x1b")
-    else:
-        p.send(b"n")  # Navigation alone must not consent on the warning's last page.
-        time.sleep(0.03)
-        assert p.process.poll() is None and b"Unverified fee:" not in p.all_text
-        p.send(b"\r")
-        p.wait(b"Unverified fee:")
-        if stop == "review":
-            p.enter(b"Esc: Cancel", b"\x1b")
-        else:
-            p.enter(b"Esc: Cancel", b"d")
-            p.wait(b"Wallet ID:")
-            p.enter(b"Esc: Cancel", b"d")
-            p.wait(b"Unverified fee:")
-            approve_review(p)
-            p.enter(b"Esc: Finish", b"\x1b")
-            assert len(re.findall(rb"\x1b\[0;31;40m(?:Review - |Signed - )?[Ff]ee not fully verified", p.all_text)) >= 5
-            assert b"The fee uses unverified input amounts." in p.all_text
-    output, _ = p.finish(0)
-    assert (b"SIGNED" in output) == (stop == "sign")
-print("PASS: automatic signing, chooser/back, inline setup, atomic replacement and persistent fee-warning consent")
+for columns in (40, 80):
+    for mode in ("workflow-fee", "workflow-change-fee"):
+        for dismiss in (b"\x1b", b"\r", b"SIGN\r"):
+            p = Probe(mode, rows=16, columns=columns)
+            p.wait(b"Could not complete this step")
+            while True:
+                p.wait(b"Esc:")
+                last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+                if b"Enter: continue" in last:
+                    if dismiss == b"SIGN\r":
+                        p.send(b"SIGN")
+                        p.wait(b"Esc:")  # The notice ignores text and flushes queued keys on redraw.
+                        assert p.process.poll() is None and b"Type SIGN" not in p.all_text
+                        p.send(b"\r")
+                    else:
+                        p.send(dismiss)
+                    break
+                p.send(b"\r")
+            output, _ = p.finish(0)
+            rendered = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", p.all_text)
+            assert b"\x1b[0;31;40mCannot verify transaction fee." in p.all_text
+            assert b"github.com/bitcoinerlab/thunderden/blob/master/docs/SPARROW.md#cannot-verify-transaction-fee" in rendered
+            assert b"BLOCKED" in output and b"SIGNED" not in output
+            assert b"Type SIGN" not in p.all_text and b"Review transaction" not in p.all_text
+            assert b"continue to review" not in p.all_text
+print("PASS: automatic signing, chooser/back, inline setup, atomic replacement and blocking fee errors on narrow/wide screens")
 
 for columns in (40, 80):
-    for fee_unverified in (False, True):
-        for stop in ("review", "confirmation", "sign"):
-            p = Probe("workflow-change-fee" if fee_unverified else "workflow-change", rows=16, columns=columns)
-            if fee_unverified:
-                p.wait(b"Fee not fully verified")
-                while True:
-                    p.wait(b"Esc:")
-                    last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
-                    p.send(b"\r")
-                    if b"Enter: continue to review" in last:
-                        break
-            title = b"Review - fee not fully verified" if fee_unverified else b"Review - high change index"
-            p.wait(b"\x1b[0;31;40m" + title)
-            if stop == "review":
+    for stop in ("review", "confirmation", "sign"):
+        p = Probe("workflow-change", rows=16, columns=columns)
+        title = b"Review - high change index"
+        p.wait(b"\x1b[0;31;40m" + title)
+        if stop == "review":
+            p.enter(b"Esc:", b"\x1b")
+        else:
+            while True:
+                p.wait(b"Esc:")
+                last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+                assert b"\x1b[0;31;40m" + title in last, "Recovery warning lost its red review heading"
+                assert b"Type SIGN" not in p.all_text, "Approval appeared before completing mandatory review"
+                p.send(b"\r")
+                if b"Enter: continue" in last:
+                    break
+            p.wait(b"Type SIGN then Enter: ")
+            assert b"Change address index: 1000000000" in p.all_text
+            assert b"WARNING: Unusually high change index." in p.all_text
+            confirmation = b" ".join(p.rows().values())
+            assert b"miss" in confirmation and b"recovery" in confirmation, "Final confirmation lost the recovery risk"
+            assert b"Unverified fee:" not in p.all_text and b"unverified input amounts" not in confirmation
+            p.send(b"SIGN\r" if stop == "sign" else b"\x1b")
+            if stop == "sign":
+                p.wait(b"\x1b[0;31;40mSigned - high change index")
                 p.enter(b"Esc:", b"\x1b")
-            else:
-                while True:
-                    p.wait(b"Esc:")
-                    last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
-                    assert b"\x1b[0;31;40m" + title in last, "Recovery warning lost its red review heading"
-                    assert b"Type SIGN" not in p.all_text, "Approval appeared before completing mandatory review"
-                    p.send(b"\r")
-                    if b"Enter: continue" in last:
-                        break
-                p.wait(b"Type SIGN then Enter: ")
-                assert b"Change address index: 1000000000" in p.all_text
-                assert b"WARNING: Unusually high change index." in p.all_text
-                confirmation = b" ".join(p.rows().values())
-                assert b"miss" in confirmation and b"recovery" in confirmation, "Final confirmation lost the recovery risk"
-                if fee_unverified:
-                    assert b"accept both risks" in confirmation
-                else:
-                    assert b"Unverified fee:" not in p.all_text and b"unverified input amounts" not in confirmation
-                p.send(b"SIGN\r" if stop == "sign" else b"\x1b")
-                if stop == "sign":
-                    signed_title = b"Signed - fee not fully verified" if fee_unverified else b"Signed - high change index"
-                    p.wait(b"\x1b[0;31;40m" + signed_title)
-                    p.enter(b"Esc:", b"\x1b")
-            output, _ = p.finish(0)
-            assert (b"EMPTY SIGNED" in output) == (stop == "sign")
-            if stop != "review":
-                address = re.search(rb"CHANGE (\S+)", output)[1]
-                rendered = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", p.all_text)
-                assert address in rendered, "Mandatory review did not display the full high-index address"
-print("PASS: high-index change warning, full address, typed approval, cancellation and combined fee/recovery risks on narrow/wide screens")
+        output, _ = p.finish(0)
+        assert (b"EMPTY SIGNED" in output) == (stop == "sign")
+        if stop != "review":
+            address = re.search(rb"CHANGE (\S+)", output)[1]
+            rendered = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", p.all_text)
+            assert address in rendered, "Mandatory review did not display the full high-index address"
+print("PASS: high-index change warning, full address, typed approval and cancellation on narrow/wide screens")
 
 
 def address_action(p, action, key=b"\r"):

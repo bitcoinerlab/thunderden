@@ -382,8 +382,8 @@ ReviewedTransaction::ReviewedTransaction(std::shared_ptr<const PSBTData> request
         const int rule = SigningRule(utxo);
         CheckSignatures(input, rule);
         // DEFAULT binds every input amount. SegWit v0 ALL binds only its own;
-        // legacy ALL binds none. Warn if any signature we may release leaves
-        // an amount unauthenticated. Consent does not upgrade that assurance.
+        // legacy ALL binds none. Block signing if any signature we may release
+        // leaves an amount unauthenticated.
         review_.fee_unverified |= witness_version != 1
             && request_->missing_previous > size_t(witness_version == 0 && !input.non_witness_utxo);
         auto& clean = public_psbt.inputs[index];
@@ -425,6 +425,11 @@ std::optional<SigningResult> ReviewedTransaction::Sign(const Keys& session,
     Require(std::any_of(review_.inputs.begin(), review_.inputs.end(), [](const auto& input) {
         return input.position && !input.finalized;
     }), "Nothing more to sign for this wallet");
+    Require(!review_.fee_unverified, "Cannot verify transaction fee. "
+        "Signing stopped because required previous-transaction data is missing. "
+        "Ask your wallet app to include full previous transactions. "
+        "Using Sparrow? Follow Thunder Den's setup guide: "
+        "github.com/bitcoinerlab/thunderden/blob/master/docs/SPARROW.md#cannot-verify-transaction-fee");
     Require(bool(approve), "Missing transaction approval callback");
     if (!approve(review_)) return {};
     Require(Params().GetChainType() == review_.network, "Network changed during approval");

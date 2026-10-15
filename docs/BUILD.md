@@ -106,7 +106,7 @@ stays open until Enter starts a fresh session. Turn the laptop off completely wh
 finished rather than leaving it asleep.
 
 Ending the session also clears the loaded multisig setup. See the
-[Sparrow guide](SPARROW.md) for SeedSigner keystore setup and automatic signing,
+[Sparrow guide](SPARROW.md) for Krux keystore setup and automatic signing,
 or the [Keeper guide](KEEPER.md) for Jade QR signing and wallet registration.
 
 ## Build or test: which command do I need?
