@@ -54,13 +54,13 @@ preview 8 or the flashed USB image; physical validation of the new flow is pendi
 
 Direct wallet workflows lack general trusted receive-address verification.
 
-- **Status:** Open
+- **Status:** Resolved
 - **Report priority:** High
 - **Source:** [2026-10-12 / F-02][report-f02]
 
 Address-QR verification implemented in [`801b8c7`][commit-801b8c7].
 [Decision and verification](#td-002--direct-address-verification);
-physical-camera verification pending.
+on 2026-10-15, the user reported all 13 physical-trial cases passed.
 
 ### TD-003
 
@@ -555,6 +555,24 @@ remains pending; this entry remains Open. The original report is unchanged.
 
 **Release availability (2026-10-13):** [preview 7][release-preview7]
 includes address verification and the review/layout polish from `b6b9c16`.
+
+**Physical validation reported (2026-10-15):** the user confirmed that all 13 cases
+in `/tmp/opencode/thunderden-address-demo/` were checked successfully on the
+physical device. The pack covers receiving/change addresses, a payment URI,
+account 7, index 1007, wrong-wallet non-matching, native/nested 2-of-2 setup and
+address checks, single-signature selection with multisig loaded, Taproot, legacy
+and wrong-network rejection. The public fixtures are reproducible with
+[`address-check-tests --fixtures`](../tests/address_check.cpp).
+
+The retained pack's image hashes to
+`2074024b7887a27939bd44adfabb6511c0af25e146dc767ad54cb97dde750a8a`;
+this identifies the supplied image, not an independently verified read-back of
+the user's boot media. Device/camera models, exact test date and flashed revision
+were not separately recorded. This is user-reported validation of the fixture
+cases, not broader hardware coverage or a physical test of the latest fee policy.
+Together with the recorded implementation and automated checks, it completes the
+pending validation for TD-002; the finding is resolved. The original report and
+earlier pending-validation checkpoint are preserved above.
 
 [report-f01]:
   2026-10-12-gpt-6-astra-a5c2f5c.md#f-01--compact-multi-input-segwit-fee-attack-remains-possible

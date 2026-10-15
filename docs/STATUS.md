@@ -82,6 +82,7 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Integrate Thunder Den into a Liana fork for Bitcoin Core and Electrum wallets.
 - [x] Record a user-tested Sparrow single-signature BIP44 QR workflow.
 - [x] Record real-device Sparrow multisig testing and release approval.
+- [x] Record user-tested physical address verification across all 13 demo cases.
 - [x] Record user-tested Keeper Jade QR multisig signing on iOS/testnet4.
 - [x] Publish a development USB image with its checksum and installed-file inventory.
 - [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
@@ -230,6 +231,18 @@ on manual descriptor export.
 The eleven native suites and the Sparrow account/signing checks passed after this
 simplification. The updated boot probe passed on the `a56f61b` image, checking the
 public account QR, three-action menu and session restart in both BIOS and UEFI.
+
+## Physical address verification
+
+On 2026-10-15, the user confirmed successful physical testing of all 13 cases in
+`/tmp/opencode/thunderden-address-demo/`. These cover receiving/change addresses,
+payment-URI destination checks, another account, index 1007, wrong-wallet and
+wrong-network cases, native/nested multisig registration and address checks,
+single-signature selection with multisig loaded, Taproot and legacy addresses.
+This completes [TD-002's pending validation](../audits/FINDINGS.md#td-002--direct-address-verification).
+The report does not separately identify hardware models or the flashed revision;
+it does not validate the latest fee-policy change or establish general camera
+compatibility. The public cases come from `address-check-tests --fixtures`.
 
 ## Text multisig setup and Keeper integration
 
