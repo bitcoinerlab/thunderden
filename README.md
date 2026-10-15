@@ -34,6 +34,9 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 3. Wait for verification, eject the drive and boot the laptop from USB. Disable
    Secure Boot to boot this unsigned image.
 
+Current source also supports optional [signed images and user signing](docs/SECURE_BOOT.md).
+This is not included in the published preview above.
+
 **Flashing erases the selected USB drive.** See the
 [build and USB guide](docs/BUILD.md) for more detail or to build your own image.
 

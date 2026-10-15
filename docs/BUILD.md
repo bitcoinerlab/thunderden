@@ -128,6 +128,12 @@ The image build checks source integrity, kernel settings, installed files and
 repeatable disk-image assembly. It also creates `installed-files.json`, a list of
 the files and hashes inside the boot system, copied alongside the image above.
 
+Current source builds an unsigned image with a self-contained EFI kernel and a
+separate legacy BIOS path. Optional signing happens **after the build**, without
+giving the build a private key. See [signed images and Secure Boot](SECURE_BOOT.md)
+for manual developer/user signing, paired release assets and exact reconstruction
+of the signed image from the unsigned one and public signature material.
+
 ## Write the USB from Linux
 
 First identify the USB by its size and model:
@@ -265,5 +271,8 @@ python3 tests/boot_isolation.py /tmp/bzImage /tmp/isolation-tests
 ```
 
 The test program is loaded in a temporary overlay, separate from the USB image.
+This developer check uses QEMU's legacy `-kernel`/`-initrd` path, not authenticated
+UEFI boot; the EFI stub deliberately refuses external initramfs loading. Use the
+[Secure Boot tests](SECURE_BOOT.md#developer-checks) to check that boundary.
 
 </details>

@@ -14,8 +14,9 @@ The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
 [`v0.0.1-preview.8`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8),
 with its checksum and installed-file inventory. BIOS/UEFI boot checks passed;
-USB write/read-back checks are recorded per image below. Broader laptop/camera coverage and a fresh
-full clean-build comparison remain outstanding.
+USB write/read-back checks are recorded per image below. Broader laptop/camera
+coverage remains outstanding; this branch's clean-build comparison is recorded
+under authenticated UEFI boot below.
 Current executable sizes refer to the latest recorded build below.
 Preview 8 adds recovery-word generation with mandatory Bitcoin Core randomness,
 optional camera/coin/dice input and full backup re-entry. It includes the
@@ -45,6 +46,47 @@ general multi-input SegWit compatibility therefore needs a full-data export rout
 
 This change is not included in preview 8 or the previously flashed USB image.
 The integration records below retain their original test scope and signing policy.
+
+## Authenticated UEFI boot (unreleased)
+
+The `feature/authenticated-boot` branch provides optional signing of the complete
+EFI kernel and its embedded runtime. UEFI no longer loads GRUB. Fixed built-in
+arguments and `noinitrd` prevent external boot arguments/filesystems from
+replacing authenticated startup. Legacy BIOS retains its separate GRUB path.
+The unsigned/signed release pair uses the same runtime; public-only tools verify
+the signing certificate and reconstruct the signed disk exactly from the unsigned
+image and detached EFI signature. See [the guide](SECURE_BOOT.md).
+
+Production signing keys are generated and used manually by the owner, outside
+the build/agent workflow. Current tests use disposable keys only; no production
+certificate or signed release exists. Firmware trust, legacy BIOS and rollback
+remain explicit limits under [TD-005](../audits/FINDINGS.md#td-005).
+
+All 18 native suites passed without skips (193.21 seconds). The first rebuilt
+64 MiB image passed content and repeat-assembly checks; BIOS and direct-UEFI
+workflow tests decoded the expected public BIP84 account QR and checked session
+restart. The signed image also passed that complete workflow under Secure Boot
+and legacy BIOS.
+
+Pinned QEMU/OVMF tests with disposable RSA-3072 code-signing certificates passed:
+trusted signed boot, unsigned/wrong-key/modified-runtime refusal, hostile command
+line isolation, ignored unsigned GRUB configuration and ignored external
+`LoadFile2` initramfs. A pre-fix kernel accepted the injected initramfs as a
+positive control. Packaging tests passed exact whole-image reconstruction,
+timezone-independent outputs, encrypted-key password prompting, user self-signing
+and rejection of valid signatures for different runtime bytes. Public test
+evidence is retained under `out/authenticated-boot/`; no production key or host
+firmware was used. Two builds from separate empty output volumes produced
+byte-identical boot payloads, initramfs, installed-file inventory and complete
+64 MiB images, also identical to the cached image used in the boot tests. These
+builds shared the pinned builder and verified source/download caches, not compiled
+outputs; they are not two independently rebuilt Docker environments. The unsigned
+image SHA-256 is
+`6d7020a03ed8a6ccd6feea58108b505795c086c7a0fb1f63851fbee4bce1be14`.
+Attaching the retained public test signature to a fresh build reconstructed the
+same signed image exactly. The existing legacy-path guest-isolation probe also
+passed with the rebuilt kernel and toolchain, including real JPEG/QR/UR decoding.
+Physical enrollment/boot validation and a fresh independent audit remain pending.
 
 ## Architecture
 

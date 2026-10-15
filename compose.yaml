@@ -23,6 +23,36 @@ services:
       - /build/Testing:rw,nosuid,nodev,mode=1777
     command: [ctest, --test-dir, /build, --output-on-failure]
 
+  boot-tools:
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+      target: boot-tools
+      args:
+        DEBIAN_BASE_IMAGE: ${DEBIAN_BASE_IMAGE:?Missing build pin}
+        DEBIAN_SNAPSHOT: ${DEBIAN_SNAPSHOT:?Missing build pin}
+    user: "1000:1000"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,mode=1777
+    volumes:
+      - .:/work:ro
+      - ./out:/out
+    command: [python3, -B, /work/build/secure_boot.py, --help]
+
+  boot-tests:
+    extends:
+      service: boot-tools
+    platform: linux/amd64
+    build:
+      target: boot-tests
+    tmpfs:
+      - /var/tmp:rw,nosuid,nodev,mode=1777
+    command: [python3, -B, /work/tests/secure_boot_vm.py, --help]
+
   image:
     build:
       context: .

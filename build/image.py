@@ -1,6 +1,7 @@
 """Rootless, deterministic 64 MiB BIOS + UEFI disk-image assembly."""
 from datetime import datetime, timezone
 import hashlib
+import json
 import os
 from pathlib import Path
 import struct
@@ -56,24 +57,25 @@ def chs(lba):
     return bytes((head, (sector + 1) | ((cylinder >> 2) & 0xc0), cylinder & 0xff))
 
 
-def assemble(images, config, output, epoch):
+def assemble(images, config, output, epoch, efi=None):
     start = 2048
     sectors = 64 * 1024 * 1024 // 512
     boot = (images / "boot.img").read_bytes()
     core = (images / "grub.img").read_bytes()
     assert len(boot) == 512 and 0 < len(core) <= (start - 1) * 512
-    os.environ["PATH"] = str(images.parent / "host/sbin") + ":" + str(images.parent / "host/bin") + ":" + os.environ["PATH"]
     with tempfile.TemporaryDirectory() as temporary:
         fat = Path(temporary) / "esp.fat"
         with fat.open("wb") as stream:
             stream.truncate((sectors - start) * 512)
         subprocess.run(["mkfs.fat", "--invariant", "-F", "32", "-i", "54445532", "-n", "THUNDERDEN", "-h", str(start), fat], check=True)
         subprocess.run(["mmd", "-i", fat, "::/EFI", "::/EFI/BOOT", "::/boot", "::/boot/grub"], check=True)
+        policy = Path(temporary) / "boot-policy.json"
+        policy.write_text(json.dumps({"format": 1, "epoch": epoch}, sort_keys=True) + "\n")
         for source, destination in [
-            (images / "efi-part/EFI/BOOT/bootx64.efi", "::/EFI/BOOT/BOOTX64.EFI"),
-            (config, "::/EFI/BOOT/grub.cfg"),
+            (efi or images / "bzImage", "::/EFI/BOOT/BOOTX64.EFI"),
             (config, "::/boot/grub/grub.cfg"),
             (images / "bzImage", "::/bzImage"),
+            (policy, "::/boot/boot-policy.json"),
         ]:
             subprocess.run(["mcopy", "-i", fat, source, destination], check=True)
         normalize_fat(fat, epoch)
@@ -96,4 +98,5 @@ def assemble(images, config, output, epoch):
 if __name__ == "__main__":
     images, config = map(Path, sys.argv[1:3])
     output = Path(sys.argv[3]) if len(sys.argv) == 4 else images / "thunderden.img"
+    os.environ["PATH"] = str(images.parent / "host/sbin") + ":" + str(images.parent / "host/bin") + ":" + os.environ["PATH"]
     assemble(images, config, output, int(os.environ["SOURCE_DATE_EPOCH"]))

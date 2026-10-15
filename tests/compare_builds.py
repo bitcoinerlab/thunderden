@@ -14,7 +14,7 @@ if args.first.resolve() == args.second.resolve():
 
 different = False
 for name in (
-    "boot.img", "grub.img", "efi-part/EFI/BOOT/bootx64.efi", "rootfs.cpio",
+    "boot.img", "grub.img", "rootfs.cpio",
     "bzImage", "thunderden.img", "thunderden.img.sha256", "installed-files.json",
 ):
     first = (args.first / name).read_bytes()

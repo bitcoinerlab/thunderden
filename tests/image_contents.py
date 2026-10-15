@@ -19,9 +19,11 @@ for symbol in (
 ):
     assert not re.search(rf'^CONFIG_{symbol}=[ym]$', config, re.M), symbol + " unexpectedly enabled"
 for symbol in ("X86_64", "USB_VIDEO_CLASS", "USB_HID", "VT", "FRAMEBUFFER_CONSOLE", "DEVTMPFS", "TMPFS", "SECURITY_LANDLOCK",
-               "FONT_8x16", "FONT_TER10x18", "FONT_TER16x32", "MEMFD_CREATE"):
+               "FONT_8x16", "FONT_TER10x18", "FONT_TER16x32", "MEMFD_CREATE", "EFI_STUB", "CMDLINE_BOOL", "CMDLINE_OVERRIDE"):
     assert f"CONFIG_{symbol}=y" in config, symbol + " missing"
 assert 'CONFIG_LSM="landlock"' in config
+assert 'CONFIG_CMDLINE="console=tty1 loglevel=3 noinitrd random.trust_cpu=off random.trust_bootloader=off"' in config
+assert 'CONFIG_INITRAMFS_SOURCE="${BR_BINARIES_DIR}/rootfs.cpio"' in config
 
 forbidden = {
     "bitcoind", "bitcoin-cli", "bitcoin-wallet", "bitcoin-node", "python", "python3",
@@ -30,6 +32,7 @@ forbidden = {
     "isolation-tests", "camera-tests", "address-check-tests", "entropy-tests", "ea_non_iid",
     "entropy-camera-tests", "entropy-worker-tests", "entropy-benchmark", "entropy-guest-tests", "entropy-confined",
     "bzip2", "bunzip2", "bzcat", "ea_iid", "ea_restart", "ea_conditioning", "ea_transpose",
+    "sbsign", "sbattach", "sbverify", "efi_boot_probe.efi",
 }
 for path in sorted(target.rglob("*")):
     relative = str(path.relative_to(target))
@@ -49,6 +52,8 @@ assert "/cache/" not in dynamic and "/opt/" not in dynamic, "Build-path RPATH re
 # Inventory the packed initramfs, including /init, device nodes, ownership, modes,
 # and hardlinks added by Buildroot's fakeroot step rather than just staging files.
 archive = (output / "images/rootfs.cpio").read_bytes()
+for marker in (b"-----BEGIN PRIVATE KEY-----", b"-----BEGIN ENCRYPTED PRIVATE KEY-----", b"-----BEGIN RSA PRIVATE KEY-----"):
+    assert marker not in archive, "Private signing key material must never enter the runtime"
 offset = 0
 entries = []
 contents = {}

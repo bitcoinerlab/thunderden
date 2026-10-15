@@ -88,12 +88,36 @@ Fixed in [`b1bd501`][commit-b1bd501].
 
 Unsigned boot and laptop/firmware trust can defeat signer protections.
 
-- **Status:** Unreviewed
+- **Status:** Open
 - **Report priority:** High impact, conditional
 - **Source:** [2026-10-12 / L-01][report-l01]
 
-Report describes an architectural limitation; no physical exploit was attempted.
-Assess the supported trust boundary and proposed improvements.
+**Decision (2026-10-15):** implement optional owner-configured authenticated UEFI
+boot, while retaining firmware/hardware trust and unauthenticated legacy BIOS as
+explicit architectural limits. The feature branch boots a signed self-contained
+kernel/initramfs directly, with fixed boot arguments and external EFI initramfs
+loading disabled. Public-only packaging reconstructs signed images from unsigned
+images and detached signatures; production signing stays human-operated.
+
+**Verification:** all 18 native suites passed without skips (193.21 seconds).
+Content/repeat-assembly checks and full public-account QR boot workflows passed
+for unsigned BIOS/UEFI and signed BIOS/authenticated UEFI. Disposable RSA-3072
+QEMU/OVMF tests reject unsigned, wrong-key and modified runtime payloads, and
+ignore hostile boot arguments, unsigned GRUB configuration and external EFI
+initramfs. The pre-fix kernel accepts the injected initramfs as a positive control.
+Public-only packaging tests reconstruct the signed disk byte-for-byte and reject
+even a valid trusted-key signature for different runtime bytes. See
+[`secure_boot.py`](../tests/secure_boot.py) and
+[`secure_boot_vm.py`](../tests/secure_boot_vm.py).
+Two fresh toolchain/kernel builds in separate empty output volumes also matched
+the tested cached image byte-for-byte, sharing the pinned builder and verified
+download caches. These are automated checks, not a fresh independent audit.
+
+See [operation and limits](../docs/SECURE_BOOT.md). Production key creation,
+physical firmware enrollment/boot validation and release remain pending. No
+production signing key has been created or accessed, and host firmware has not
+been changed. This is a conditional mitigation, not a resolution of compromised
+firmware/hardware or rollback risk. The original report is unchanged.
 
 ### TD-006
 
