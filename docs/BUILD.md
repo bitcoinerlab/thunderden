@@ -185,6 +185,36 @@ Downloads and build outputs stay in Docker volumes when you remove a container.
 `--build` does not clear those volumes. AMD64 and ARM64 builders need separate
 output caches.
 
+### Fast local image builds
+
+Compatible build caches make application rebuilds much faster than rebuilding
+the toolchain and dependencies. Previously verified images can also be reused
+when their runtime/build inputs have not changed.
+
+1. Record the requested source revision. If `.env`, `CMakeLists.txt`, `src/`,
+   `build/`, `platform/` and the relevant Compose/builder inputs are unchanged
+   from an archived build, reuse its image. Documentation changes alone do not
+   change the runtime; a byte-identical EFI payload can reuse its public signature.
+2. Otherwise reuse the existing pinned builder and a compatible **development**
+   output volume. `build/image.sh` already refreshes the application directory and
+   regenerates the embedded runtime/kernel while keeping toolchain and dependency
+   outputs. Avoid `--no-cache`, fresh toolchain volumes and whole-cache copies
+   unless needed for changed pins/architecture, concurrent builds or an explicitly
+   requested clean-build comparison. Never repurpose a frozen release/reference
+   volume as a mutable development cache.
+3. Keep the script's source-integrity, image-content and repeat-assembly checks.
+   Export artifacts into a new revision-specific directory. Reuse the builder
+   without `--build` only when its pinned inputs/Dockerfile still match.
+4. [Prepare the EFI and sign manually](SECURE_BOOT.md#commands-and-technical-details).
+   Private signing keys and passwords stay outside agents and containers. Package
+   with `secure_boot.py package`, which checks the trusted public certificate,
+   verifies the detached and attached signatures, and creates the signed image.
+5. Choose validation for the change: run relevant regression tests for software
+   changes, boot/display checks for boot or rendering changes, and clean-build
+   comparisons for reproducibility work. Repackaging unchanged bytes does not
+   require repeating those tests. Record verification scope accurately and
+   investigate failures. Cached builds do not replace release verification.
+
 ## Run the software tests
 
 ```sh
