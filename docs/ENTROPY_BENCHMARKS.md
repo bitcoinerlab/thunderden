@@ -4,6 +4,13 @@ Experimental branch, measured 2026-10-13/14. These are software/lab results, not
 an entropy-source certification or a performance promise for an older laptop.
 Physical camera and reference-laptop measurements are pending maintainer testing.
 
+These historical measurements used `-i -a`. Production now uses the official
+`-i -t` mode: all selected original symbols are assessed, but separate bitstring
+checks are limited to the first 1,000,000 bits. The tables below are not timings
+or estimates for that mode; the synthetic matrix intentionally retains `-a` for
+full-bitstring comparisons. The assessment regression compares the isolated
+production wrapper with the official `-i -t` entry point on identical public data.
+
 ## Environment and method
 
 - Development CPU: AMD Ryzen 7 8745HS, x86-64, 16 logical CPUs; about 58.6 GiB RAM.

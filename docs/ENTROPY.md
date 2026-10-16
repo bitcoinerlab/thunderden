@@ -164,7 +164,15 @@ of the collected camera values the randomness checks examined in one sentence.
 The estimate describes that tested data; the interface does not extrapolate a
 total number of bits added to the wallet.
 
-Use only the official NIST `ea_non_iid` with `-i -a` and eight bits per symbol.
+Use only the official NIST `ea_non_iid` with `-i -t` and eight bits per symbol.
+The original-symbol estimators still examine all 1,048,576 selected component
+values. NIST's `-t` option limits the separate bitstring assessment to the first
+1,000,000 bits, rather than all 8,388,608 bits of that input. This reduces that
+branch's workload and coverage; it is not an equivalent full-bitstring assessment
+or a guarantee of completion on slow hardware. The fixed prefix must not be
+selected or retried to improve an estimate. Camera acquisition, sample selection,
+hashing, resource limits and mandatory system randomness are unchanged. Details
+show the bitstring limit alongside the original-symbol sample count.
 It runs as a fresh executable, separate from the signer and camera, using sealed
 sample input and a bounded anonymous JSON output. No sample hash or full JSON is
 displayed or logged. The signer uses the existing bounded JSON parser to read the

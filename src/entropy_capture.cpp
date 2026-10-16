@@ -107,6 +107,7 @@ SecretBytes Terminal::CameraEntropy()
         "Camera collection is complete, but NIST reported a warning or could not calculate every estimate.", ""});
     if (!Confirm(result.warning ? "Camera checks returned a warning" : "Camera data ready", summary, "use camera data",
         {"The randomness checks examined " + std::to_string(ENTROPY_TEST_SAMPLES) + " of the collected camera values.", "",
+            "Separate bitstring checks use at most the first 1,000,000 bits.", "",
             "Image size: " + std::to_string(ReadBE32(profile.data() + 5)) + " x " + std::to_string(ReadBE32(profile.data() + 9)),
             "Camera output format: " + fourcc,
             profile[14] == 1 ? "Readings used: brightness" : "Readings used: red, green and blue",
