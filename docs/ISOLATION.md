@@ -108,8 +108,9 @@ limit of the scanner policy. Its binary pipe has a BE32 kind and BE32 byte lengt
 profile (17 bytes), frame count (4), samples (at most 65,536 per record), or
 completion flags (4). The parent validates the
 profile, bounds the complete sample stream to 64 MiB and requires complete
-records for its ten-second activity deadline. Capture has a separate elapsed
-budget; the complete capture/assessment operation has a 120-second wall limit.
+records for its ten-second activity deadline. Capture has a separate 30-second
+watchdog through the camera worker's exit. Assessment has no application-imposed
+wall-clock or CPU deadline; the user can stop checks after valid capture.
 
 The assessment wrapper first checks two anonymous RAM-file descriptors. Input is
 sealed against writes, growth and shrinkage; the output is capped at 64 KiB.
@@ -120,12 +121,15 @@ parent accepts a complete, finite, correctly sized overall result with coherent
 exit status; the upstream constant-alphabet failure is a distinct zero diagnostic.
 The input hash and full JSON stay off the screen and out of logs.
 
-Assessment limits are 512 MiB virtual address space, 120 CPU seconds, 64 open
+Assessment limits are 512 MiB virtual address space, 64 open
 descriptors and zero additional processes/threads. OpenMP is fixed to one thread;
 the OS process limit enforces the boundary. This does not relax the QR scanner's
-limits. Failed, frozen, saturated or timed-out camera attempts are discarded; the
-user can explicitly omit the optional source or start a new attempt. Partial
-statistics are never treated as a complete assessment.
+limits. Inherited OS CPU limits are left unchanged. Failed, frozen, saturated or
+timed-out captures are discarded; the user can explicitly omit the optional source
+or start a new attempt. After complete, fault-free capture, stopping the checks
+offers a default skip or an explicit unchecked contribution. All workers are
+stopped and reaped before that choice. Partial statistics are never treated as a
+complete assessment.
 
 ## Scope and practical limits
 

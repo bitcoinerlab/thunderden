@@ -10,6 +10,9 @@ checks are limited to the first 1,000,000 bits. The tables below are not timings
 or estimates for that mode; the synthetic matrix intentionally retains `-a` for
 full-bitstring comparisons. The assessment regression compares the isolated
 production wrapper with the official `-i -t` entry point on identical public data.
+Assessment now runs until completion or manual stop, without an application CPU
+or wall-clock deadline. Historical 120-second benchmark timeouts below remain
+incomplete measurements, not a current production deadline or a completion promise.
 
 ## Environment and method
 
@@ -78,9 +81,11 @@ measure `TemporalSamples` and incremental Core SHA-256, excluding capture/NIST.
 | RGB | 64 | 58,982,400 | 0.205902 | 0.266777 |
 | RGB | 128 | 117,964,800 | 0.429637 | 0.521865 |
 
-The resulting first profile keeps 1 MiB assessed, T=64, one assessment thread,
-512 MiB virtual-address-space limit and 120-second total deadline. These remain
-provisional pending real-camera/older-laptop measurements. The matrix demonstrates
+The initial benchmark profile used 1 MiB assessed, T=64, one assessment thread,
+a 512 MiB virtual-address-space limit and a 120-second total deadline. The current
+profile retains those sample/memory settings but no longer installs an assessment
+deadline. Parameters remain provisional pending real-camera/older-laptop
+measurements. The matrix demonstrates
 why a universal two-minute completion claim would be incorrect.
 
 ## Reproduce the measurements

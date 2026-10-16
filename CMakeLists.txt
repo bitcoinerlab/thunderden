@@ -192,7 +192,7 @@ target_link_options(terminal-probe PRIVATE -Wl,--wrap=_Z18GetStrongRandBytesSt4s
 target_link_libraries(terminal-probe PRIVATE thunderden)
 target_compile_options(terminal-probe PRIVATE -Wall -Wextra -Werror)
 add_dependencies(terminal-probe entropy-worker-tests thunderden-assess)
-foreach(scenario valid constant frozen bad-header stalled-capture cancel-assessment timeout-assessment bad-progress-assessment)
+foreach(scenario valid constant frozen bad-header stalled-capture stalled-exit-assessment cancel-assessment long-assessment bad-progress-assessment)
   set(fixture "${CMAKE_BINARY_DIR}/entropy-fixtures/${scenario}")
   set(assessor "$<TARGET_FILE:thunderden-assess>")
   if(scenario MATCHES "assessment")

@@ -13,14 +13,14 @@ SecretBytes Terminal::CameraEntropy(bool& unchecked)
     if (!Confirm("Collect camera randomness", {"A still scene is fine; movement is not required.", "",
         "We'll collect camera readings and check part of the data for patterns using statistical software from NIST, "
         "the US National Institute of Standards and Technology. This helps estimate how unpredictable the checked data is.", "",
-        "Allow up to two minutes for collection and checks. Once collection finishes, you can stop the checks and choose whether to use the data unchecked."}, "start")) throw Cancelled{};
+        "The checks run until they finish or you stop them. Once collection finishes, press Esc to stop the checks and choose whether to use the data unchecked."}, "start")) throw Cancelled{};
     SecretBytes digest(32);
     std::array<unsigned char, 17> profile{};
     size_t total = 0;
     unsigned frames = 0, warnings = 0;
     EntropyAssessment result{};
     AssessmentProgress progress;
-    bool stopped = false, timed_out = false;
+    bool stopped = false;
     {
         EntropyFile samples, report;
         EntropyHash hash;
@@ -59,12 +59,8 @@ SecretBytes Terminal::CameraEntropy(bool& unchecked)
                 if (!ready) throw Cancelled{};
                 stopped = true; break;
             }
-            if (now - start >= std::chrono::seconds(ENTROPY_TOTAL_SECONDS)) {
-                Require(ready, "Camera collection and checks took too long");
-                stopped = timed_out = true; break;
-            }
             Require(captured || now - last_frame < std::chrono::seconds(10), "The camera stopped sending images");
-            Require(captured || now - start < std::chrono::seconds(ENTROPY_CAPTURE_SECONDS + 10), "Camera collection took too long");
+            Require(ready || now - start < std::chrono::seconds(ENTROPY_CAPTURE_SECONDS + 10), "Camera collection took too long");
             if (now - painted >= std::chrono::milliseconds(250)) {
                 ReviewLines lines{captured ? "Camera: finished" : frames ? "Camera: collecting images" : "Camera: starting",
                     "Check: " + std::to_string(progress.Current()) + " of 9"};
@@ -131,10 +127,10 @@ SecretBytes Terminal::CameraEntropy(bool& unchecked)
     } // All workers are dead and reaped before any manual input or fresh RNG request.
     Require(!progress.Constant() && !result.constant, "The checked camera data had no variation");
     if (stopped) {
-        const auto title = timed_out ? "Camera checks did not finish" : "Camera checks stopped early";
-        if (Menu(title, {"Continue without camera data", "Use unchecked camera data"},
+        if (Menu("Camera checks stopped early", {"Continue without camera data", "Use unchecked camera data"},
             std::to_string(progress.Finished()) + " of 9 checks finished. There is no final randomness estimate. "
-            "You can still add the collected camera data as an unchecked extra. Fresh randomness from Bitcoin Core will still be used.",
+            "You can leave the camera data out or add it as an unchecked extra. Fresh randomness from Bitcoin Core is used either way. "
+            "Camera data may add useful randomness, but it never replaces or weakens Bitcoin Core's protection.",
             true, {}, true, progress.Details()) == 0) return {};
         unchecked = true;
         return CameraContribution(profile, total, digest);
