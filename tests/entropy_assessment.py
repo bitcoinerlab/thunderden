@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import signal
 import subprocess
 import time
@@ -12,7 +13,7 @@ import time
 SEALS = fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL
 
 
-def assess(binary, data, *, sealed=True, threads=1, official=False, timeout=130):
+def assess(binary, data, *, sealed=True, threads=1, official=False, truncate=False, timeout=130):
     source = os.memfd_create('public-entropy-fixture', os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
     report = os.memfd_create('public-assessment', os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
     safe_in = safe_out = -1
@@ -26,7 +27,7 @@ def assess(binary, data, *, sealed=True, threads=1, official=False, timeout=130)
         actions = [(os.POSIX_SPAWN_DUP2, safe_in, 3), (os.POSIX_SPAWN_DUP2, safe_out, 4)]
         actions += [(os.POSIX_SPAWN_OPEN, fd, '/dev/null', os.O_RDONLY if fd == 0 else os.O_WRONLY, 0) for fd in range(3)]
         actions.append((os.POSIX_SPAWN_CLOSEFROM, 5))
-        command = [str(binary)] + (['-i', '-a', '-q', '-o', '/proc/self/fd/4', '/proc/self/fd/3', '8'] if official else [])
+        command = [str(binary)] + (['-i', '-t' if truncate else '-a', '-q', '-o', '/proc/self/fd/4', '/proc/self/fd/3', '8'] if official else [])
         env = {'LANG': 'C', 'LC_ALL': 'C', 'TZ': 'UTC0', 'OMP_NUM_THREADS': str(threads), 'OMP_THREAD_LIMIT': str(threads), 'OMP_DYNAMIC': 'FALSE'}
         start = time.monotonic()
         pid = os.posix_spawn(str(binary), command, env, file_actions=actions, setsid=True)
@@ -74,6 +75,11 @@ def tests(binary, parser_binary=None):
     assert len(report['testCases']) == 11 and report['IID'] is False and report['errorLevel'] == 0
     assert report['sha256'] == hashlib.sha256(data).hexdigest(), 'NIST did not receive the immutable sample bytes'
     assert 0 <= summary['bits_per_sample'] <= 8
+    command = shlex.split(report['commandline'])
+    assert '-t' in command and '-a' not in command, 'Production assessment did not use the truncated bitstring mode'
+    reference, expected = assess(binary.with_name('ea_non_iid'), data, official=True, truncate=True)
+    assert reference['exit_code'] == 0 and not reference['timeout'], reference
+    assert report['testCases'] == expected['testCases'], 'Isolated assessment differs from official -i -t results'
     if parser_binary:
         for samples in (data, bytes(value & 1 for value in data)):
             if samples != data:
@@ -82,7 +88,7 @@ def tests(binary, parser_binary=None):
             parsed = subprocess.run([parser_binary, '--assessment-report'], input=json.dumps(report),
                                     text=True, capture_output=True, check=True)
             assert float(parsed.stdout) == summary['bits_per_sample'], 'Signer changed the official score'
-    print('PASS: sealed RAM-only input, invalid descriptors, constant-data status, complete official battery and exact sample bytes')
+    print('PASS: sealed RAM-only input, invalid descriptors, constant-data status, official -i -t results and exact sample bytes')
     print(json.dumps(summary, sort_keys=True))
 
 

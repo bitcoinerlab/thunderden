@@ -27,7 +27,8 @@ int main()
         OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, nullptr);
         unsigned char warmup[32]; SHA256(reinterpret_cast<const unsigned char*>(""), 0, warmup);
         td::ConfineAssessment(); // No filesystem exceptions: anonymous memfds retain their descriptor rights.
-        const char* args[]{"ea_non_iid", "-i", "-a", "-q", "-o", "/proc/self/fd/4", "/proc/self/fd/3", "8", nullptr};
+        // Keep all original symbols; bound separate bitstring checks to one million bits.
+        const char* args[]{"ea_non_iid", "-i", "-t", "-q", "-o", "/proc/self/fd/4", "/proc/self/fd/3", "8", nullptr};
         return NistMain(8, const_cast<char**>(args));
     } catch (...) { return 1; } // Never forward estimator text or sample metadata to the terminal.
 }

@@ -832,6 +832,7 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
         # Compact pages insert navigation text between wrapped lines.
         assert b"The randomness checks examined" in rendered and b"1048576" in rendered
         assert b"of the collected camera values." in rendered
+        assert b"Separate bitstring checks use at most" in rendered and b"1,000,000 bits." in rendered
         assert b"Each camera value is an 8-bit" not in rendered
         assert b"final strength of your recovery words" not in rendered
         assert b"Samples hashed" not in rendered and b"Hashed / assessed" not in rendered
