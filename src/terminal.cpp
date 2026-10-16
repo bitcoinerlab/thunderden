@@ -187,7 +187,7 @@ void Terminal::Screen(std::string_view title, const ReviewLines& lines, std::str
 }
 
 int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction,
-    bool cancellable, std::string_view status, bool keep_introduction, const ReviewLines& details)
+    bool cancellable, std::string_view status, bool keep_introduction, const ReviewLines& details, const ReviewLines& identity)
 {
     Require(!choices.empty() && choices.size() <= 9, "Invalid menu");
     Printable(status);
@@ -198,8 +198,15 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
     Flush();
     while (true) {
         const auto view = View();
-        const auto instruction = Wrap({"Use the arrow keys to choose, then press Enter."}, view.width);
-        const size_t available = view.height - instruction.size() - 1;
+        auto pinned = Wrap(identity, view.width);
+        auto instruction = Wrap({"Use the arrow keys to choose, then press Enter."}, view.width);
+        // Session identity stays visible even when a compact screen scrolls choices.
+        // The footer already explains navigation, so omit its duplicate if needed.
+        if (!pinned.empty() && pinned.size() + instruction.size() + 3 > view.height) instruction.clear();
+        if (!pinned.empty() && pinned.size() + (instruction.empty() ? 1 : instruction.size() + 2) < view.height) pinned.emplace_back("");
+        const size_t reserved = pinned.size() + (instruction.empty() ? 0 : instruction.size() + 1);
+        Require(reserved < view.height, "Session identity does not fit this screen");
+        const size_t available = view.height - reserved;
         std::vector<ReviewLines> entries;
         size_t entry_rows = 0;
         for (const auto& choice : choices) {
@@ -218,7 +225,8 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
             }
             lines.clear();
         }
-        const size_t start = lines.size(), slots = available - start;
+        const size_t slots = available - lines.size();
+        lines.insert(lines.begin(), pinned.begin(), pinned.end());
         Require(entries[selected].size() <= slots, "Menu option does not fit this screen");
         if (!previous_view || *previous_view != view) first = 0;
         if (selected < first) first = selected;
@@ -227,13 +235,13 @@ int Terminal::Menu(std::string_view title, const ReviewLines& choices, std::stri
         while (visible > slots) visible -= entries[first++].size();
         size_t highlight = 0;
         for (size_t i = first; i < choices.size(); ++i) {
-            if (lines.size() + entries[i].size() > available) break;
+            if (lines.size() + entries[i].size() > pinned.size() + available) break;
             if (i == selected) highlight = lines.size();
             for (size_t row = 0; row < entries[i].size(); ++row)
                 lines.push_back((row ? std::string(5, ' ') : std::string(i == selected ? "> " : "  ") + std::to_string(i + 1) + ": ")
                     + entries[i][row]);
         }
-        lines.emplace_back(""); lines.insert(lines.end(), instruction.begin(), instruction.end());
+        if (!instruction.empty()) { lines.emplace_back(""); lines.insert(lines.end(), instruction.begin(), instruction.end()); }
         if (redraw || !previous_view || *previous_view != view) {
             Draw(view, title, lines, std::string("Up/Down: Choose   Enter/1-") + std::to_string(choices.size())
                 + ": Select" + (details.empty() ? "" : "   d: Details") + (cancellable ? "   Esc: Back" : ""), highlight);

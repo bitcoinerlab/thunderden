@@ -1,5 +1,6 @@
 #include "entropy.h"
 #include "terminal.h"
+#include "hardware.h"
 #include <algorithm>
 
 namespace td {
@@ -39,28 +40,33 @@ SecretBytes Terminal::ManualEntropy(ManualSource source, unsigned words)
 void Terminal::BackupWords(std::span<const unsigned char> mnemonic)
 {
     ValidateMnemonic(mnemonic);
+    if (ShowRecoveryWords(*this, mnemonic)) return;
     const std::string_view text(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
     const auto view = View();
     const size_t count = 1 + std::count(text.begin(), text.end(), ' '), per_page = view.height - 2;
     for (size_t first = 0; first < count; first += per_page) {
         const bool last = first + per_page >= count;
-        Flush();
-        Draw(view, "Write down your recovery words", {}, last ? "Enter: Check backup   Esc: Cancel" : "Enter: Next   Esc: Cancel");
-        size_t start = 0;
-        for (size_t i = 0; i < std::min(count, first + per_page); ++i) {
-            const auto end = text.find(' ', start);
-            if (i >= first) {
-                At(view.body + i - first, view.left);
-                Write(std::to_string(i + 1) + ". ");
-                Write(text.substr(start, end == text.npos ? end : end - start)); // No ordinary string/screen cache of secrets.
+        const auto draw = [&] {
+            Flush();
+            Draw(view, "Write down your recovery words", {}, last ? "Q: Seed QR   Enter: Check backup   Esc: Cancel" : "Q: Seed QR   Enter: Next   Esc: Cancel");
+            size_t start = 0;
+            for (size_t i = 0; i < std::min(count, first + per_page); ++i) {
+                const auto end = text.find(' ', start);
+                if (i >= first) {
+                    At(view.body + i - first, view.left);
+                    Write(std::to_string(i + 1) + ". ");
+                    Write(text.substr(start, end == text.npos ? end : end - start)); // No ordinary string/screen cache of secrets.
+                }
+                start = end + 1;
             }
-            start = end + 1;
-        }
-        Row(view, view.height - 1, "Copy every word in order.");
+            Row(view, view.height - 1, "Copy every word in order.");
+        };
+        draw();
         while (true) {
             const int key = Key();
             Require(View() == view, "The screen changed. Start backup again.");
             if (key == 27 || key == 3) throw Cancelled{};
+            if (key == 'q' || key == 'Q') { ShowSeedQR(*this, mnemonic); draw(); }
             if (key == '\r' || key == '\n') break;
         }
     }
@@ -102,6 +108,7 @@ SecretBytes NewMnemonic(Terminal& terminal)
             : std::string(source == ManualSource::Coins ? "Coin tosses: " : "Dice rolls: ") + std::to_string(ManualTarget(source, words)), "",
         "The next screen will show your recovery words.", "",
         "Before continuing, make sure no one else can see the screen and no camera is pointed at it.", "",
+        "The seed QR is another copy of these recovery words. Keep it private too. Use only a trusted offline device to scan it.", "",
         "Write down every word in order. Afterward, you'll enter them again to check your written backup."}, "generate words")) throw Cancelled{};
     auto mnemonic = GenerateMnemonic(words, camera, source, manual);
     while (true) {

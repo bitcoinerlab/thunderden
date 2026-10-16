@@ -9,10 +9,11 @@ independent review of the corrected revision remain pending.
 
 ## Sources and backup
 
-Before a key session is loaded, choose an action such as **Share a public key**,
-then **Generate new recovery words** when asked for recovery words. Choose the
-length and optional sources. To use an existing wallet, choose **Use existing
-recovery words** instead. End the current session before generating another wallet.
+In current source, choose **Create a new wallet** on the initial **Start a session**
+menu, then choose the length and optional sources. To use an existing wallet,
+choose **Enter recovery words** or **Scan a seed QR** instead. End the current
+session before generating another wallet. Preview 9 still asks for recovery words
+when first opening a wallet action, such as **Share a public key**.
 
 Generate 12 or 24 English BIP39 words. The chooser recommends 12 words for strong
 protection and an easier backup; 24 words provide a larger recovery-phrase search
@@ -40,7 +41,11 @@ All camera/assessment workers finish before manual input or final randomness.
 Re-enter the generated words to verify the backup before a key session is created.
 Before revealing the words, the interface asks the user to keep other people and
 cameras from seeing the screen and to write every word down in order.
-Words and contributions are not exported, logged or written to persistent storage.
+Current source shows a private [seed QR backup](SEED_QR.md) beside the words by
+default; **F** switches Standard/Compact and **Q** hides/shows it. The QR is the
+same recovery secret: only scan it with a trusted offline device. The written-word
+check remains required. Contributions are not exported; neither words nor
+contributions are logged or written to persistent storage.
 
 All inputs pass through the same computer. More sources do not protect against
 compromised signer software, OS or firmware. A camera score is a diagnostic, not

@@ -20,6 +20,8 @@ std::vector<uint8_t> UnwrapBytes(const std::vector<uint8_t>& cbor);
 struct QRMessage {
     std::string type;
     std::vector<uint8_t> cbor;
+    // Seed QRs are not public UR replies. Keep their raw payload in wiping storage.
+    SecretBytes secret{};
 };
 
 // One instance per scan. A conflicting stream never replaces collected data.

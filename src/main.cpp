@@ -5,7 +5,7 @@
 #include "scan.h"
 #include "qr_commands.h"
 #include "address_check.h"
-#include "entropy.h"
+#include "seed_qr.h"
 
 #include <chainparams.h>
 #include <util/strencodings.h>
@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdio>
-#include <memory>
 
 namespace {
 using namespace td;
@@ -57,10 +56,10 @@ std::pair<Path, PublicKeyFormat> PublicKeyChoice(Terminal& terminal)
     return {std::move(path), format == 0 ? PublicKeyFormat::Text : PublicKeyFormat::HDKey};
 }
 
-QRMessage Scan(Terminal& terminal)
+QRMessage Scan(Terminal& terminal, bool seed = false)
 {
-    terminal.Screen("Scan a QR code", {"Opening the camera on this device...",
-        "Point it at the QR code shown by your wallet app."}, "Esc: Cancel");
+    terminal.Screen(seed ? "Scan a seed QR" : "Scan a QR code", {"Opening the camera on this device...",
+        seed ? "Point it at your SeedQR or CompactSeedQR backup." : "Point it at the QR code shown by your wallet app."}, "Esc: Cancel");
     Display display(terminal);
     ScanProcess scanner(ScannerExecutable());
     terminal.Flush();
@@ -70,7 +69,7 @@ QRMessage Scan(Terminal& terminal)
         auto update = scanner.Poll();
         if (!update) continue;
         if (update->message) return std::move(*update->message);
-        display.Preview(update->gray, update->width, update->height, update->progress / 100.0);
+        display.Preview(update->gray, update->width, update->height, update->progress / 100.0, seed);
     }
 }
 
@@ -103,41 +102,20 @@ int main(int argc, char** argv)
         terminal.SetNetwork(td::NetworkName(Params().GetChainType()));
         td::PrepareSigner(); // Before any recovery input or private key exists.
         ECC_Context context;
-        std::unique_ptr<td::Keys> session;
+        const auto session = td::StartSession(terminal, [&] { return Scan(terminal, true); });
+        const auto& keys = *session;
         std::optional<td::ApprovedWallet> loaded_wallet;
-        const auto keys = [&]() -> const td::Keys& {
-            if (!session) {
-                const auto mnemonic = terminal.Menu("Recovery words", {"Use existing recovery words", "Generate new recovery words"}) == 0
-                    ? terminal.Mnemonic() : td::NewMnemonic(terminal);
-                while (!session) {
-                    SecretInput visibility;
-                    const auto passphrase = terminal.Input("Wallet passphrase (optional)", {
-                        "Some wallets use an extra word or phrase in addition to the recovery words. Enter it only if you already use one.", "",
-                        "If you do not use a passphrase, leave this blank and press Enter to skip.", "",
-                        "Spaces and capital letters matter. A different passphrase opens a different wallet."}, "Passphrase: ", 128, &visibility);
-                    if (!passphrase.empty()) {
-                        visibility.visible = false;
-                        if (passphrase != terminal.Input("Repeat your passphrase", {"Enter the same passphrase again to check for typing mistakes."},
-                            "Repeat passphrase: ", 128, &visibility)) {
-                            terminal.Notice("Passphrases did not match", {"Enter the passphrase again."});
-                            continue;
-                        }
-                    }
-                    session = std::make_unique<td::Keys>(mnemonic, passphrase);
-                }
-            }
-            return *session;
-        };
         while (true) {
+            td::ReviewLines identity{"Seed fingerprint: " + HexStr(keys.RootFingerprint())};
+            if (loaded_wallet) identity.push_back("Loaded wallet: " + loaded_wallet->policy.Name());
             const int choice = terminal.Menu("What would you like to do?", {
                 "Scan a QR code", "Share a public key (xpub)", "End session (clear keys)"},
-                "Scan an address, transaction or request from your wallet app.", false,
-                loaded_wallet ? "Loaded wallet: " + loaded_wallet->policy.Name() : "");
+                "Scan an address, transaction or request from your wallet app.", false, {}, false, {}, identity);
             if (choice == 2) return 0;
             try {
                 if (choice == 1) {
                     const auto [path, format] = PublicKeyChoice(terminal);
-                    auto lines = td::PublicKeyReview(keys(), path);
+                    auto lines = td::PublicKeyReview(keys, path);
                     if (format == PublicKeyFormat::Account) {
                         lines.push_back("Address type: " + (path.size() == 3 ? td::AccountType(path[0] & 0x7fffffffU)
                             : std::string(path.size() == 1 ? "Legacy multisig (P2SH)" : path.back() == 0x80000001U
@@ -145,29 +123,32 @@ int main(int argc, char** argv)
                         if (path.size() >= 3) lines.push_back("Account: " + std::to_string(path[2] & 0x7fffffffU));
                     }
                     lines.insert(lines.end(), {"", "Extended public key:",
-                        td::EncodePublic(keys().PublicAt(path), Params().GetChainType() == ChainType::MAIN)});
+                        td::EncodePublic(keys.PublicAt(path), Params().GetChainType() == ChainType::MAIN)});
                     const td::ReviewScreen review{"Share a public key", std::move(lines), {}};
                     if (terminal.Confirm(review.title, review.summary, "show the QR code")) {
-                        if (format == PublicKeyFormat::Text) td::ShowQR(terminal, td::PublicKeyText(keys(), path), &review);
-                        else td::ShowQR(terminal, format == PublicKeyFormat::Account ? td::PublicAccount(keys(), path)
-                            : td::PublicHDKey(keys(), path), &review);
+                        if (format == PublicKeyFormat::Text) td::ShowQR(terminal, td::PublicKeyText(keys, path), &review);
+                        else td::ShowQR(terminal, format == PublicKeyFormat::Account ? td::PublicAccount(keys, path)
+                            : td::PublicHDKey(keys, path), &review);
                     }
                 } else if (choice == 0) {
-                    keys(); // Recovery words must be entered before the online webcam faces this screen.
                     const auto message = Scan(terminal);
+                    if (td::IsSeedQR(message)) {
+                        if (td::EndSessionForSeed(terminal, message)) return 0;
+                        continue;
+                    }
                     std::optional<td::QRMessage> response;
                     std::optional<td::ReviewScreen> completed;
                     const auto approve = [&](const td::TransactionReview& review) {
                         return td::ApproveTransaction(terminal, review, completed);
                     };
                     if (message.type == "crypto-psbt") {
-                        response = td::SignRequest(terminal, keys(), loaded_wallet, message, [&] { return Scan(terminal); }, approve);
+                        response = td::SignRequest(terminal, keys, loaded_wallet, message, [&] { return Scan(terminal); }, approve);
                     } else if (message.type == "address") {
-                        td::CheckAddress(terminal, keys(), loaded_wallet ? &*loaded_wallet : nullptr, td::UnwrapBytes(message.cbor));
+                        td::CheckAddress(terminal, keys, loaded_wallet ? &*loaded_wallet : nullptr, td::UnwrapBytes(message.cbor));
                     } else if (td::IsMultisigSetup(message)) {
-                        LoadWallet(terminal, keys(), loaded_wallet, message);
+                        LoadWallet(terminal, keys, loaded_wallet, message);
                     } else {
-                        auto result = td::HandleQRRequest(message, keys(), {
+                        auto result = td::HandleQRRequest(message, keys, {
                             [&](const auto& lines) {
                                 completed = td::ReviewScreen{"Public key (xpub)", lines, {}};
                                 return terminal.Confirm("Share a public key (xpub)", lines, "show the QR code");

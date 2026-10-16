@@ -1,6 +1,7 @@
 #include "application.h"
 #include "terminal.h"
 #include "wallet_qr.h"
+#include "seed_qr.h"
 #include <util/strencodings.h>
 
 namespace td {
@@ -15,6 +16,7 @@ std::optional<Digest> ApproveWallet(const Policy& policy, const Keys& keys, cons
 
 bool LoadWallet(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded, const QRMessage& message)
 {
+    Require(!IsSeedQR(message), "You scanned recovery words. Scan the multisig wallet setup instead.");
     return LoadWallet(terminal, keys, loaded, ImportMultisig(message), false);
 }
 

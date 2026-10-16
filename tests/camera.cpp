@@ -28,11 +28,12 @@ int open_error = 0;
 bool second_camera = false;
 constexpr int FRAMEBUFFER_FD = 101;
 constexpr unsigned WIDTH = 320, HEIGHT = 240;
-std::array<uint8_t, WIDTH * HEIGHT * 4> framebuffer{};
+std::vector<uint8_t> framebuffer(WIDTH * HEIGHT * 4);
 int display_mode = KD_TEXT;
 unsigned setup_width = WIDTH, setup_height = HEIGHT;
 std::string selected_font;
 bool doubled_font = false;
+unsigned display_font_width = 8, display_font_height = 16;
 std::function<int(pollfd*, int)> display_input;
 
 void Check(bool ok, const char* message)
@@ -130,7 +131,7 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
         info = {};
         info.type = FB_TYPE_PACKED_PIXELS;
         info.visual = FB_VISUAL_TRUECOLOR;
-        info.line_length = WIDTH * 4;
+        info.line_length = setup_width * 4;
         info.smem_len = framebuffer.size();
     } else if (request == FBIOGET_VSCREENINFO) {
         auto& info = *static_cast<fb_var_screeninfo*>(argument);
@@ -158,10 +159,10 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
             doubled_font = true;
         } else {
             Check(font.op == KD_FONT_OP_GET_TALL && font.width == 32 && font.height == 64, "Wrong display font buffer bounds");
-            font.width = 8;
-            font.height = 16;
+            font.width = display_font_width;
+            font.height = display_font_height;
             font.charcount = 256;
-            std::memset(font.data, 0xff, font.charcount * 64);
+            std::memset(font.data, 0xff, font.charcount * 64 * ((font.width + 7) / 8));
         }
     } else {
         Check(request == KDGETMODE, "Unexpected display ioctl");
@@ -170,14 +171,18 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
     return 0;
 }
 
-extern "C" void* __wrap_mmap(void*, size_t length, int, int, int fd, off_t)
+extern "C" void* __real_mmap(void*, size_t, int, int, int, off_t);
+extern "C" void* __wrap_mmap(void* address, size_t length, int protection, int flags, int fd, off_t offset)
 {
+    if (fd != FRAMEBUFFER_FD) return __real_mmap(address, length, protection, flags, fd, offset);
     Check(fd == FRAMEBUFFER_FD && length == framebuffer.size(), "Unexpected framebuffer mapping");
     return framebuffer.data();
 }
 
+extern "C" int __real_munmap(void*, size_t);
 extern "C" int __wrap_munmap(void* address, size_t length)
 {
+    if (address != framebuffer.data()) return __real_munmap(address, length);
     Check(address == framebuffer.data() && length == framebuffer.size(), "Unexpected framebuffer unmap");
     return 0;
 }
@@ -318,6 +323,101 @@ int main()
             display_input = {};
         }
         std::puts("PASS: static/animated QR pixels, Enter/Space handling, repeated review, identical replies and Finish");
+        for (const auto& [width, height, font_width, font_height] : {
+                std::tuple{640U, 480U, 8U, 16U}, {1280U, 800U, 16U, 32U}, {2560U, 1600U, 32U, 64U}}) {
+            setup_width = width; setup_height = height;
+            display_font_width = font_width; display_font_height = font_height;
+            framebuffer.resize(width * height * 4);
+            for (const unsigned bytes : {16, 32}) for (const bool cancel : {false, true}) {
+                winsize size{30, 80, 0, 0};
+                Check(openpty(&master, &slave, nullptr, nullptr, &size) == 0, "Cannot open seed backup tty");
+                Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain seed backup tty");
+                const auto words = td::EntropyMnemonic(td::SecretBytes(bytes, 0x42));
+                unsigned step = 0;
+                std::vector<uint8_t> original_words;
+                display_input = [&](pollfd* descriptors, int timeout) {
+                    if (timeout == 30) return __real_poll(descriptors, 1, 0);
+                    char buffer[4096]; while (read(master, buffer, sizeof(buffer)) > 0) {}
+                    Check(display_mode == KD_GRAPHICS, "Seed backup left graphics unexpectedly");
+                    const unsigned factor = width > 1920 ? 2 : 1, w = width / factor, h = height / factor;
+                    std::vector<uint8_t> gray(w * h);
+                    for (unsigned y = 0; y < h; ++y) for (unsigned x = 0; x < w; ++x)
+                        gray[y * w + x] = framebuffer[(y * factor * width + x * factor) * 4];
+                    td::QRScanner scanner;
+                    const auto frames = scanner.Scan(gray, w, h);
+                    if (step == 2) Check(frames.empty(), "Hidden seed QR remained readable");
+                    else {
+                        Check(frames.size() == 1, "Side-by-side seed QR was not readable");
+                        td::URReceiver receiver; receiver.Receive(frames[0]);
+                        Check(receiver.Result() && td::DecodeSeedQR(*receiver.Result()) == words, "Displayed QR contained different recovery words");
+                        Check(receiver.Result()->type == (step == 0 ? "seedqr" : "compact-seedqr"), "Wrong default/toggled seed QR format");
+                    }
+                    // Left-side word pixels must be identical across format/hide changes.
+                    std::vector<uint8_t> left;
+                    for (unsigned y = 16 + 4 * (font_height + 4); y < height - 16 - 2 * (font_height + 4); ++y)
+                        left.insert(left.end(), framebuffer.begin() + (y * width + 16) * 4,
+                            framebuffer.begin() + (y * width + 16 + (bytes == 32 ? 30 : 15) * font_width) * 4);
+                    if (step == 0) original_words = left;
+                    else Check(left == original_words, "Toggling seed QR changed or erased recovery words");
+                    const std::string keys[]{"f", "q", "Q", "\r"};
+                    Check(step < 4, "Seed backup did not finish");
+                    const std::string key = cancel ? "\033" : keys[step];
+                    ++step;
+                    Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send backup key");
+                    return __real_poll(descriptors, 1, 1000);
+                };
+                bool cancelled = false;
+                {
+                    td::Terminal terminal(slave); terminal.SetNetwork("Bitcoin mainnet");
+                    try { terminal.BackupWords(words); } catch (const td::Cancelled&) { cancelled = true; }
+                }
+                Check(cancelled == cancel && step == (cancel ? 1U : 4U) && display_mode == KD_TEXT, "Seed backup navigation failed");
+                for (size_t i = 0; i < framebuffer.size(); i += 4) Check(framebuffer[i] == 25, "Recovery pixels survived completion/cancellation");
+                close(master); display_input = {};
+            }
+        }
+        setup_width = WIDTH; setup_height = HEIGHT; display_font_width = 8; display_font_height = 16;
+        framebuffer.resize(WIDTH * HEIGHT * 4);
+        Check(openpty(&master, &slave, nullptr, nullptr, nullptr) == 0, "Cannot open small backup tty");
+        {
+            td::Terminal terminal(slave);
+            Check(!td::ShowRecoveryWords(terminal, td::EntropyMnemonic(td::SecretBytes(32))), "Tiny display squeezed both words and QR");
+        }
+        Check(display_mode == KD_TEXT, "Small-screen fallback retained graphics mode");
+        close(master);
+        winsize small_size{15, 40, 0, 0};
+        Check(openpty(&master, &slave, nullptr, nullptr, &small_size) == 0, "Cannot open paged backup tty");
+        Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain paged backup tty");
+        const auto small_words = td::EntropyMnemonic(td::SecretBytes(16));
+        unsigned small_step = 0;
+        display_input = [&](pollfd* descriptors, int timeout) {
+            if (timeout == 30) return __real_poll(descriptors, 1, 0);
+            std::string text;
+            char buffer[4096];
+            for (ssize_t count; (count = read(master, buffer, sizeof(buffer))) > 0;) text.append(buffer, count);
+            if (small_step == 1 || small_step == 2) {
+                Check(display_mode == KD_GRAPHICS, "Small seed QR did not open separately");
+                std::vector<uint8_t> gray(WIDTH * HEIGHT);
+                for (size_t i = 0; i < gray.size(); ++i) gray[i] = framebuffer[i * 4];
+                td::QRScanner scanner; const auto frames = scanner.Scan(gray, WIDTH, HEIGHT);
+                Check(frames.size() == 1, "Separate seed QR was unreadable");
+                td::URReceiver receiver; receiver.Receive(frames[0]);
+                Check(td::DecodeSeedQR(*receiver.Result()) == small_words, "Separate QR changed the seed");
+                Check(receiver.Result()->type == (small_step == 1 ? "seedqr" : "compact-seedqr"), "Separate QR format did not toggle");
+            } else {
+                Check(display_mode == KD_TEXT && text.find(small_step == 4 ? "7. " : "1. ") != text.npos,
+                    "Returning from separate QR skipped a word page");
+            }
+            const std::string keys[]{"q", "f", "\033", "\r", "\r"};
+            Check(small_step < 5, "Paged seed backup did not finish");
+            const auto& key = keys[small_step++];
+            Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send paged backup key");
+            return __real_poll(descriptors, 1, 1000);
+        };
+        { td::Terminal terminal(slave); terminal.BackupWords(small_words); }
+        Check(small_step == 5 && display_mode == KD_TEXT, "Separate QR did not return to word backup");
+        close(master); display_input = {};
+        std::puts("PASS: 12/24-word VGA/high-DPI backups, visible Standard QR default, compact toggle, hide/show, unchanged words and pixel clearing");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Camera test failed: %s\n", error.what());

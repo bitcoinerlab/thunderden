@@ -51,6 +51,52 @@ void ShowQR(Terminal& terminal, const std::string& text, const ReviewScreen* rev
     ShowFrames(terminal, text, nullptr, review);
 }
 
+void ShowSeedQR(Terminal& terminal, std::span<const unsigned char> mnemonic)
+{
+    auto format = SeedQRFormat::Standard;
+    Display display(terminal);
+    while (true) {
+        const auto data = EncodeSeedQR(mnemonic, format);
+        const QRImage image(data, format == SeedQRFormat::Standard);
+        display.QR(image, format == SeedQRFormat::Standard ? "Standard SeedQR   F: Compact   Esc: Words"
+            : "CompactSeedQR   F: Standard   Esc: Words", "Private recovery backup. Keep it private like your words.");
+        terminal.Flush();
+        while (true) {
+            const int key = terminal.Key();
+            if (key == 27 || key == 3 || key == 'q' || key == 'Q') return;
+            if (key == 'f' || key == 'F') break;
+        }
+        format = format == SeedQRFormat::Standard ? SeedQRFormat::Compact : SeedQRFormat::Standard;
+    }
+}
+
+bool ShowRecoveryWords(Terminal& terminal, std::span<const unsigned char> mnemonic)
+{
+    // Text-only development consoles retain the existing paginated word backup.
+    const int fd = open("/dev/fb0", O_RDWR | O_CLOEXEC);
+    if (fd < 0) return false;
+    close(fd);
+    auto format = SeedQRFormat::Standard;
+    bool visible = true;
+    Display display(terminal);
+    while (true) {
+        const auto data = EncodeSeedQR(mnemonic, format);
+        const QRImage image(data, format == SeedQRFormat::Standard);
+        if (!display.RecoveryWords(mnemonic, visible ? &image : nullptr, format)) return false;
+        terminal.Flush();
+        while (true) {
+            const int key = terminal.Key();
+            if (key == 27 || key == 3) throw Cancelled{};
+            if (key == '\r' || key == '\n') return true;
+            if (key == 'q' || key == 'Q') { visible = !visible; break; }
+            if (visible && (key == 'f' || key == 'F')) {
+                format = format == SeedQRFormat::Standard ? SeedQRFormat::Compact : SeedQRFormat::Standard;
+                break;
+            }
+        }
+    }
+}
+
 void ConfigureConsole(int tty)
 {
     // Linux console palette: charcoal, paper and a restrained orange accent.
@@ -89,7 +135,7 @@ void ConfigureConsole(int tty)
     (void)resized; // An unsupported font size leaves the already-selected font.
 }
 
-Display::Display(Terminal& tty) : tty_(tty.FD())
+Display::Display(Terminal& tty) : tty_(tty.FD()), network_(tty.Network())
 {
     fd_ = open("/dev/fb0", O_RDWR | O_CLOEXEC);
     if (fd_ < 0) throw std::runtime_error("A framebuffer display is required");
@@ -133,6 +179,9 @@ Display::Display(Terminal& tty) : tty_(tty.FD())
 
 void Display::Close()
 {
+    // Camera previews and recovery QR/word pixels are secrets too. Do not leave
+    // them in the framebuffer when returning to text mode, including on cancel.
+    if (graphics_ && memory_) Clear();
     if (graphics_) ioctl(tty_, KDSETMODE, KD_TEXT);
     if (memory_) munmap(memory_, fixed_.smem_len);
     if (fd_ >= 0) close(fd_);
@@ -163,30 +212,36 @@ unsigned Display::Caption(const ReviewLines& lines)
     const auto wrapped = Wrap(lines, (variable_.xres - 32) / font_width_);
     const unsigned height = wrapped.size() * (font_height_ + 4) + 16;
     Require(height < variable_.yres / 2, "Not enough room for the camera or QR code.");
-    const unsigned stride = (font_width_ + 7) / 8;
     for (unsigned y = variable_.yres - height; y < variable_.yres; ++y) {
         for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, 25);
     }
     for (size_t row = 0; row < wrapped.size(); ++row) {
-        for (size_t i = 0; i < wrapped[row].size(); ++i) {
-            const unsigned ch = static_cast<unsigned char>(wrapped[row][i]);
-            const auto* glyph = font_.data() + ch * 64 * stride;
-            for (unsigned y = 0; y < font_height_; ++y) for (unsigned x = 0; x < font_width_; ++x) {
-                Pixel(16 + i * font_width_ + x, variable_.yres - height + 8 + row * (font_height_ + 4) + y,
-                    (glyph[y * stride + x / 8] & (0x80 >> (x % 8))) ? 239 : 25);
-            }
-        }
+        Text(16, variable_.yres - height + 8 + row * (font_height_ + 4), wrapped[row]);
     }
     return height;
 }
 
-void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress)
+void Display::Text(unsigned xoff, unsigned yoff, std::string_view text)
+{
+    Require(xoff + text.size() * font_width_ <= variable_.xres && yoff + font_height_ <= variable_.yres, "Display text does not fit");
+    const unsigned stride = (font_width_ + 7) / 8;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const unsigned ch = static_cast<unsigned char>(text[i]);
+        Require(ch >= 32 && ch <= 126, "Invalid display text");
+        const auto* glyph = font_.data() + ch * 64 * stride;
+        for (unsigned y = 0; y < font_height_; ++y) for (unsigned x = 0; x < font_width_; ++x)
+            Pixel(xoff + i * font_width_ + x, yoff + y, (glyph[y * stride + x / 8] & (0x80 >> (x % 8))) ? 239 : 25);
+    }
+}
+
+void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress, bool seed)
 {
     Require(width > 0 && width <= 1920 && height > 0 && height <= 1080
         && gray.size() == size_t(width) * height, "Invalid preview image");
     const int percent = int(progress * 100);
     if (percent != preview_progress_) {
-        caption_height_ = Caption({"Point this device's camera at the code in your wallet app.",
+        caption_height_ = Caption({seed ? "Point this device's camera at your seed QR backup."
+                : "Point this device's camera at the code in your wallet app.",
             std::to_string(percent) + "% scanned   Esc: Cancel"});
         preview_progress_ = percent;
     }
@@ -199,20 +254,63 @@ void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned he
     }
 }
 
-void Display::QR(const QRImage& image, std::string_view caption)
+void Display::QR(const QRImage& image, std::string_view caption, std::string_view instruction)
 {
     const unsigned modules = image.width + 8;
     Clear();
-    const auto height = Caption({"Use your wallet app to scan this QR code.", std::string(caption)});
+    const auto height = Caption({std::string(instruction), std::string(caption)});
     const unsigned scale = std::min(variable_.xres, variable_.yres - height) / modules;
     Require(scale >= 2, "This QR code is too large for the screen.");
-    const unsigned xoff = (variable_.xres - modules * scale) / 2 + 4 * scale;
-    const unsigned yoff = (variable_.yres - height - modules * scale) / 2 + 4 * scale;
+    Code(image, (variable_.xres - modules * scale) / 2, (variable_.yres - height - modules * scale) / 2, scale);
+}
+
+void Display::Code(const QRImage& image, unsigned x, unsigned y, unsigned scale)
+{
+    Require(scale > 0 && x + (image.width + 8) * scale <= variable_.xres
+        && y + (image.width + 8) * scale <= variable_.yres, "QR code does not fit");
+    const unsigned xoff = x + 4 * scale, yoff = y + 4 * scale;
     for (unsigned y = yoff - 4 * scale; y < yoff + (image.width + 4) * scale; ++y)
         for (unsigned x = xoff - 4 * scale; x < xoff + (image.width + 4) * scale; ++x) Pixel(x, y, 255);
     for (int y = 0; y < image.width; ++y) for (int x = 0; x < image.width; ++x) {
         if (!image.modules[y * image.width + x]) continue;
         for (unsigned dy = 0; dy < scale; ++dy) for (unsigned dx = 0; dx < scale; ++dx) Pixel(xoff + x * scale + dx, yoff + y * scale + dy, 0);
     }
+}
+
+bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRImage* qr, SeedQRFormat format)
+{
+    const std::string_view words(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
+    const size_t count = 1 + std::count(words.begin(), words.end(), ' ');
+    const unsigned row = font_height_ + 4, top = 16 + 4 * row, bottom = variable_.yres - 16 - 2 * row;
+    const unsigned columns = count == 24 ? 2 : 1, per_column = (count + columns - 1) / columns;
+    const unsigned words_width = columns * 15 * font_width_, qr_x = 16 + words_width + 24;
+    if (top >= bottom || per_column * row > bottom - top || qr_x + 29 * 3 + 16 > variable_.xres
+        || 2 * row + 29 * 3 > bottom - top) return false;
+    Clear();
+    Text(16, 16, "THUNDER DEN");
+    Text(variable_.xres - 16 - network_.size() * font_width_, 16, network_);
+    Text(16, 16 + 2 * row, "Write down your recovery words");
+    // Render secrets directly from the secure mnemonic, never through ReviewLines
+    // or a normal std::string screen cache.
+    size_t start = 0;
+    for (size_t i = 0; i < count; ++i) {
+        const auto end = words.find(' ', start);
+        const unsigned x = 16 + (i / per_column) * 15 * font_width_, y = top + (i % per_column) * row;
+        Text(x, y, std::to_string(i + 1) + ".");
+        Text(x + 4 * font_width_, y, words.substr(start, end == words.npos ? end : end - start));
+        start = end + 1;
+    }
+    if (qr) {
+        const unsigned available = variable_.xres - qr_x - 16, modules = qr->width + 8;
+        const unsigned scale = std::min(available, bottom - top - 2 * row) / modules;
+        Require(scale >= 2, "Seed QR does not fit");
+        const unsigned x = qr_x + (available - modules * scale) / 2;
+        Code(*qr, x, top, scale);
+        Text(qr_x, top + modules * scale, format == SeedQRFormat::Standard ? "Standard SeedQR" : "CompactSeedQR");
+        Text(qr_x, top + modules * scale + row, "F: Switch format");
+    } else Text(qr_x, top, "Seed QR hidden");
+    Text(16, bottom, "Copy every word in order.");
+    Text(16, bottom + row, qr ? "Q: Hide QR   Enter: Check backup   Esc: Cancel" : "Q: Show QR   Enter: Check backup   Esc: Cancel");
+    return true;
 }
 }

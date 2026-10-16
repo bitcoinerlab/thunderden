@@ -2,6 +2,7 @@
 #include "address_check.h"
 #include "entropy.h"
 #include "entropy_rng.h"
+#include "seed_qr.h"
 #include "multisig_fixture.h"
 #include <key_io.h>
 #include <util/strencodings.h>
@@ -13,6 +14,44 @@ int main(int argc, char** argv)
 {
     try {
         td::Terminal terminal(dup(STDIN_FILENO));
+        if (argc == 2 && std::string_view(argv[1]).starts_with("seed-")) {
+            const std::string_view mode(argv[1]);
+            ECC_Context context; SelectParams(ChainType::REGTEST); terminal.SetNetwork("Regtest");
+            const auto words = td::EntropyMnemonic(td::SecretBytes(16));
+            const td::QRMessage message{mode == "seed-compact" ? "compact-seedqr" : "seedqr", {},
+                td::EncodeSeedQR(words, mode == "seed-compact" ? td::SeedQRFormat::Compact : td::SeedQRFormat::Standard)};
+            if (mode == "seed-loaded") {
+                td::Keys keys(words, {}), bob(words, fixture::Bytes("cosigner"));
+                auto policy = td::ImportMultisig(fixture::Setup(2, 2, {&keys, &bob}, {fixture::Path(2), fixture::Path(2, 7)}));
+                std::optional<td::ApprovedWallet> loaded(td::ApprovedWallet{policy, keys.RegistrationTag(policy.ID())});
+                const auto fingerprint = keys.RootFingerprint();
+                const bool end = td::EndSessionForSeed(terminal, message);
+                td::Require(keys.RootFingerprint() == fingerprint && loaded->policy.ID() == policy.ID()
+                    && keys.VerifyTag(policy.ID(), loaded->proof), "Seed scan changed the current session");
+                std::puts(end ? "END SESSION" : "KEPT SESSION");
+            } else if (mode == "seed-nested") {
+                td::Keys keys(words, {});
+                std::optional<td::ApprovedWallet> loaded;
+                try { td::LoadWallet(terminal, keys, loaded, message); throw std::runtime_error("Seed was accepted as setup"); }
+                catch (const std::invalid_argument& error) { terminal.Notice("Wrong QR type", {error.what()}); }
+                td::Require(!loaded, "Seed installed a wallet setup");
+                std::puts("NO SESSION CHANGE");
+            } else if (mode == "seed-menu") {
+                terminal.Menu("What would you like to do?", {"Scan a QR code", "Share a public key (xpub)", "End session (clear keys)"},
+                    "Scan an address, transaction or request from your wallet app.", false, {}, false, {},
+                    {"Seed fingerprint: 73c5da0a", "Loaded wallet: Family multisig"});
+            } else {
+                unsigned scans = 0;
+                const auto keys = td::StartSession(terminal, [&] {
+                    ++scans;
+                    if (mode == "seed-wrong" && scans == 1) return td::QRMessage{"address", td::CborBytes(fixture::Bytes("public fixture"))};
+                    if (mode == "seed-invalid" && scans == 1) return td::QRMessage{"seedqr", {}, td::SecretBytes(48, '0')};
+                    return message;
+                });
+                std::printf("LOADED %s SCANS %u\n", HexStr(keys->RootFingerprint()).c_str(), scans);
+            }
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]).starts_with("entropy-")) {
             const std::string_view mode(argv[1]);
             if (mode == "entropy-generate" || mode == "entropy-rng-fail") {

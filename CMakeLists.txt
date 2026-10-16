@@ -49,9 +49,9 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(QR REQUIRED IMPORTED_TARGET libqrencode zbar libv4l2)
 
 add_library(thunderden STATIC src/keys.cpp src/policy.cpp src/transaction.cpp src/transport.cpp src/qr.cpp
-  src/review.cpp src/terminal.cpp src/application.cpp src/address_check.cpp src/entropy.cpp src/generation.cpp
+  src/review.cpp src/terminal.cpp src/application.cpp src/session.cpp src/address_check.cpp src/entropy.cpp src/generation.cpp
   src/camera_entropy.cpp src/entropy_process.cpp src/entropy_capture.cpp src/assessment_progress.cpp
-  src/wallet_qr.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/qr_scan.cpp src/scan.cpp src/isolation.cpp)
+  src/wallet_qr.cpp src/qr_commands.cpp src/seed_qr.cpp src/hardware.cpp src/camera.cpp src/qr_scan.cpp src/scan.cpp src/isolation.cpp)
 target_include_directories(thunderden PUBLIC src "${CORE_SOURCE_DIR}/src"
   "${CORE_SOURCE_DIR}/src/secp256k1/include" "${CMAKE_BINARY_DIR}/core/src"
   PRIVATE "${CMAKE_BINARY_DIR}")
@@ -179,6 +179,10 @@ add_executable(transport-tests tests/transport.cpp)
 target_link_libraries(transport-tests PRIVATE thunderden)
 target_compile_options(transport-tests PRIVATE -Wall -Wextra -Werror)
 add_test(NAME transport COMMAND transport-tests)
+add_executable(seed-qr-tests tests/seed_qr.cpp)
+target_link_libraries(seed-qr-tests PRIVATE thunderden)
+target_compile_options(seed-qr-tests PRIVATE -Wall -Wextra -Werror)
+add_test(NAME seed-qr COMMAND seed-qr-tests)
 
 add_executable(application-tests tests/application.cpp)
 target_link_libraries(application-tests PRIVATE thunderden)

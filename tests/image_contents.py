@@ -29,7 +29,7 @@ forbidden = {
     "bitcoind", "bitcoin-cli", "bitcoin-wallet", "bitcoin-node", "python", "python3",
     "gcc", "g++", "cmake", "strace", "thunderden-tests", "transaction-tests", "transport-tests",
     "application-tests", "terminal-probe", "qr-image-probe", "core-key-probe", "core-key-edges",
-    "isolation-tests", "camera-tests", "address-check-tests", "entropy-tests", "assessment-progress-tests", "ea_non_iid",
+    "isolation-tests", "camera-tests", "address-check-tests", "entropy-tests", "assessment-progress-tests", "seed-qr-tests", "ea_non_iid",
     "entropy-camera-tests", "entropy-worker-tests", "entropy-benchmark", "entropy-guest-tests", "entropy-confined",
     "bzip2", "bunzip2", "bzcat", "ea_iid", "ea_restart", "ea_conditioning", "ea_transpose",
     "sbsign", "sbattach", "sbverify", "efi_boot_probe.efi",

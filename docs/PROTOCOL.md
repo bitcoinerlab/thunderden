@@ -18,6 +18,11 @@ Custom public-key exports may also use a case-sensitive static text QR.
 | Multisig setup | `crypto-output`, or text configuration inside `bytes` | Import and locally approve a supported public multisig account |
 | Address check | Plain address or `bitcoin:` URI | Local comparison against a chosen account or loaded multisig; no reply QR |
 
+Current source also recognises private [SeedQR and CompactSeedQR backups](SEED_QR.md).
+They are not UR commands or public replies: loading needs local confirmation,
+and an existing key session cannot be replaced by a scan. Preview 9 does not
+include this backup format support.
+
 ## Human-operated exchange
 
 The user chooses when to scan on Thunder Den, reviews the requested operation and

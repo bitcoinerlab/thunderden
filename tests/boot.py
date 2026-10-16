@@ -87,14 +87,7 @@ with (args.output / "qemu.log").open("wb") as log:
         key("ret")  # Regtest, selected using arrow keys.
         time.sleep(2)
         screenshot("menu.ppm")
-        key("down")
-        key("ret")  # Share a public key.
-        time.sleep(1)
-        key("1")  # BIP84
-        time.sleep(1)
-        key("ret")  # Account zero
-        time.sleep(1)
-        key("ret")  # Use existing recovery words.
+        key("2")  # Enter recovery words before any wallet operations are offered.
         time.sleep(1)
         key("ret")  # Default: 12 recovery words
         time.sleep(1)
@@ -108,6 +101,13 @@ with (args.output / "qemu.log").open("wb") as log:
         screenshot("passphrase.ppm")
         key("ret")  # Empty passphrase
         time.sleep(2)
+        screenshot("loaded-menu.ppm")
+        key("2")  # Share a public key.
+        time.sleep(1)
+        key("1")  # BIP84
+        time.sleep(1)
+        key("ret")  # Account zero
+        time.sleep(1)
         screenshot("review.ppm")
         for _ in range(8):
             key("right")  # Read every required page; Next cannot accept the last one.

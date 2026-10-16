@@ -51,8 +51,9 @@ certificate enrolled in enforcing UEFI firmware.
 - The running signer cannot access disk storage, Ethernet, Wi-Fi or Bluetooth.
 - Wallet data and transactions move through QR codes.
 - You review and approve transactions on the laptop before signing.
-- Wallet requests arrive through QR codes; recovery input and approval use the
-  laptop's keyboard. Inputs are treated as untrusted and validated.
+- Wallet requests arrive through QR codes. Recovery words are entered locally or
+  scanned from a seed backup; approval uses the laptop's keyboard. Inputs are
+  treated as untrusted and validated.
 - The scanner runs separately from the keys and approval controls. Linux restricts
   its file and process access, and the running programs cannot overwrite the
   installed application files. See [scanner isolation](docs/ISOLATION.md).
@@ -62,6 +63,8 @@ certificate enrolled in enforcing UEFI firmware.
 ## Features
 
 - English BIP39 recovery words with an optional printable ASCII passphrase.
+- [SeedQR and CompactSeedQR backups](docs/SEED_QR.md) for 12/24 words, with explicit
+  import confirmation and a seed-first menu (current source; not preview 9).
 - [Generate 12 or 24 recovery words](docs/ENTROPY.md) using Bitcoin Core randomness,
   with optional camera, coin or dice input and full backup re-entry.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.

@@ -688,7 +688,7 @@ def word(p, index, count, value):
 
 def mnemonic(p, words, choice=b"\r"):
     if p.controlling:
-        p.enter(b"Use existing recovery words", b"1")
+        p.enter(b"3: Create a new wallet", b"2")
     p.enter(b"1: 12 words", choice)
     for index, value in enumerate(words, 1):
         word(p, index, len(words), value)
@@ -706,6 +706,69 @@ def export_review(p):
         if b"Enter: show the QR code" in p.all_text.rsplit(b"\x1b[2J", 1)[-1]:
             return
         p.send(b"\r")
+
+
+for mode in ("seed-standard", "seed-compact"):
+    p = Probe(mode)
+    p.wait(b"3: Create a new wallet")
+    assert b"Share a public key" not in p.all_text
+    p.send(b"1")
+    p.wait(b"Recovery words scanned")
+    address_action(p, b"Enter: continue", b"d")
+    p.wait(b"Format: " + (b"CompactSeedQR" if mode == "seed-compact" else b"Standard SeedQR"))
+    address_action(p, b"Enter: continue", b"d")
+    address_action(p, b"Enter: continue")
+    p.enter(b"Passphrase: ", b"\r")
+    output, _ = p.finish(0)
+    assert b"LOADED 73c5da0a SCANS 1" in output and b"abandon" not in p.all_text
+    assert b"Nothing is signed" not in p.all_text
+
+for mode, reason in (("seed-wrong", b"This isn't a seed QR."), ("seed-invalid", b"Invalid mnemonic checksum")):
+    p = Probe(mode)
+    p.enter(b"3: Create a new wallet", b"1")
+    p.wait(reason)
+    address_action(p, b"Enter: continue")
+    assert b"Passphrase: " not in p.all_text
+    p.enter(b"3: Create a new wallet", b"1")
+    address_action(p, b"Enter: continue", b"\x1b")
+    p.enter(b"3: Create a new wallet", b"1")
+    address_action(p, b"Enter: continue")
+    p.enter(b"Passphrase: ", b"TREZOR\r")
+    p.enter(b"Repeat passphrase: ", b"TREZOR\r")
+    output, _ = p.finish(0)
+    assert b"LOADED b4e3f5ed SCANS 3" in output and b"TREZOR" not in p.all_text
+
+for rows, columns in ((12, 40), (24, 80)):
+    p = Probe("seed-menu", rows=rows, columns=columns)
+    p.wait(b"Seed fingerprint: 73c5da0a")
+    p.wait(b"Loaded wallet: Family multisig")
+    p.wait(b"Enter/1-3: Select")
+    p.spaced(b"Seed fingerprint:")
+    assert b"1: Scan a QR code" in p.all_text and b"2: Share a public key" in p.all_text
+    assert b"Regtest" in p.all_text
+    if columns == 80:
+        assert b"Scan an address, transaction or request from your wallet app." in p.all_text
+    p.send(b"\x1b[B")
+    p.wait(b"> 2: Share a public key")
+    p.send(b"\x1b[B")
+    p.wait(b"> 3: End session")
+    assert p.rows()[5 if rows == 12 else 6].startswith(b"Seed fingerprint:"), "Scrolling hid the seed identity"
+    p.send(b"\r")
+    p.finish(0)
+    for key, expected in ((b"\r", b"KEPT SESSION"), (b"2", b"END SESSION"), (b"\x1b", None)):
+        p = Probe("seed-loaded", rows=rows, columns=columns)
+        address_action(p, b"Enter/1-2: Select", key)
+        output, _ = p.finish(2 if expected is None else 0)
+        if expected:
+            assert expected in output
+        assert b"Passphrase: " not in p.all_text and b"Recovery words scanned" not in p.all_text
+
+p = Probe("seed-nested")
+p.wait(b"Scan the multisig wallet setup instead.")
+address_action(p, b"Enter: continue")
+output, _ = p.finish(0)
+assert b"NO SESSION CHANGE" in output and b"End session and scan" not in p.all_text
+print("PASS: seed-first scan/confirmation/passphrase, failed/cancelled imports, fingerprint spacing and explicit session-end choices")
 
 
 for mode, entered, expected in (
@@ -933,6 +996,10 @@ for choice, network, coin in [(b"\r", b"Bitcoin mainnet", 0), (b"2", b"Signet", 
     p = Probe(executable=sys.argv[2], controlling=True)
     p.enter(b"5: Legacy testnet3", choice)
     p.wait(network)
+    p.wait(b"Start a session")
+    assert b"Share a public key" not in p.all_text and b"End session" not in p.all_text
+    mnemonic(p, MNEMONIC)
+    p.enter(b"Passphrase: ", b"\r")
     p.enter(b"3: End session (clear keys)", b"2")
     p.enter(b"Enter a custom path (advanced)", b"8")
     p.enter(b"Path: ", b"\x1b")
@@ -950,16 +1017,15 @@ for key in (b"\x1b", b"\x03"):
         time.sleep(0.02)
     assert p.process.poll() is None, "Cancel key ended network selection"
 p.send(b"4")
+mnemonic(p, ["abandon"] * 12)
+p.wait(b"These words do not make a valid recovery phrase.")
+assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
+for index, value in enumerate(MNEMONIC, 1):
+    word(p, index, 12, value)
+p.enter(b"Passphrase: ", b"\r")
 for attempt in range(2):
     p.wait(b"3: End session (clear keys)")
     public_key_export(p)
-    if attempt == 0:
-        mnemonic(p, ["abandon"] * 12)
-        p.wait(b"These words do not make a valid recovery phrase.")
-        assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
-        for index, value in enumerate(MNEMONIC, 1):
-            word(p, index, 12, value)
-        p.enter(b"Passphrase: ", b"\r")
     export_review(p)
     p.spaced(b"Press Enter to show the QR code.")
     assert b"Repeat passphrase: " not in p.all_text, "Empty passphrase required confirmation"
@@ -1122,8 +1188,6 @@ print("PASS: hidden recovery words, opt-in visibility, rejected replacements, ov
 # A mistyped passphrase can be retried without entering the words again.
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
 p.enter(b"5: Legacy testnet3", b"4")
-p.wait(b"3: End session (clear keys)")
-public_key_export(p)
 mnemonic(p, MNEMONIC)
 p.enter(b"Passphrase: ", b" A Case  \r")
 p.enter(b"Repeat passphrase: ", b" A Case\r")
@@ -1149,6 +1213,8 @@ p.wait(b"Repeat passphrase: ")
 p.spaced(b"Repeat passphrase:")
 confirmation_start = len(p.all_text)
 p.send(b" A Case  \r")
+p.wait(b"3: End session (clear keys)")
+public_key_export(p)
 export_review(p)
 p.send(b"q")
 p.wait(b"3: End session (clear keys)")
@@ -1181,12 +1247,12 @@ with tempfile.TemporaryDirectory() as temporary:
         pids.append(pid)
         p.send(network)
         p.wait(b"Regtest" if network == b"4" else b"Testnet4")
-        p.wait(b"3: End session (clear keys)")
-        public_key_export(p)
         mnemonic(p, words)
         p.enter(b"Passphrase: ", passphrase + b"\r")
         if passphrase:
             p.enter(b"Repeat passphrase: ", passphrase + b"\r")
+        p.wait(b"3: End session (clear keys)")
+        public_key_export(p)
         export_review(p)
         fingerprints.append(re.findall(rb"Master fingerprint: ([0-9a-f]{8})", p.all_text)[-1])
         p.send(b"q")

@@ -84,6 +84,12 @@ while the project is under development.
 The menu order is Bitcoin mainnet, Signet, Testnet4, Regtest and legacy testnet3.
 Mainnet is initially highlighted, so choose the test network explicitly.
 
+Current source then offers **Scan a seed QR**, **Enter recovery words**, or
+**Create a new wallet** before showing wallet actions. The active menu identifies
+the loaded seed by its fingerprint and shows any loaded multisig setup. See
+[seed QR backups](SEED_QR.md) for the new backup display and format controls.
+These screens are not included in the published preview 9 images.
+
 Use the arrow keys and Enter to choose an option, or press its number. Text size
 is selected automatically. The console uses a dark background and built-in
 bitmap fonts; the available screen resolution depends on the laptop's firmware.

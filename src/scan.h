@@ -1,11 +1,15 @@
 #pragma once
 #include "transport.h"
+#include <support/allocators/zeroafterfree.h>
 
 #include <array>
 #include <chrono>
 #include <sys/types.h>
 
 namespace td {
+// Camera frames and PSBT packets can exceed Core's 256 KiB secure-pool block
+// limit. Wipe their ordinary RAM allocations; small seed payloads use SecretBytes.
+using ScanBytes = std::vector<uint8_t, zero_after_free_allocator<uint8_t>>;
 inline constexpr auto SCAN_FRAME_TIMEOUT = std::chrono::seconds(10);
 enum class ScanFailure : uint32_t {
     Startup = 1, Camera, CameraAccess, Confinement, Capture, Decode, Request
@@ -13,7 +17,7 @@ enum class ScanFailure : uint32_t {
 
 struct ScanUpdate {
     unsigned width{}, height{}, progress{};
-    std::vector<uint8_t> gray;
+    ScanBytes gray;
     std::optional<QRMessage> message;
 };
 
@@ -23,7 +27,7 @@ class ScanProcess {
     pid_t child_{-1};
     int fd_{-1};
     std::array<uint32_t, 5> header_{};
-    std::vector<uint8_t> payload_;
+    ScanBytes payload_;
     size_t header_bytes_{0}, payload_bytes_{0};
     bool checked_{false}, complete_{false};
     bool preview_seen_{false};

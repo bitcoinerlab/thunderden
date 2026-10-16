@@ -27,6 +27,35 @@ The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
 separate from the automated checks below.
 
+## Seed QR sessions (unreleased)
+
+Current source starts with scanning a seed QR, entering recovery words or creating
+a new wallet. SeedQR and CompactSeedQR support 12/24 English words, explicit local
+confirmation and the existing optional-passphrase flow. The active menu shows
+the seed fingerprint below a blank line, retains the existing scan description
+and pins any loaded wallet setup while compact menus scroll.
+
+Generated-word backups show Standard SeedQR beside the words by default; F
+switches format and Q hides/shows it. Smaller screens can open a separate QR
+view without skipping word pages. A second seed scan cannot replace an active
+session: the user keeps the session or explicitly ends its process and rescans.
+The [seed QR guide](SEED_QR.md) records format ambiguity and secret-handling limits.
+
+All 20 rebuilt native suites passed without skips in 201.54 seconds (two parallel
+test slots). Coverage
+includes all nine published SeedSigner vectors, numeric/binary optical round
+trips (including NUL/CR/LF), strict seed validation, address precedence, confined
+seed IPC, full VGA previews and large request records. Framebuffer tests decode
+12/24-word backups at 640×480, 1280×800 and 2560×1600, switch/hide/restore the QR,
+check unchanged word pixels and clear the framebuffer on completion/cancellation.
+Terminal tests cover local scan confirmation, passphrases, fingerprint spacing
+and compact-menu scrolling; launcher tests retain fresh-process session clearing.
+
+Preview 9 images and their recorded physical/reproducibility results are unchanged.
+This feature has not yet been checked with a physical camera or a newly assembled
+boot image; current coverage is native automated testing, including framebuffer
+rendering/decoding at VGA and high-DPI sizes.
+
 ## Fee verification (preview 9)
 
 Current source rejects insufficiently verified fees in `ReviewedTransaction::Sign`

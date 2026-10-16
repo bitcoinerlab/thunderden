@@ -313,10 +313,10 @@ comes from the renderer; wallet-provided text is still printable ASCII only.
 Menus, inputs and reviews prepare their body rows using their own layout.
 The renderer draws those rows without rewrapping them or starting another
 interactive screen. Text validation is separate from wrapping.
-Long menu labels wrap within their numbered option on narrow screens. The main
-menu's orange loaded-wallet status uses the otherwise blank header row, so it
-remains visible even when the options scroll. An overlong status is visibly
-shortened with an ellipsis; the complete wallet definition stays in the review.
+Long menu labels wrap within their numbered option on narrow screens. The active
+menu pins its seed fingerprint and optional loaded-wallet identity above the
+choices, with a blank row separating the title and fingerprint. Identity remains
+visible when compact screens scroll the options; the network stays top-right.
 
 Legacy BIOS GRUB uses the firmware's automatic graphics mode; UEFI boots the
 self-contained EFI kernel directly. Before loading keys or dropping
@@ -336,7 +336,14 @@ key. This is a cosigner export, not a complete multisig configuration. It uses
 the deployed legacy registry tags and shares the HD-key encoder with modern
 `hdkey` exports.
 
-The main menu has three actions: scan a QR, share a public key and end the session.
+Before loading keys, the start menu offers scanning a seed QR, entering recovery
+words or creating a new wallet. Scanned words need local confirmation before the
+normal optional-passphrase flow. The active menu then has three actions: scan a
+QR, share a public key and end the session. A subsequent seed scan offers keeping
+the session (default) or ending the signer process and rescanning in a fresh
+session; no in-place replacement or persistent secret handoff is used.
+The [seed QR guide](SEED_QR.md) describes formats, private backup display and
+the untagged CompactSeedQR detection limitation.
 There is no standalone descriptor export. Sparrow can assemble both single-key
 and multisig wallets from account-key QRs, and Liana retrieves keys through its
 commands. Descriptors remain the internal wallet model and are visible in policy

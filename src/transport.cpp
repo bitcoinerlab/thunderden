@@ -2,6 +2,7 @@
 #include "cbor.h"
 
 #include <bytewords.hpp>
+#include <base58.h>
 #include <crypto/sha256.h>
 
 #include <algorithm>
@@ -21,6 +22,7 @@ uint32_t Number(std::string_view text)
 
 size_t FragmentSize(const QRMessage& message, size_t preferred)
 {
+    Require(message.secret.empty(), "A seed QR cannot be sent as a public UR reply");
     Require(!message.cbor.empty() && message.cbor.size() <= MAX_UR_MESSAGE, "UR message size limit exceeded");
     Require(message.type == "crypto-psbt" || message.type == "bytes"
         || message.type == "hdkey" || message.type == "crypto-output"
@@ -53,6 +55,22 @@ bool URReceiver::Receive(std::string frame)
 {
     Require(!result_, "Scan is already complete");
     Require(!frame.empty() && frame.size() <= MAX_QR_TEXT, "QR text size limit exceeded");
+    const bool standard_seed = (frame.size() == 48 || frame.size() == 96)
+        && std::all_of(frame.begin(), frame.end(), [](auto c) { return c >= '0' && c <= '9'; });
+    bool compact_seed = frame.size() == 16 || frame.size() == 32;
+    if (compact_seed && std::all_of(frame.begin(), frame.end(), [](unsigned char c) { return c >= 33 && c <= 126; })) {
+        // CompactSeedQR has no marker. A valid legacy address takes precedence
+        // over the otherwise ambiguous 32-byte payload, on either Bitcoin network.
+        std::vector<unsigned char> address;
+        if (DecodeBase58Check(frame, address, 21) && address.size() == 21
+            && (address[0] == 0 || address[0] == 5 || address[0] == 111 || address[0] == 196)) compact_seed = false;
+    }
+    if (standard_seed || compact_seed) {
+        Require(type_.empty(), "Seed QR conflicts with multipart scan");
+        result_ = QRMessage{standard_seed ? "seedqr" : "compact-seedqr", {}, SecretBytes(frame.begin(), frame.end())};
+        memory_cleanse(frame.data(), frame.size());
+        return true;
+    }
     auto prefix = frame.substr(0, 8);
     for (auto& c : prefix) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
     if (!prefix.starts_with("ur:")) {

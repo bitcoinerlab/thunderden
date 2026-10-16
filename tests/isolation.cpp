@@ -2,6 +2,7 @@
 #include "isolation.h"
 #include "qr.h"
 #include "scan.h"
+#include "seed_qr.h"
 
 #include <linux/capability.h>
 #include <linux/falloc.h>
@@ -41,6 +42,11 @@ td::QRMessage Message() { return {"bytes", td::CborBytes(std::vector<uint8_t>{1,
 td::QRMessage WalletMessage() { return {"crypto-output", {0xd9, 1, 0x91, 0xd9, 1, 0x97, 0xa2, 1, 2, 2, 0x80}}; }
 const std::string ADDRESS = "bitcoin:1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA?amount=0.1&label=Test";
 td::QRMessage AddressMessage() { return {"address", td::CborBytes({reinterpret_cast<const uint8_t*>(ADDRESS.data()), ADDRESS.size()})}; }
+td::QRMessage SeedMessage(bool compact)
+{
+    return {compact ? "compact-seedqr" : "seedqr", {}, td::EncodeSeedQR(td::EntropyMnemonic(td::SecretBytes(16)),
+        compact ? td::SeedQRFormat::Compact : td::SeedQRFormat::Standard)};
+}
 
 int CameraControl(void*, int, unsigned long request, void* argument)
 {
@@ -81,6 +87,9 @@ int Worker(const std::string& mode)
     if (mode == "wallet-oversize") { Header({5, 0, 0, 0, td::MAX_WALLET_SETUP + 1}); return 0; }
     if (mode == "address-oversize") { Header({6, 0, 0, 0, td::MAX_ADDRESS_QR + 10}); return 0; }
     if (mode == "address-geometry") { Header({6, 1, 0, 0, 2}); return 0; }
+    if (mode == "seed-oversize") { Header({7, 0, 0, 0, 97}); return 0; }
+    if (mode == "compact-seed-length") { Header({8, 0, 0, 0, 17}); return 0; }
+    if (mode == "seed-geometry") { Header({7, 1, 0, 0, 48}); return 0; }
     if (mode == "bad-failure-code") { Header({4, 0, 0, UINT32_MAX, 0}); return 0; }
     if (mode == "bad-failure-zero") { Header({4, 0, 0, 0, 0}); return 0; }
     if (mode == "bad-failure-geometry") { Header({4, 1, 0, 1, 0}); return 0; }
@@ -91,6 +100,12 @@ int Worker(const std::string& mode)
         return 1;
     }
     if (mode == "unexpected-exit") return 1;
+    if (mode == "large-preview" || mode == "large-request") {
+        td::ConfineScanner();
+        if (mode == "large-preview") td::SendPreview(std::vector<uint8_t>(640 * 480), 640, 480, 100);
+        td::SendScanResult(mode == "large-request" ? td::QRMessage{"bytes", td::CborBytes(std::vector<uint8_t>(600000))} : Message());
+        return 0;
+    }
     if (mode == "truncated") { Header({2, 0, 0, 0, 4}); return 0; }
     if (mode == "partial-header") { const char data = 2; return write(1, &data, 1) == 1 ? 0 : 1; }
     if (mode == "stall" || mode == "partial-timeout") { Header({2, 0, 0, 0, 4}); for (;;) pause(); }
@@ -121,7 +136,9 @@ int Worker(const std::string& mode)
     // Generate public image data before confinement, then exercise the actual
     // ZBar + UR decode and pipe-write path under the production policy.
     td::URSender sender(mode == "wallet" ? WalletMessage() : Message());
-    td::QRImage qr(mode == "address" ? ADDRESS : sender.Next());
+    const bool seed = mode == "seed" || mode == "compact-seed";
+    const auto seed_message = SeedMessage(mode == "compact-seed");
+    td::QRImage qr = seed ? td::QRImage(seed_message.secret, mode == "seed") : td::QRImage(mode == "address" ? ADDRESS : sender.Next());
     const unsigned width = (qr.width + 8) * 4;
     std::vector<uint8_t> image(width * width, 255);
     for (int y = 0; y < qr.width; ++y) for (int x = 0; x < qr.width; ++x) {
@@ -213,7 +230,7 @@ int Worker(const std::string& mode)
         return 0;
     }
     else {
-        Check(mode == "decode" || mode == "limit" || mode == "mjpeg" || mode == "wallet" || mode == "address", "Unknown probe mode");
+        Check(mode == "decode" || mode == "limit" || mode == "mjpeg" || mode == "wallet" || mode == "address" || seed, "Unknown probe mode");
         char value;
         Check(read(camera, &value, 1) == 0, "Previously opened device became unreadable");
         Check(ioctl(camera, FIONREAD, &result) == -1 && errno == ENOTTY, "Previously opened device ioctl was blocked");
@@ -260,7 +277,7 @@ void Parent(const std::string& executable)
             std::filesystem::create_symlink(executable, link);
             return link.string();
         };
-        for (const auto mode : {"decode", "limit", "bytewise", "mjpeg", "wallet", "address"}) {
+        for (const auto mode : {"decode", "limit", "bytewise", "mjpeg", "wallet", "address", "seed", "compact-seed", "large-preview", "large-request"}) {
             td::ScanProcess process(path(mode));
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             bool complete = false;
@@ -268,8 +285,12 @@ void Parent(const std::string& executable)
                 if (auto update = process.Poll()) {
                     if (update->message) {
                         const auto expected = std::string_view(mode) == "wallet" ? WalletMessage()
-                            : std::string_view(mode) == "address" ? AddressMessage() : Message();
-                        Check(update->message->type == expected.type && update->message->cbor == expected.cbor, "Result changed across process boundary");
+                            : std::string_view(mode) == "address" ? AddressMessage()
+                            : std::string_view(mode) == "seed" || std::string_view(mode) == "compact-seed" ? SeedMessage(std::string_view(mode) == "compact-seed")
+                            : std::string_view(mode) == "large-request" ? td::QRMessage{"bytes", td::CborBytes(std::vector<uint8_t>(600000))} : Message();
+                        Check(update->message->type == expected.type && update->message->cbor == expected.cbor
+                            && update->message->secret == expected.secret, "Result changed across process boundary");
+                        if (td::IsSeedQR(expected)) Check(td::DecodeSeedQR(*update->message) == td::DecodeSeedQR(expected), "Seed changed across process boundary");
                         complete = true;
                     } else {
                         Check(update->progress == 100 && update->gray.size() == update->width * update->height, "Invalid preview accepted");
@@ -278,7 +299,7 @@ void Parent(const std::string& executable)
             }
             Check(complete, "Worker failed to return a result");
         }
-        for (const auto mode : {"oversize", "wallet-oversize", "address-oversize", "address-geometry", "geometry", "progress", "command", "truncated", "partial-header",
+        for (const auto mode : {"oversize", "wallet-oversize", "address-oversize", "address-geometry", "seed-oversize", "compact-seed-length", "seed-geometry", "geometry", "progress", "command", "truncated", "partial-header",
                 "bad-failure-code", "bad-failure-zero", "bad-failure-geometry", "bad-failure-payload"}) {
             bool rejected = false;
             td::ScanProcess process(path(mode));
@@ -336,7 +357,7 @@ void Parent(const std::string& executable)
                     }
                 }
                 if (auto update = streaming.Poll()) {
-                    Check(!update->message && update->gray == std::vector<uint8_t>(4, 0), "Invalid streaming preview");
+                    Check(!update->message && update->gray == td::ScanBytes(4, 0), "Invalid streaming preview");
                     ++previews;
                 }
             }

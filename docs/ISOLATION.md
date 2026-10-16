@@ -36,8 +36,10 @@ local approval.
 A QR scan uses two Linux processes: running programs with separate memory.
 
 - **Scanner (`thunderden-scanner`):** opens the camera, converts its images, reads
-  QR codes and assembles animated QR messages. It receives no recovery words or
-  private keys.
+  QR codes and assembles animated QR messages. It receives no existing signer
+  memory or private keys. When scanning a seed backup, it necessarily sees that
+  backup's recovery secret through the camera; isolation cannot hide scanned data
+  from the decoder itself.
 - **Signer (`thunderden-signer`):** holds the keys, validates wallet definitions
   and transactions, renders the review, accepts keyboard approval and signs.
 
@@ -165,6 +167,11 @@ validation work; current coverage is listed in [Implementation status](STATUS.md
   separately checks URI syntax, the Bitcoin destination and public script matches.
   Address searching runs after the camera worker has exited and can be stopped
   between public derivations. It does not call signing operations.
+- Seed records use kind 7 (48/96 numeric bytes) or 8 (16/32 binary bytes), with
+  zero geometry/progress and no CBOR wrapping. They enter wiping buffers and are
+  independently decoded by the signer after worker exit. Loading requires local
+  confirmation and the normal passphrase flow; scanning another seed never
+  replaces the active session automatically. See [seed QR backups](SEED_QR.md).
 - Per-scanner resource limits are 256 MiB of address space, 64 file descriptors
   and no additional child processes or threads. A hard zero `RLIMIT_FSIZE` prevents
   regular-file growth, including anonymous RAM files (`memfd`), while pipe output

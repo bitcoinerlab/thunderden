@@ -1,15 +1,15 @@
 #pragma once
 
-#include <cstdint>
+#include "keys.h"
 #include <span>
 #include <string>
-#include <vector>
 
 namespace td {
 struct QRImage {
     int width;
-    std::vector<uint8_t> modules;
+    SecretBytes modules;
     explicit QRImage(const std::string& text, int version = 0);
+    QRImage(std::span<const uint8_t> data, bool numeric);
 };
 
 }

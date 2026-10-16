@@ -45,9 +45,11 @@ public:
     int Key(int timeout_ms = -1);
     void Flush();
     void SetNetwork(std::string_view network) { network_ = network; }
+    std::string_view Network() const { return network_; }
     void Screen(std::string_view title, const ReviewLines& lines, std::string_view footer);
     int Menu(std::string_view title, const ReviewLines& choices, std::string_view introduction = {},
-        bool cancellable = true, std::string_view status = {}, bool keep_introduction = false, const ReviewLines& details = {});
+        bool cancellable = true, std::string_view status = {}, bool keep_introduction = false, const ReviewLines& details = {},
+        const ReviewLines& identity = {});
     SecretBytes Input(std::string_view title, const ReviewLines& introduction, std::string_view prompt,
         size_t limit, SecretInput* secret = nullptr, SecretBytes initial = {}, std::string error = {}, bool warning = false,
         std::string_view help = {});
