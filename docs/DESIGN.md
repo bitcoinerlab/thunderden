@@ -318,7 +318,8 @@ menu's orange loaded-wallet status uses the otherwise blank header row, so it
 remains visible even when the options scroll. An overlong status is visibly
 shortened with an ellipsis; the complete wallet definition stays in the review.
 
-GRUB uses the firmware's automatic graphics mode. Before loading keys or dropping
+Legacy BIOS GRUB uses the firmware's automatic graphics mode; UEFI boots the
+self-contained EFI kernel directly. Before loading keys or dropping
 privileges, the signer selects a built-in Terminus font when the screen is large
 enough, with the compact VGA font as a fallback. High-DPI screens use an exact
 2x enlargement of the larger bitmap. Font and palette setup are optional visual
@@ -399,6 +400,30 @@ Linux and hardware remain trust dependencies. The isolation guide explains the
 threat model, enforced boundary and practical limits.
 
 ## Build and independent review
+
+### Authenticated UEFI boot
+
+The EFI executable is the Linux `bzImage`, including the complete built-in
+initramfs. A release signature therefore authenticates the kernel, signer,
+libraries, workers and startup configuration together. UEFI does not execute GRUB
+or read its configuration. `CONFIG_CMDLINE_OVERRIDE` fixes the kernel command
+line; its built-in `noinitrd` is parsed by the EFI stub before either external
+initrd loader. Runtime networking/storage/module restrictions remain unchanged.
+Legacy BIOS retains its separate, unauthenticated GRUB path.
+
+Unsigned images are deterministic and contain identical EFI/BIOS kernel payloads.
+Public-only post-processing verifies a detached EFI signature against an explicit
+certificate fingerprint and deterministically assembles the signed image. It can
+reconstruct and compare the entire signed disk byte-for-byte, without a private
+key or arbitrary patch instructions. The signature does not authenticate unused
+disk space or partition/FAT metadata to the firmware.
+
+Private-key creation and signing are human-operated, outside build containers.
+Firmware ownership remains with the user; trusting a developer certificate in
+`db` is distinct from replacing `PK`/`KEK`. No rollback, compromised-firmware or
+legacy-BIOS authentication guarantee is made. See [operation and limits](SECURE_BOOT.md).
+
+### Code boundaries
 
 The main code boundaries are deliberately small:
 

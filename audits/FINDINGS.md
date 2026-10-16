@@ -48,7 +48,13 @@ The interactive refusal/link checks passed at 40 and 80 columns.
 
 Sparrow guidance now requires 2.5.5+ and Krux; Keeper's current multi-input SegWit
 limitation is documented. See [fee policy](../docs/FEES.md). This fix is not in
-preview 8 or the flashed USB image; physical validation of the new flow is pending.
+preview 8, but is included in the current candidate.
+
+**Physical follow-up (2026-10-16):** the maintainer confirmed physical validation
+of the fee-policy QR signing workflow during the current candidate test session.
+This is a user report, not independent observation; the wallet application/version,
+individual transaction cases and broadcast outcome were not separately recorded.
+It supplements, rather than replaces, the malicious-fee regression tests above.
 
 ### TD-002
 
@@ -88,12 +94,65 @@ Fixed in [`b1bd501`][commit-b1bd501].
 
 Unsigned boot and laptop/firmware trust can defeat signer protections.
 
-- **Status:** Unreviewed
+- **Status:** Open
 - **Report priority:** High impact, conditional
 - **Source:** [2026-10-12 / L-01][report-l01]
 
-Report describes an architectural limitation; no physical exploit was attempted.
-Assess the supported trust boundary and proposed improvements.
+**Decision (2026-10-15):** implement optional owner-configured authenticated UEFI
+boot, while retaining firmware/hardware trust and unauthenticated legacy BIOS as
+explicit architectural limits. The feature branch boots a signed self-contained
+kernel/initramfs directly, with fixed boot arguments and external EFI initramfs
+loading disabled. Public-only packaging reconstructs signed images from unsigned
+images and detached signatures; production signing stays human-operated.
+
+**Initial verification (2026-10-15):** all 18 native suites passed without skips
+(193.21 seconds).
+Content/repeat-assembly checks and full public-account QR boot workflows passed
+for unsigned BIOS/UEFI and signed BIOS/authenticated UEFI. Disposable RSA-3072
+QEMU/OVMF tests reject unsigned, wrong-key and modified runtime payloads, and
+ignore hostile boot arguments, unsigned GRUB configuration and external EFI
+initramfs. The pre-fix kernel accepts the injected initramfs as a positive control.
+Public-only packaging tests reconstruct the signed disk byte-for-byte and reject
+even a valid trusted-key signature for different runtime bytes. See
+[`secure_boot.py`](../tests/secure_boot.py) and
+[`secure_boot_vm.py`](../tests/secure_boot_vm.py).
+Two fresh toolchain/kernel builds in separate empty output volumes also matched
+the tested cached image byte-for-byte, sharing the pinned builder and verified
+download caches. These are automated checks, not a fresh independent audit.
+
+**Follow-up (2026-10-16):** candidate `e85d560` passed all 19 native suites without
+skips (255.46 seconds), BIOS and authenticated-UEFI public-account QR/session
+workflows, firmware rejection/injection regressions and exact signed-image
+reconstruction. The actual signed candidate also booted under the public trust
+policy installed through authenticated variable updates in OVMF.
+
+A fresh empty-output build of the cross-toolchain, kernel and application also
+matched all seven compared cached-build artifacts, including the complete image
+and installed-file inventory. The retained public signature reconstructed the
+same signed image from that fresh unsigned build. The pinned Docker builder and
+verified source/download caches were shared; this was not an independently
+rebuilt Docker environment.
+
+The maintainer enrolled the public trust configuration on an HP ProBook x360
+11 G5 EE, BIOS S96 01.12.00, and reported signed UEFI boot acceptance followed by
+matching unsigned-image refusal under the instructed unchanged Secure Boot-enabled,
+Legacy-disabled settings. This acceptance/refusal pair is the reported enforcement
+check, not merely a successful key import or firmware toggle. These physical results
+are maintainer reports, not independently observed measurements. Candidate hashes
+and scope are recorded in [status](../docs/STATUS.md#current-release-candidate-2026-10-16).
+
+The image-signing key was created and used manually by the maintainer; build and
+verification tools accessed only its public certificate and signatures. Target HP
+firmware trust was changed by the maintainer; build-host firmware was not changed.
+Laptop-specific ownership/enrollment material is not release content. The maintainer
+approved the tested image-signing certificate for the paired unsigned/signed
+`v0.0.1-preview.9` release; its public certificate and signature are release assets.
+
+See [operation and limits](../docs/SECURE_BOOT.md). TD-005 remains **Open** with a
+conditional mitigation, not a resolution of compromised firmware/hardware, legacy
+BIOS or rollback risk. A fresh independent review is explicitly deferred under the
+[maintainer's review plan](README.md#follow-up-status-2026-10-16). The original report
+is unchanged.
 
 ### TD-006
 
@@ -116,7 +175,8 @@ Native camera capture is incompatible with streaming-only UVC devices.
 - **Source:** [2026-10-14 / BOUNDARY-01][report-boundary01]
 
 Explicit native streaming replaces raw `read()`. Real-library simulated-device
-regressions pass; physical-camera testing remains pending.
+regressions pass; the maintainer also confirmed physical camera behaviour during
+the current candidate session on 2026-10-16. Broader device coverage is not implied.
 [Decision and evidence](#td-007--native-camera-streaming).
 
 ### TD-008
@@ -140,7 +200,7 @@ Camera address-space limit does not bound anonymous-file memory.
 - **Source:** [2026-10-14 / BOUNDARY-03][report-boundary03]
 
 QR and camera workers now deny anonymous-file growth with a hard zero file-size
-limit. Native regressions pass; the correction is not yet released.
+limit. Native regressions pass; the correction is included in preview 9.
 [Decision and evidence](#td-009--camera-resource-accounting).
 
 ### TD-010
@@ -297,7 +357,13 @@ streaming-only device, including exact sample bytes, retries, bad buffer metadat
 capture errors and partial-setup cleanup (18 scenarios). It asserts that raw
 `read()` is never used. Both `entropy-camera` and `camera` passed (0.11 seconds).
 **Fix:** this commit, `fix: stream native camera frames explicitly`. Physical
-camera behavior and image verification remain pending.
+camera behavior and image verification were pending at that checkpoint.
+
+**Physical follow-up (2026-10-16):** the maintainer confirmed physical camera
+behaviour during the current HP release-candidate session. Camera formats,
+geometry and individual reconnect/slow-device scenarios were not separately
+enumerated. This is functional, maintainer-reported validation, not a quantitative
+entropy measurement, a cross-device compatibility matrix or an independent audit.
 
 ## TD-008 — Assessment JSON boundary
 

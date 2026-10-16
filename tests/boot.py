@@ -6,6 +6,7 @@ are retained for inspection. All recovery words used here are public fixtures.
 import argparse
 import json
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import time
@@ -13,7 +14,8 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("image", type=Path)
 parser.add_argument("output", type=Path)
-parser.add_argument("--firmware", type=Path, help="Combined OVMF firmware image; omit for SeaBIOS")
+parser.add_argument("--firmware", type=Path, help="Combined OVMF image, or OVMF_CODE with --variables; omit for SeaBIOS")
+parser.add_argument("--variables", type=Path, help="OVMF variable-store template; copied, never enrolled into host firmware")
 parser.add_argument("--display-size", help="QEMU display size for font/layout checks, such as 640x480")
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
@@ -23,7 +25,15 @@ command = ["qemu-system-x86_64", "-m", "1024", "-smp", "2", "-cpu", "qemu64",
            "-drive", f"file={args.image.resolve()},format=raw,if=ide,snapshot=on",
            "-device", "virtio-rng-pci", "-display", "none", "-nic", "none",
            "-qmp", f"unix:{qmp_path},server=on,wait=off", "-no-reboot"]
-if args.firmware:
+if args.variables:
+    if not args.firmware:
+        parser.error("--variables requires --firmware")
+    variables = args.output / "OVMF_VARS.fd"
+    shutil.copyfile(args.variables, variables)
+    command += ["-machine", "q35,smm=on", "-global", "driver=cfi.pflash01,property=secure,value=on",
+                "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={args.firmware.resolve()}",
+                "-drive", f"if=pflash,format=raw,unit=1,file={variables.resolve()}"]
+elif args.firmware:
     command += ["-bios", str(args.firmware)]
 if args.display_size:
     width, height = map(int, args.display_size.split("x"))

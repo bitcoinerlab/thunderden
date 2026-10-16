@@ -2,10 +2,15 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img.sha256)
-from [v0.0.1-preview.8](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img.sha256)
+from [v0.0.1-preview.9](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9).
 The release also includes `installed-files.json` for reviewing the built system.
+
+For optional Secure Boot, choose `thunderden-signed.img` and its matching checksum
+from the same release. Read the [enrollment and verification guide](SECURE_BOOT.md)
+before enabling Secure Boot; the signed image needs its public certificate trusted
+by your firmware. The unsigned and signed images contain the same runtime.
 
 The same 64 MiB image can be written from macOS, Linux or Windows. It boots
 x86-64 laptops with BIOS or UEFI, not Apple Silicon Macs. After downloading,
@@ -127,6 +132,12 @@ Source versions and checksums are pinned in `.env`.
 The image build checks source integrity, kernel settings, installed files and
 repeatable disk-image assembly. It also creates `installed-files.json`, a list of
 the files and hashes inside the boot system, copied alongside the image above.
+
+Current source builds an unsigned image with a self-contained EFI kernel and a
+separate legacy BIOS path. Optional signing happens **after the build**, without
+giving the build a private key. See [signed images and Secure Boot](SECURE_BOOT.md)
+for manual developer/user signing, paired release assets and exact reconstruction
+of the signed image from the unsigned one and public signature material.
 
 ## Write the USB from Linux
 
@@ -265,5 +276,8 @@ python3 tests/boot_isolation.py /tmp/bzImage /tmp/isolation-tests
 ```
 
 The test program is loaded in a temporary overlay, separate from the USB image.
+This developer check uses QEMU's legacy `-kernel`/`-initrd` path, not authenticated
+UEFI boot; the EFI stub deliberately refuses external initramfs loading. Use the
+[Secure Boot tests](SECURE_BOOT.md#developer-checks) to check that boundary.
 
 </details>

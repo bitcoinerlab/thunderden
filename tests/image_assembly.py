@@ -15,8 +15,8 @@ os.environ["PATH"] = str(images.parent / "host/sbin") + ":" + str(images.parent 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     copied = root / "images"
-    (copied / "efi-part/EFI/BOOT").mkdir(parents=True)
-    for name in ("boot.img", "grub.img", "bzImage", "efi-part/EFI/BOOT/bootx64.efi"):
+    copied.mkdir()
+    for name in ("boot.img", "grub.img", "bzImage"):
         shutil.copyfile(images / name, copied / name)
     local_config = root / "grub.cfg"
     shutil.copyfile(config, local_config)
