@@ -24,6 +24,7 @@ int main()
             && input_seals >= 0 && (input_seals & seals) == seals && fcntl(4, F_GET_SEALS) >= 0,
             "Invalid assessment descriptors");
         omp_set_dynamic(0); omp_set_num_threads(1);
+        td::Require(fcntl(5, F_SETFL, O_NONBLOCK) == 0, "Cannot configure camera check progress");
         OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, nullptr);
         unsigned char warmup[32]; SHA256(reinterpret_cast<const unsigned char*>(""), 0, warmup);
         td::ConfineAssessment(); // No filesystem exceptions: anonymous memfds retain their descriptor rights.

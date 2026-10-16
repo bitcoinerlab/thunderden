@@ -1,6 +1,7 @@
 #include "camera_entropy.h"
 #include "entropy_process.h"
 #include "isolation.h"
+#include "nist_progress.h"
 #include <crypto/common.h>
 #include <linux/videodev2.h>
 #include <sys/resource.h>
@@ -57,7 +58,23 @@ int main(int argc, char** argv)
             const unsigned char ok = 1; td::Require(write(1, &ok, 1) == 1, "No confinement reply");
             return 0;
         }
-        if (mode.find("thunderden-assess") != mode.npos) { while (true) pause(); }
+        if (mode.find("thunderden-assess") != mode.npos) {
+            if (mode.find("bad-progress") != mode.npos) {
+                const unsigned char bad[20]{255};
+                td::Require(write(5, bad, sizeof(bad)) == sizeof(bad), "Bad progress fixture write");
+            } else {
+                td::NistInput(256, td::ENTROPY_TEST_SAMPLES, 1000000);
+                for (unsigned test = 1; test <= 8; ++test) for (unsigned branch : {2, 1}) {
+                    if (branch == 1 && test >= 2 && test <= 4) continue;
+                    td::NistStart(test, branch, branch == 2 ? 1000000 : td::ENTROPY_TEST_SAMPLES);
+                    td::NistResult(test, test == 1 ? 0 : 0.5); // A low partial result is not a capture fault.
+                }
+                td::NistStart(9, 1, td::ENTROPY_TEST_SAMPLES);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+                td::NistUpdate(655360);
+            }
+            while (true) pause();
+        }
         td::ConfineScanner();
         const auto profile = td::CameraProfile(128, 128, V4L2_PIX_FMT_GREY, 64);
         if (mode.find("bad-header") != mode.npos) { unsigned char bad[8]{}; WriteBE32(bad, 3); WriteBE32(bad + 4, UINT32_MAX); td::Require(write(1, bad, 8) == 8, "Test write"); return 0; }

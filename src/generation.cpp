@@ -86,16 +86,18 @@ SecretBytes NewMnemonic(Terminal& terminal)
         "You can add another source of randomness by tossing a coin or rolling a six-sided die and entering each result. This step is optional.",
         true, {}, true)];
     SecretBytes camera, manual;
+    bool camera_unchecked = false;
     while (use_camera) {
-        try { camera = terminal.CameraEntropy(); break; }
+        try { camera = terminal.CameraEntropy(camera_unchecked); break; }
         catch (const std::exception& error) {
-            if (terminal.Menu("Camera not included", {"Continue without camera", "Try camera again"},
-                std::string(error.what()) + ". Camera data will not be included. Try again or continue without it.", true, {}, true) == 0) break;
+            if (terminal.Menu("Camera data cannot be used", {"Continue without camera", "Try camera again"},
+                std::string(error.what()) + ". No camera data will be added. Fresh randomness from Bitcoin Core will still be used.", true, {}, true) == 0) break;
         }
     }
     if (source != ManualSource::None) manual = ManualContribution(source, terminal.ManualEntropy(source, words));
     if (!terminal.Confirm("Ready to generate", {"Recovery words: " + std::to_string(words), "Random-number generator: Bitcoin Core",
-        !camera.empty() ? "Camera readings: included" : use_camera ? "Camera readings: not included" : "Camera readings: not selected",
+        !camera.empty() ? camera_unchecked ? "Camera readings: included (unchecked)" : "Camera readings: included"
+            : use_camera ? "Camera readings: not included" : "Camera readings: not selected",
         source == ManualSource::None ? "Coins or dice: not selected"
             : std::string(source == ManualSource::Coins ? "Coin tosses: " : "Dice rolls: ") + std::to_string(ManualTarget(source, words)), "",
         "The next screen will show your recovery words.", "",

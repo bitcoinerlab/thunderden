@@ -79,9 +79,12 @@ Source archive hashes are in `.env`; the external Buildroot recipe also checks
 the divsufsort archive. `CMakeLists.txt` builds only the official non-IID entry
 point for the image, with `-O2 -ffloat-store` and the target compiler's baseline.
 It renames `main` to enter through the confinement wrapper. It does not use
-`-march=native` or host header paths. The sole upstream source patch,
-`build/nist-json-warning.patch`, retains warning text in JSON when errorLevel is
-zero; estimator mathematics are unchanged. The complete NIST notice is installed
+`-march=native` or host header paths. `build/nist-json-warning.patch` retains warning
+text in JSON when errorLevel is zero. A build-local copy additionally receives
+`build/nist-progress.patch`: estimator entry/result hooks and throttled sequential
+loop counters, modified by Thunder Den on 2026-10-16 from NIST's pinned source.
+Estimator mathematics, ordering and selection are unchanged. The uninstrumented
+official entry point remains the development comparator. The complete NIST notice is installed
 as `usr/share/licenses/NIST-EntropyAssessment.txt`.
 
 The official general Makefile also lists bzip2, but only the IID permutation code

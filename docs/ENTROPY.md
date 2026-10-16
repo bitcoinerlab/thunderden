@@ -142,7 +142,9 @@ driver. Never select a profile or retry a block to maximize the
 score. Whole batches are serialized; the byte cap may stop at a complete temporal
 history. No differences, filters, LSB extraction or bias correction are applied.
 Device exposure/gain remain at driver defaults; no characterized control profile
-is claimed. Failed capture or assessment is omitted unless a fresh attempt succeeds.
+is claimed. Failed capture is omitted unless a fresh attempt succeeds. An interrupted
+assessment can be included only as an explicitly unchecked extra after complete,
+fault-free capture, as described below.
 Eight repeated-frame comparisons or eight frames with at least 99% dark/bright
 samples trigger whole-contribution rejection. These are fault heuristics, not
 calibrated NIST RCT/APT health tests. Even data with a high estimate can be entirely
@@ -152,10 +154,31 @@ predictable. The camera never replaces mandatory system randomness.
 
 The interface introduces NIST as the US National Institute of Standards and
 Technology and explains that the randomness checks help estimate how unpredictable
-the checked data is. Collection and checks have separate progress statuses because
-they can overlap. Successful results show a short confirmation; warnings are
-visibly distinguished and failures offer retry
-or continuation without camera data.
+the checked data is. Collection and checks can overlap. The live screen shows
+the current check, a numbered sequence of nine check groups, current-pass counts
+and percentages where available, and elapsed time. Tuple and LRS share one group
+because the pinned implementation calculates both together. Bitstring and original
+values are separate passes, so their counters can restart within a check. These
+are not overall time percentages. Compression and suffix-array work show activity
+instead of a fabricated sample percentage.
+
+During capture, **Esc: stop camera** discards the attempt. After complete,
+fault-free capture and a successful camera-worker exit, **Esc: stop checks** stops
+and reaps every worker before offering a choice. Reaching the unchanged total
+deadline after valid capture uses the same incomplete-assessment flow. The chooser
+defaults to **Continue without camera data**. **Use unchecked camera data** is an
+explicit opt-in; the final generation confirmation also labels that contribution
+unchecked. Fresh Core randomness remains mandatory and is requested only afterward.
+
+The stopped-checks screen states that there is no final randomness estimate.
+Details show only finished individual results, with the warning that unfinished
+checks could lower the result. They are not an early-acceptance score, an entropy
+credit or a replacement for the missing estimates. Low nonzero or zero individual
+estimates alone are not an invented rejection threshold. Known constant input,
+frozen/dark/bright capture faults, malformed progress and invalid capture streams
+cannot be accepted through the unchecked path. Failures offer retry or continuation
+without camera data. Successful full results retain their short confirmation;
+warnings remain visibly distinguished.
 
 The summary shows estimated randomness in checked data, in bits per camera value,
 and the number of camera values included. A visible prompt offers Details with
@@ -164,7 +187,8 @@ of the collected camera values the randomness checks examined in one sentence.
 The estimate describes that tested data; the interface does not extrapolate a
 total number of bits added to the wallet.
 
-Use only the official NIST `ea_non_iid` with `-i -t` and eight bits per symbol.
+Use the pinned official NIST `ea_non_iid` estimators with `-i -t` and eight bits
+per symbol, with progress-only instrumentation in a build-local source copy.
 The original-symbol estimators still examine all 1,048,576 selected component
 values. NIST's `-t` option limits the separate bitstring assessment to the first
 1,000,000 bits, rather than all 8,388,608 bits of that input. This reduces that
@@ -177,6 +201,14 @@ It runs as a fresh executable, separate from the signer and camera, using sealed
 sample input and a bounded anonymous JSON output. No sample hash or full JSON is
 displayed or logged. The signer uses the existing bounded JSON parser to read the
 global `Overall.hAssessed` JSON result; it does not link NIST or jsoncpp.
+Descriptor 5 carries fixed 20-byte progress records on a nonblocking pipe, separate
+from suppressed estimator stdout/stderr and the final report. The signer bounds
+record counts, validates identities, ranges and finite estimates, and buffers
+fragmented records. Sequential-loop updates are rate-limited to one per second;
+full pipes omit updates rather than block computation. Stage starts and individual
+results are also reported. No raw readings, hashes, filenames or estimator text
+cross this progress channel. Missing updates can undercount finished work; only
+the validated full report can supply a final estimate.
 The parser requires the pinned eleven-case sequence and validates the applicable
 literal/bitstring result fields and numeric ranges. Upstream can omit an
 unavailable compression, tuple or predictor estimate; that produces a warning,

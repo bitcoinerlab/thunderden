@@ -50,7 +50,7 @@ pkg_check_modules(QR REQUIRED IMPORTED_TARGET libqrencode zbar libv4l2)
 
 add_library(thunderden STATIC src/keys.cpp src/policy.cpp src/transaction.cpp src/transport.cpp src/qr.cpp
   src/review.cpp src/terminal.cpp src/application.cpp src/address_check.cpp src/entropy.cpp src/generation.cpp
-  src/camera_entropy.cpp src/entropy_process.cpp src/entropy_capture.cpp
+  src/camera_entropy.cpp src/entropy_process.cpp src/entropy_capture.cpp src/assessment_progress.cpp
   src/wallet_qr.cpp src/qr_commands.cpp src/hardware.cpp src/camera.cpp src/qr_scan.cpp src/scan.cpp src/isolation.cpp)
 target_include_directories(thunderden PUBLIC src "${CORE_SOURCE_DIR}/src"
   "${CORE_SOURCE_DIR}/src/secp256k1/include" "${CMAKE_BINARY_DIR}/core/src"
@@ -75,7 +75,13 @@ install(TARGETS thunderden-camera-entropy RUNTIME DESTINATION bin)
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
 pkg_check_modules(NIST_DEPS REQUIRED IMPORTED_TARGET jsoncpp libdivsufsort libdivsufsort64)
-add_library(nist_non_iid OBJECT "${NIST_SOURCE_DIR}/cpp/non_iid_main.cpp")
+# Instrument a build-local copy, keeping the official comparator and source intact.
+file(COPY "${NIST_SOURCE_DIR}/cpp/" DESTINATION "${CMAKE_BINARY_DIR}/nist-progress")
+execute_process(COMMAND patch --batch --fuzz=0 -p1 -d "${CMAKE_BINARY_DIR}/nist-progress"
+  -i "${CMAKE_SOURCE_DIR}/build/nist-progress.patch" COMMAND_ERROR_IS_FATAL ANY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS build/nist-progress.patch)
+add_library(nist_non_iid OBJECT "${CMAKE_BINARY_DIR}/nist-progress/non_iid_main.cpp")
+target_include_directories(nist_non_iid PRIVATE src)
 set_target_properties(nist_non_iid PROPERTIES CXX_STANDARD 11)
 target_compile_definitions(nist_non_iid PRIVATE main=NistMain)
 target_compile_options(nist_non_iid PRIVATE -O2 -ffloat-store)
@@ -96,6 +102,10 @@ add_executable(entropy-tests tests/entropy.cpp)
 target_link_libraries(entropy-tests PRIVATE thunderden)
 target_compile_options(entropy-tests PRIVATE -Wall -Wextra -Werror)
 add_test(NAME entropy COMMAND entropy-tests)
+add_executable(assessment-progress-tests tests/assessment_progress.cpp)
+target_link_libraries(assessment-progress-tests PRIVATE thunderden)
+add_test(NAME assessment-progress COMMAND assessment-progress-tests)
+set_tests_properties(assessment-progress PROPERTIES TIMEOUT 5)
 add_executable(mnemonic-cleanup-tests tests/mnemonic_cleanup.cpp)
 target_link_libraries(mnemonic-cleanup-tests PRIVATE thunderden)
 target_compile_options(mnemonic-cleanup-tests PRIVATE -Wall -Wextra -Werror)
@@ -182,7 +192,7 @@ target_link_options(terminal-probe PRIVATE -Wl,--wrap=_Z18GetStrongRandBytesSt4s
 target_link_libraries(terminal-probe PRIVATE thunderden)
 target_compile_options(terminal-probe PRIVATE -Wall -Wextra -Werror)
 add_dependencies(terminal-probe entropy-worker-tests thunderden-assess)
-foreach(scenario valid constant frozen bad-header stalled-capture cancel-assessment timeout-assessment)
+foreach(scenario valid constant frozen bad-header stalled-capture cancel-assessment timeout-assessment bad-progress-assessment)
   set(fixture "${CMAKE_BINARY_DIR}/entropy-fixtures/${scenario}")
   set(assessor "$<TARGET_FILE:thunderden-assess>")
   if(scenario MATCHES "assessment")

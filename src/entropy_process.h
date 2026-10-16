@@ -25,9 +25,11 @@ class EntropyWorker {
 public:
     EntropyWorker(const std::string& executable, int input = -1, int output = -1);
     ~EntropyWorker();
+    void Stop();
     EntropyWorker(const EntropyWorker&) = delete;
     EntropyWorker& operator=(const EntropyWorker&) = delete;
     size_t Read(std::span<unsigned char> bytes);
+    size_t ReadAvailable(std::span<unsigned char> bytes);
     std::optional<int> PollExit();
 };
 std::string EntropyExecutable(bool assessment);

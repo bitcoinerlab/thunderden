@@ -54,7 +54,7 @@ public:
     SecretBytes Mnemonic(unsigned count = 0);
     SecretBytes ManualEntropy(ManualSource source, unsigned words);
     void BackupWords(std::span<const unsigned char> mnemonic);
-    SecretBytes CameraEntropy();
+    SecretBytes CameraEntropy(bool& unchecked);
     std::optional<Position> SearchAddress(const Policy& policy, const CScript& script,
         std::string_view wallet, uint32_t& next, uint32_t end);
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {},
