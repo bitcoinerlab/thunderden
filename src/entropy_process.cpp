@@ -54,10 +54,10 @@ EntropyWorker::EntropyWorker(const std::string& executable, int input, int outpu
 {
     int pipefd[2]{-1, -1};
     const bool assessment = input >= 0;
-    Require(assessment || pipe2(pipefd, O_CLOEXEC | O_NONBLOCK) == 0, "Cannot create entropy pipe");
-    // Avoid descriptor collisions when remapping the two inherited memfds.
-    const int in = assessment ? fcntl(input, F_DUPFD_CLOEXEC, 5) : -1;
-    const int out = assessment ? fcntl(output, F_DUPFD_CLOEXEC, 5) : -1;
+    Require(pipe2(pipefd, O_CLOEXEC | O_NONBLOCK) == 0, "Cannot create entropy pipe");
+    // Reserve 3/4 for memfds and 5 for progress; remapping must not overwrite a source.
+    const int in = assessment ? fcntl(input, F_DUPFD_CLOEXEC, 6) : -1;
+    const int out = assessment ? fcntl(output, F_DUPFD_CLOEXEC, 6) : -1;
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attributes;
     const int a = posix_spawn_file_actions_init(&actions), b = posix_spawnattr_init(&attributes);
@@ -68,10 +68,11 @@ EntropyWorker::EntropyWorker(const std::string& executable, int input, int outpu
         ok = ok && posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0) == 0
             && posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", O_WRONLY, 0) == 0
             && (assessment ? posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", O_WRONLY, 0) == 0
+                && posix_spawn_file_actions_adddup2(&actions, pipefd[1], 5) == 0
                 && posix_spawn_file_actions_adddup2(&actions, in, 3) == 0
                 && posix_spawn_file_actions_adddup2(&actions, out, 4) == 0
                 : posix_spawn_file_actions_adddup2(&actions, pipefd[1], 1) == 0)
-            && posix_spawn_file_actions_addclosefrom_np(&actions, assessment ? 5 : 3) == 0
+            && posix_spawn_file_actions_addclosefrom_np(&actions, assessment ? 6 : 3) == 0
             && posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSID) == 0;
     }
     const char* env[]{"LANG=C", "LC_ALL=C", "TZ=UTC0", "OMP_NUM_THREADS=1", "OMP_THREAD_LIMIT=1", "OMP_DYNAMIC=FALSE", nullptr};
@@ -88,10 +89,15 @@ EntropyWorker::EntropyWorker(const std::string& executable, int input, int outpu
 }
 EntropyWorker::~EntropyWorker()
 {
+    Stop();
     if (fd_ >= 0) close(fd_);
+}
+void EntropyWorker::Stop()
+{
     if (pid_ > 0) {
         kill(pid_, SIGKILL);
         while (waitpid(pid_, nullptr, 0) < 0 && errno == EINTR) {}
+        pid_ = -1; exit_ = 256;
     }
 }
 std::optional<int> EntropyWorker::PollExit()
@@ -114,6 +120,14 @@ size_t EntropyWorker::Read(std::span<unsigned char> bytes)
     const auto n = read(fd_, bytes.data(), bytes.size());
     if (n < 0 && (errno == EAGAIN || errno == EINTR)) return 0;
     Require(n > 0, "Camera capture stopped before completion");
+    return n;
+}
+size_t EntropyWorker::ReadAvailable(std::span<unsigned char> bytes)
+{
+    ssize_t n;
+    do { n = read(fd_, bytes.data(), bytes.size()); } while (n < 0 && errno == EINTR);
+    if (n < 0 && errno == EAGAIN) return 0;
+    Require(n >= 0, "Camera check progress pipe failed");
     return n;
 }
 

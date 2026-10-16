@@ -34,6 +34,7 @@ RUN sh /work/build/native-deps.sh
 
 FROM dependencies AS development
 COPY CMakeLists.txt /work/CMakeLists.txt
+COPY build/nist-progress.patch /work/build/nist-progress.patch
 COPY src /work/src
 COPY tests /work/tests
 RUN python3 -B /work/tests/core_keys.py --source-hash > /opt/bitcoin-source.sha256 \

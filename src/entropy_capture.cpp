@@ -1,32 +1,37 @@
 #include "camera_entropy.h"
 #include "entropy_process.h"
+#include "assessment_progress.h"
 #include "terminal.h"
 #include <crypto/common.h>
 #include <algorithm>
 #include <memory>
 
 namespace td {
-SecretBytes Terminal::CameraEntropy()
+SecretBytes Terminal::CameraEntropy(bool& unchecked)
 {
+    unchecked = false;
     if (!Confirm("Collect camera randomness", {"A still scene is fine; movement is not required.", "",
         "We'll collect camera readings and check part of the data for patterns using statistical software from NIST, "
         "the US National Institute of Standards and Technology. This helps estimate how unpredictable the checked data is.", "",
-        "Allow up to two minutes for collection and checks."}, "start")) throw Cancelled{};
+        "Allow up to two minutes for collection and checks. Once collection finishes, you can stop the checks and choose whether to use the data unchecked."}, "start")) throw Cancelled{};
     SecretBytes digest(32);
     std::array<unsigned char, 17> profile{};
     size_t total = 0;
     unsigned frames = 0, warnings = 0;
     EntropyAssessment result{};
+    AssessmentProgress progress;
+    bool stopped = false, timed_out = false;
     {
         EntropyFile samples, report;
         EntropyHash hash;
         EntropyWorker camera(EntropyExecutable(false));
         std::unique_ptr<EntropyWorker> assessment;
         const auto view = View();
-        Draw(view, "Collect camera randomness", {}, "Esc: Cancel"); Flush();
+        Draw(view, "Collect camera randomness", {}, "Esc: stop camera"); Flush();
         const auto start = std::chrono::steady_clock::now();
         auto last_frame = start, painted = start - std::chrono::seconds(1);
-        bool have_profile = false, captured = false;
+        bool have_profile = false, captured = false, ready = false;
+        ReviewLines previous;
         std::array<unsigned char, 8> header{};
         size_t head = 0, body = 0, length = 0;
         unsigned type = 0;
@@ -34,29 +39,52 @@ SecretBytes Terminal::CameraEntropy()
         while (true) {
             const auto now = std::chrono::steady_clock::now();
             Require(View() == view, "The screen changed. Start camera collection again.");
-            const int key = Key(0);
-            if (key == 27 || key == 3) throw Cancelled{};
-            Require(now - start < std::chrono::seconds(ENTROPY_TOTAL_SECONDS), "Camera collection and checks took too long");
-            Require(captured || now - last_frame < std::chrono::seconds(10), "The camera stopped sending images");
-            Require(captured || now - start < std::chrono::seconds(ENTROPY_CAPTURE_SECONDS + 10), "Camera collection took too long");
+            if (assessment) progress.Read(*assessment);
+            Require(!progress.Constant(), "The checked camera data had no variation");
             const auto assessed = assessment ? assessment->PollExit() : std::nullopt;
-            if (now - painted >= std::chrono::milliseconds(250)) {
-                Row(view, 0, captured ? "Camera: finished" : frames ? "Camera: collecting images" : "Camera: starting");
-                const auto checks = Wrap({assessed ? "Randomness checks: finished" : assessment ? "Randomness checks: running"
-                    : "Randomness checks: waiting for camera data"}, view.width);
-                Row(view, 1, checks[0]);
-                Row(view, 2, checks.size() > 1 ? checks[1] : "");
-                Row(view, 4, "Time elapsed: " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now - start).count()) + " seconds");
-                painted = now;
-            }
             if (captured) {
                 const auto exit = camera.PollExit();
                 if (exit) Require(*exit == 0, "Camera collection failed");
                 if (exit && assessed) {
                     report.Seal(); result = ParseAssessment(report.Read(), *assessed); break;
                 }
+                if (exit && !ready) {
+                    ready = true;
+                    Draw(view, "Checking camera data", {}, "Esc: stop checks"); previous.clear();
+                    painted = start - std::chrono::seconds(1);
+                }
+            }
+            const int key = Key(0);
+            if (key == 27 || key == 3) {
+                if (!ready) throw Cancelled{};
+                stopped = true; break;
+            }
+            if (now - start >= std::chrono::seconds(ENTROPY_TOTAL_SECONDS)) {
+                Require(ready, "Camera collection and checks took too long");
+                stopped = timed_out = true; break;
+            }
+            Require(captured || now - last_frame < std::chrono::seconds(10), "The camera stopped sending images");
+            Require(captured || now - start < std::chrono::seconds(ENTROPY_CAPTURE_SECONDS + 10), "Camera collection took too long");
+            if (now - painted >= std::chrono::milliseconds(250)) {
+                ReviewLines lines{captured ? "Camera: finished" : frames ? "Camera: collecting images" : "Camera: starting",
+                    "Check: " + std::to_string(progress.Current()) + " of 9"};
+                if (view.height >= 7) {
+                    const auto label = Wrap({"Current check: " + progress.Check()}, view.width);
+                    lines.push_back(label[0]); lines.push_back(label.size() > 1 ? label[1] : "");
+                } else lines.push_back(progress.Check());
+                lines.push_back(progress.Pass());
+                lines.push_back("Elapsed: " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now - start).count()) + " seconds");
+                for (size_t row = 0; row < lines.size(); ++row)
+                    if (row >= previous.size() || previous[row] != lines[row]) Row(view, row, lines[row]);
+                previous = std::move(lines);
+                painted = now;
+            }
+            if (captured) {
                 const int waiting = Key(20);
-                if (waiting == 27 || waiting == 3) throw Cancelled{};
+                if (waiting == 27 || waiting == 3) {
+                    if (!ready) throw Cancelled{};
+                    stopped = true; break;
+                }
                 continue;
             }
             if (head < header.size()) {
@@ -94,9 +122,23 @@ SecretBytes Terminal::CameraEntropy()
             }
             head = body = 0;
         }
+        if (assessment) {
+            if (stopped) assessment->Stop();
+            progress.Read(*assessment);
+        }
+        progress.Boundary();
         hash.Finalize(digest.data());
     } // All workers are dead and reaped before any manual input or fresh RNG request.
-    Require(!result.constant, "The checked camera data had no variation");
+    Require(!progress.Constant() && !result.constant, "The checked camera data had no variation");
+    if (stopped) {
+        const auto title = timed_out ? "Camera checks did not finish" : "Camera checks stopped early";
+        if (Menu(title, {"Continue without camera data", "Use unchecked camera data"},
+            std::to_string(progress.Finished()) + " of 9 checks finished. There is no final randomness estimate. "
+            "You can still add the collected camera data as an unchecked extra. Fresh randomness from Bitcoin Core will still be used.",
+            true, {}, true, progress.Details()) == 0) return {};
+        unchecked = true;
+        return CameraContribution(profile, total, digest);
+    }
     const auto score = std::to_string(result.bits_per_sample);
     const auto format = ReadBE32(profile.data() + 1);
     std::string fourcc;

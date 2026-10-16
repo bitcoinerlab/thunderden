@@ -1,0 +1,245 @@
+--- a/non_iid_main.cpp
++++ b/non_iid_main.cpp
+@@ -1,3 +1,4 @@
++#include "nist_progress.h"
+ /* VERSION information is kept in utils.h. Please update when a new version is released */
+ 
+ #include "shared/utils.h"
+@@ -221,6 +222,8 @@
+ 
+     if (verbose > 1) printf("Loaded %ld samples of %d distinct %d-bit-wide symbols\n", data.len, data.alph_size, data.word_size);
+ 
++    td::NistInput(data.alph_size, data.len, all_bits ? data.blen : std::min<long>(data.blen, MIN_SIZE));
++
+     if (data.alph_size <= 1) {
+ 
+         printf("Symbol alphabet consists of 1 symbol. No entropy awarded...\n");
+@@ -261,14 +264,14 @@
+     NonIidTestCase tc631;
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = most_common(data.bsymbols, data.blen, 2, verbose, "Bitstring", tc631);
++        ret_min_entropy = td::NistEstimate(1, 2, data.blen, [&] { return most_common(data.bsymbols, data.blen, 2, verbose, "Bitstring", tc631); });
+         if (verbose == 2) printf("\tMost Common Value Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+         tc631.h_bitstring = ret_min_entropy;
+         H_bitstring = min(ret_min_entropy, H_bitstring);
+     }
+ 
+     if (initial_entropy) {
+-        ret_min_entropy = most_common(data.symbols, data.len, data.alph_size, verbose, "Literal", tc631);
++        ret_min_entropy = td::NistEstimate(1, 1, data.len, [&] { return most_common(data.symbols, data.len, data.alph_size, verbose, "Literal", tc631); });
+         if (verbose == 2) printf("\tMost Common Value Estimate = %f / %d bit(s)\n", ret_min_entropy, data.word_size);
+         tc631.h_original = ret_min_entropy;
+         H_original = min(ret_min_entropy, H_original);
+@@ -283,14 +286,14 @@
+     if ((verbose == 1) || (verbose == 2)) printf("\nRunning Entropic Statistic Estimates (bit strings only)...\n");
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = collision_test(data.bsymbols, data.blen, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(2, 2, data.blen, [&] { return collision_test(data.bsymbols, data.blen, verbose, "Bitstring"); });
+         if (verbose == 2) printf("\tCollision Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+         tc632.h_bitstring = ret_min_entropy;
+         H_bitstring = min(ret_min_entropy, H_bitstring);
+     }
+ 
+     if (initial_entropy && (data.alph_size == 2)) {
+-        ret_min_entropy = collision_test(data.symbols, data.len, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(2, 1, data.len, [&] { return collision_test(data.symbols, data.len, verbose, "Literal"); });
+         if (verbose == 2) printf("\tCollision Test Estimate = %f / 1 bit(s)\n", ret_min_entropy);
+         tc632.h_original = ret_min_entropy;
+         H_original = min(ret_min_entropy, H_original);
+@@ -303,14 +306,14 @@
+     NonIidTestCase tc633;
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = markov_test(data.bsymbols, data.blen, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(3, 2, data.blen, [&] { return markov_test(data.bsymbols, data.blen, verbose, "Bitstring"); });
+         if (verbose == 2) printf("\tMarkov Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+         tc633.h_bitstring = ret_min_entropy;
+         H_bitstring = min(ret_min_entropy, H_bitstring);
+     }
+ 
+     if (initial_entropy && (data.alph_size == 2)) {
+-        ret_min_entropy = markov_test(data.symbols, data.len, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(3, 1, data.len, [&] { return markov_test(data.symbols, data.len, verbose, "Literal"); });
+         if (verbose == 2) printf("\tMarkov Test Estimate = %f / 1 bit(s)\n", ret_min_entropy);
+         tc633.h_original = ret_min_entropy;
+         H_original = min(ret_min_entropy, H_original);
+@@ -323,7 +326,7 @@
+     NonIidTestCase tc634;
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = compression_test(data.bsymbols, data.blen, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(4, 2, data.blen, [&] { return compression_test(data.bsymbols, data.blen, verbose, "Bitstring"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tCompression Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+             tc634.h_bitstring = ret_min_entropy;
+@@ -332,7 +335,7 @@
+     }
+ 
+     if (initial_entropy && (data.alph_size == 2)) {
+-        ret_min_entropy = compression_test(data.symbols, data.len, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(4, 1, data.len, [&] { return compression_test(data.symbols, data.len, verbose, "Literal"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tCompression Test Estimate = %f / 1 bit(s)\n", ret_min_entropy);
+             tc634.h_original = ret_min_entropy;
+@@ -349,7 +352,7 @@
+     if ((verbose == 1) || (verbose == 2)) printf("\nRunning Tuple Estimates...\n");
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        SAalgs(data.bsymbols, data.blen, 2, bin_t_tuple_res, bin_lrs_res, verbose, "Bitstring");
++        td::NistSequences(2, data.blen, bin_t_tuple_res, bin_lrs_res, [&] { SAalgs(data.bsymbols, data.blen, 2, bin_t_tuple_res, bin_lrs_res, verbose, "Bitstring"); });
+         if (bin_t_tuple_res >= 0.0) {
+             if (verbose == 2) printf("\tT-Tuple Test Estimate (bit string) = %f / 1 bit(s)\n", bin_t_tuple_res);
+             tc635.bin_t_tuple_res = bin_t_tuple_res;
+@@ -358,7 +361,7 @@
+     }
+ 
+     if (initial_entropy) {
+-        SAalgs(data.symbols, data.len, data.alph_size, t_tuple_res, lrs_res, verbose, "Literal");
++        td::NistSequences(1, data.len, t_tuple_res, lrs_res, [&] { SAalgs(data.symbols, data.len, data.alph_size, t_tuple_res, lrs_res, verbose, "Literal"); });
+         if (t_tuple_res >= 0.0) {
+             if (verbose == 2) printf("\tT-Tuple Test Estimate = %f / %d bit(s)\n", t_tuple_res, data.word_size);
+             tc635.t_tuple_res = t_tuple_res;
+@@ -393,7 +396,7 @@
+     if ((verbose == 1) || (verbose == 2)) printf("\nRunning Predictor Estimates...\n");
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = multi_mcw_test(data.bsymbols, data.blen, 2, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(7, 2, data.blen, [&] { return multi_mcw_test(data.bsymbols, data.blen, 2, verbose, "Bitstring"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tMulti Most Common in Window (MultiMCW) Prediction Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+             tc637.h_bitstring = ret_min_entropy;
+@@ -402,7 +405,7 @@
+     }
+ 
+     if (initial_entropy) {
+-        ret_min_entropy = multi_mcw_test(data.symbols, data.len, data.alph_size, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(7, 1, data.len, [&] { return multi_mcw_test(data.symbols, data.len, data.alph_size, verbose, "Literal"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tMulti Most Common in Window (MultiMCW) Prediction Test Estimate = %f / %d bit(s)\n", ret_min_entropy, data.word_size);
+             tc637.h_original = ret_min_entropy;
+@@ -417,7 +420,7 @@
+     NonIidTestCase tc638;
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = lag_test(data.bsymbols, data.blen, 2, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(8, 2, data.blen, [&] { return lag_test(data.bsymbols, data.blen, 2, verbose, "Bitstring"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tLag Prediction Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+             tc638.h_bitstring = ret_min_entropy;
+@@ -426,7 +429,7 @@
+     }
+ 
+     if (initial_entropy) {
+-        ret_min_entropy = lag_test(data.symbols, data.len, data.alph_size, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(8, 1, data.len, [&] { return lag_test(data.symbols, data.len, data.alph_size, verbose, "Literal"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tLag Prediction Test Estimate = %f / %d bit(s)\n", ret_min_entropy, data.word_size);
+             tc638.h_original = ret_min_entropy;
+@@ -441,7 +444,7 @@
+     NonIidTestCase tc639;
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = multi_mmc_test(data.bsymbols, data.blen, 2, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(9, 2, data.blen, [&] { return multi_mmc_test(data.bsymbols, data.blen, 2, verbose, "Bitstring"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tMulti Markov Model with Counting (MultiMMC) Prediction Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+             tc639.h_bitstring = ret_min_entropy;
+@@ -450,7 +453,7 @@
+     }
+ 
+     if (initial_entropy) {
+-        ret_min_entropy = multi_mmc_test(data.symbols, data.len, data.alph_size, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(9, 1, data.len, [&] { return multi_mmc_test(data.symbols, data.len, data.alph_size, verbose, "Literal"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tMulti Markov Model with Counting (MultiMMC) Prediction Test Estimate = %f / %d bit(s)\n", ret_min_entropy, data.word_size);
+             tc639.h_original = ret_min_entropy;
+@@ -465,7 +468,7 @@
+     NonIidTestCase tc6310;
+ 
+     if (((data.alph_size > 2) || !initial_entropy)) {
+-        ret_min_entropy = LZ78Y_test(data.bsymbols, data.blen, 2, verbose, "Bitstring");
++        ret_min_entropy = td::NistEstimate(10, 2, data.blen, [&] { return LZ78Y_test(data.bsymbols, data.blen, 2, verbose, "Bitstring"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tLZ78Y Prediction Test Estimate (bit string) = %f / 1 bit(s)\n", ret_min_entropy);
+             tc6310.h_bitstring = ret_min_entropy;
+@@ -474,7 +477,7 @@
+     }
+ 
+     if (initial_entropy) {
+-        ret_min_entropy = LZ78Y_test(data.symbols, data.len, data.alph_size, verbose, "Literal");
++        ret_min_entropy = td::NistEstimate(10, 1, data.len, [&] { return LZ78Y_test(data.symbols, data.len, data.alph_size, verbose, "Literal"); });
+         if (ret_min_entropy >= 0) {
+             if (verbose == 2) printf("\tLZ78Y Prediction Test Estimate = %f / %d bit(s)\n", ret_min_entropy, data.word_size);
+             tc6310.h_original = ret_min_entropy;
+--- a/shared/most_common.h
++++ b/shared/most_common.h
+@@ -14,7 +14,10 @@
+ 	assert(len > 1);
+ 
+ 	for(i = 0; i < alph_size; i++) counts[i] = 0;
+-	for (i = 0; i < len; i++) counts[data[i]]++;
++	for (i = 0; i < len; i++) {
++		if (!(i & 16383)) td::NistUpdate(i);
++		counts[data[i]]++;
++	}
+ 
+ 	mode = 0;
+ 	for(i = 0; i < alph_size; i++){
+--- a/non_iid/multi_mmc_test.h
++++ b/non_iid/multi_mmc_test.h
+@@ -43,6 +43,7 @@
+    //In C, arrays are 0 indexed.
+    //i is the index of the new symbol to be predicted
+    for(i=2; i<L; i++) {
++      if (!(i & 16383)) td::NistUpdate(i);
+       bool found_x = false;
+ 
+       curWinner = winner;
+@@ -185,6 +186,7 @@
+ 	// perform predictions
+ 	//i is the index of the new symbol to be predicted
+ 	for (i = 2; i < len; i++){
++		if (!(i & 16383)) td::NistUpdate(i);
+ 		bool found_x = false;
+ 		cur_winner = winner;
+ 		memset(x.data(), 0, D_MMC);
+--- a/non_iid/lz78y_test.h
++++ b/non_iid/lz78y_test.h
+@@ -40,6 +40,7 @@
+    //In C, arrays are 0 indexed.
+    //i is the index of the bit to be predicted.
+    for(i=B_len+1; i<L; i++) {
++      if (!(i & 16383)) td::NistUpdate(i);
+       bool found_x;
+       bool havePrediction = false;
+       uint8_t roundPrediction=2;
+@@ -144,6 +145,7 @@
+ 
+ 	// perform predictions
+ 	for(i = B_len+1; i < len; i++) {
++		if (!(i & 16383)) td::NistUpdate(i);
+ 		bool found_x;
+ 		bool have_prediction = false;
+ 		uint8_t prediction = 0;
+--- a/non_iid/lag_test.h
++++ b/non_iid/lag_test.h
+@@ -56,6 +56,7 @@
+ 
+ 	// The rest of the values yield a prediction
+ 	for (long i = 1; i < L; i++) {
++		if (!(i & 16383)) td::NistUpdate(i);
+ 		const uint8_t curSymbol = S[i];
+ 		lagBuf *const curRingBuffer = &(ringBuffers[curSymbol]); // The pointer itself is a constant (not the structure it points to)
+ 
+--- a/non_iid/multi_mcw_test.h
++++ b/non_iid/multi_mcw_test.h
+@@ -45,6 +45,7 @@
+ 
+ 	// perform predictions
+ 	for (i = W[0]; i < len; i++){
++		if (!(i & 16383)) td::NistUpdate(i);
+ 		// test prediction of winner
+ 		if(frequent[winner] == data[i]){
+ 			C++;
