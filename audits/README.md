@@ -19,6 +19,20 @@ Source references and line numbers refer to the recorded revision. Archiving a
 report does not constitute certification or acceptance of all proposed changes;
 the tracker records current project dispositions.
 
+## Follow-up status (2026-10-16)
+
+The tracker records twelve resolved findings and TD-005 as open with conditional
+authenticated-boot mitigation. The maintainer has confirmed physical signed-image
+acceptance, matching unsigned-image refusal, camera behaviour and the fee-policy
+QR signing workflow during the current candidate session. These reports supplement
+automated checks; they are not a new independent audit or security certification.
+
+The maintainer explicitly defers further independent review until after
+`v0.0.1-preview.9` and planned additional improvements. The corrected/current
+revision therefore must not be described as independently re-audited. This is a
+recorded review-plan decision, not closure of TD-005 or a change to the original
+reports. See [current verification scope](../docs/STATUS.md#current-release-candidate-2026-10-16).
+
 ## Adding a report
 
 - Name it `YYYY-MM-DD-reviewer-shortcommit.md`; append `-2`, `-3`, etc. if needed

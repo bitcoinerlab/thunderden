@@ -21,9 +21,9 @@ See [implementation status](docs/STATUS.md) for completed checks and remaining w
 
 ## Download and boot
 
-**[Download the USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img)**
-· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img.sha256)
-· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8)
+**[Download the unsigned USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img)**
+· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img.sha256)
+· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9)
 
 This image boots x86-64 (Intel/AMD) laptops with BIOS or UEFI. You can prepare the
 USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot it.
@@ -34,8 +34,11 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 3. Wait for verification, eject the drive and boot the laptop from USB. Disable
    Secure Boot to boot this unsigned image.
 
-Current source also supports optional [signed images and user signing](docs/SECURE_BOOT.md).
-This is not included in the published preview above.
+For optional Secure Boot, use the [signed image](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden-signed.img)
+([checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden-signed.img.sha256))
+and follow the [enrollment, verification and self-signing guide](docs/SECURE_BOOT.md).
+Both images contain the same runtime; the signed one requires the matching public
+certificate enrolled in enforcing UEFI firmware.
 
 **Flashing erases the selected USB drive.** See the
 [build and USB guide](docs/BUILD.md) for more detail or to build your own image.

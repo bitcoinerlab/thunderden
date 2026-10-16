@@ -2,10 +2,15 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.8/thunderden.img.sha256)
-from [v0.0.1-preview.8](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img.sha256)
+from [v0.0.1-preview.9](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9).
 The release also includes `installed-files.json` for reviewing the built system.
+
+For optional Secure Boot, choose `thunderden-signed.img` and its matching checksum
+from the same release. Read the [enrollment and verification guide](SECURE_BOOT.md)
+before enabling Secure Boot; the signed image needs its public certificate trusted
+by your firmware. The unsigned and signed images contain the same runtime.
 
 The same 64 MiB image can be written from macOS, Linux or Windows. It boots
 x86-64 laptops with BIOS or UEFI, not Apple Silicon Macs. After downloading,

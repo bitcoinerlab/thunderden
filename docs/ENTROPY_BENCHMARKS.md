@@ -2,7 +2,9 @@
 
 Experimental branch, measured 2026-10-13/14. These are software/lab results, not
 an entropy-source certification or a performance promise for an older laptop.
-Physical camera and reference-laptop measurements are pending maintainer testing.
+Quantitative physical-camera and reference-laptop benchmark measurements remain
+pending. The maintainer's functional HP camera validation is recorded separately
+in [status](STATUS.md#current-release-candidate-2026-10-16).
 
 These historical measurements used `-i -a`. Production now uses the official
 `-i -t` mode: all selected original symbols are assessed, but separate bitstring

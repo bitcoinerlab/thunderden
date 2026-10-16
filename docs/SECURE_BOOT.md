@@ -21,10 +21,18 @@ alone: a replacement operating system could otherwise show a convincing fake
 Thunder Den screen. The protected boot path also ignores outside startup settings
 and extra system files that could replace this system.
 
-*This support is currently unreleased. Preview 8 is unsigned, and no production
-signing certificate from landabaso has been published yet. The published-image
-route below describes how signed releases will work; test certificates are not
-release keys.*
+*Signed images and public signing material are available from
+[v0.0.1-preview.9](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9).
+Earlier previews are unsigned. Disposable test certificates are not release keys.*
+
+Thunder Den's release-signing certificate SHA-256 fingerprint is:
+
+```text
+77:C2:64:BD:D1:E9:7B:E9:E9:9C:15:6E:90:85:8E:45:C8:B6:1E:FD:CA:23:22:6D:1A:CF:87:E3:6B:37:49:16
+```
+
+Confirm it through a trusted channel before enrollment, rather than trusting a
+certificate merely because it arrived on the USB you are checking.
 
 ## What you still trust
 
@@ -41,8 +49,8 @@ also a UEFI feature: booting through legacy BIOS does not provide this protectio
 
 ## Use a published image without taking the builder's word for it
 
-You can use an image signed by landabaso without simply trusting that he built
-it from the published source. Thunder Den's unsigned build is reproducible, so
+You can use an image signed with Thunder Den's release key without simply
+trusting the project's build. Thunder Den's unsigned build is reproducible, so
 you can build the same release yourself and compare the results.
 
 There is one wrinkle: your normal build has no signature, so it will not be
@@ -52,16 +60,16 @@ the unsigned image and the signature as a separate public file.
 First, compare your build with the published unsigned image. Then use the
 published signature to reconstruct the signed image from your own build. The
 verification tool checks that this reconstruction matches the signed download
-**byte for byte**. You do not need landabaso's private key to do this.
+**byte for byte**. You do not need Thunder Den's private signing key to do this.
 
 If both checks pass, the signed download contains the same software as your own
 build, with the public signature attached. For that image, you have checked the
 builder's work rather than taken his word for it. You still rely on the source
 you chose, your build tools and the computer doing the verification.
 
-Your firmware can then check landabaso's signature whenever you boot. Remember
-that trusting his key also allows other images signed with that key—not just
-the release you checked, and potentially older releases too. Verify each update.
+Your firmware can then check Thunder Den's signature whenever you boot. Remember
+that trusting the release key also allows other images signed with that key—not
+just the release you checked, and potentially older releases too. Verify each update.
 If you want to control which builds receive a valid signature yourself, use
 your own key instead.
 
@@ -69,7 +77,7 @@ your own key instead.
 
 You can build Thunder Den and sign it with your own private key. Signing happens
 after the build; it does not recompile or change the software. You then tell
-your laptop to accept your public key rather than relying on landabaso's.
+your laptop to accept your public key rather than Thunder Den's release key.
 
 Keep the private key on your trusted signing computer, encrypted with a password.
 Only the public key, normally carried in a file called a **certificate**, belongs
@@ -88,43 +96,75 @@ choosing a published signature or your own key, building and checking an image,
 signing it, and adding the public certificate to your laptop. You can start with:
 
 > Using this Thunder Den Secure Boot guide, walk me through setup. My computer
-> runs [operating system]; my laptop is [model], with firmware [version]. Help me
-> choose landabaso's signature or my own key, and explain each step. For my own
-> key, use an encrypted private key and a 100-year certificate. Give me key-creation
-> and signing commands to run myself; never ask for my private key or password.
-> Check the manufacturer's instructions and ask before any firmware changes.
+> runs [operating system]; my laptop is [model], with firmware [version], and also
+> boots [other operating systems, or none]. Help me choose Thunder Den's release
+> signature or my own key, and explain each step. For my own signing key, use an
+> encrypted private key and a 100-year certificate. Give me key-creation and signing
+> commands to run myself; never ask for my private key or password. Check the
+> manufacturer's instructions for this exact device. Establish whether enrollment
+> adds a certificate or replaces existing trust, and how to keep my other operating
+> systems bootable and accessible. Check whether a BIOS administrator password can
+> protect Secure Boot settings and what happens if I forget it; never ask for that
+> password. Ask before any firmware changes; do not guess when the procedure is unclear.
 
 Use the AI for guidance, not for handling secrets. Create and use your private
 key yourself in your terminal, entering its password only at the tool's prompt.
-Public certificates are fine to share. The complete manual steps are below if
-you prefer to work without an AI.
+Public certificates are fine to share. The manual build, signing and verification
+steps are below; firmware enrollment still needs device-specific instructions.
 
 ## Adding the public key to your laptop
 
-Whether you use your own signature or landabaso's, the laptop needs the matching
-public certificate in its Secure Boot settings. Adding it tells the firmware,
-“allow software signed by this key.” You do not give anyone your private key or
-hand over ownership of the laptop by adding a release-signing certificate.
+The goal is to **enroll the image's public signing certificate in your laptop's
+Secure Boot firmware settings**—Thunder Den's release certificate or your own.
+This tells the firmware, “allow software signed by this key.”
 
-The exact menus and import format vary by manufacturer, model and firmware
-version. Whether you follow the instructions yourself or with an AI's help,
-check the manufacturer's documentation for your exact device rather than guess.
+Often, you copy the public certificate or prepared import files to a USB and
+select them through the firmware's key-management menu. This is called
+**enrollment**. The firmware remembers the public key afterwards; you normally
+enroll it once, not again for every release signed with the same key. Your
+private key never belongs on that USB or in the laptop's firmware.
 
-Before changing settings, save any disk-recovery keys for your existing operating
-system and make sure you know how to restore the previous configuration. Do not
-blindly clear the existing keys or replace the firmware's ownership keys.
-If using landabaso's certificate, confirm its fingerprint through a trusted
-channel—not just a certificate found on the USB you are checking.
+**If this laptop also boots Windows, Linux or other operating systems, changing
+Secure Boot settings or keys can stop them booting or trigger disk-encryption
+recovery prompts.** Some firmware can add one certificate; other import procedures
+replace existing trust. Do not assume that “Import” means “add.”
 
-Once the certificate is installed, [write the signed image to USB](BUILD.md#2-write-it-to-a-usb-drive)
-and select its UEFI boot entry. Both signed and unsigned images can also boot
-with Secure Boot disabled, but then the firmware is not checking this seal.
+The menus, file formats and precautions depend on the exact model, firmware and
+installed systems. This guide is not a universal enrollment or recovery manual.
+Work out the appropriate procedure using the manufacturer's instructions,
+optionally with an AI assistant's help as above. Before changing anything, make
+sure the plan accounts for your other operating systems and recovery options;
+do not blindly clear or replace keys.
+
+If using Thunder Den's release certificate, confirm its fingerprint through a
+trusted channel—not just a certificate found on the USB you are checking.
+
+Once enrollment has succeeded, enable Secure Boot,
+[write the signed image to USB](BUILD.md#2-write-it-to-a-usb-drive) and select its
+UEFI boot entry. Both signed and unsigned images can also boot with Secure Boot
+disabled, but then the firmware is not checking this seal.
 
 Test both sides: the signed image should boot, and the unsigned one
 should be refused. Use test recovery words for these checks. Secure Boot must
 actually be enforcing signatures, with no legacy-boot bypass. Other trusted
 keys, such as factory-installed ones, may still allow other operating systems.
 The protection depends on these settings remaining under your control.
+
+## Protecting the firmware settings
+
+Secure Boot is easy to bypass if someone can simply turn it off or replace its
+trusted keys. Where supported, we recommend a **BIOS/UEFI administrator (setup)
+password**. Check that it protects Secure Boot changes and key management on your
+model. This is not your operating-system PIN or a power-on/disk password.
+
+**Check the manufacturer's recovery policy before setting it.** Save the password
+in a password manager with a separate secure backup; never share it with an AI.
+A forgotten firmware administrator password may require hardware service or even
+motherboard replacement. Restoring factory Secure Boot keys is not a password
+reset.
+
+This helps prevent casual settings changes, not all physical tampering. Keeping
+the laptop physically secure and trusting its hardware and firmware still matter.
 
 ## Commands and technical details
 
@@ -243,8 +283,13 @@ the matching `installed-files.json`, and its source revision.
 
 The allowed-signature database, **`db`**, is where firmware trusts image-signing
 certificates. **`PK`** and **`KEK`** manage ownership and updates to firmware
-trust; they have a different role. You do not need to give landabaso control of
-those ownership keys to trust his release-signing certificate.
+trust; they have a different role. Trusting Thunder Den's release certificate
+belongs in `db`; do not install it as your `PK` or `KEK` and give the project
+control of your firmware trust policy.
+
+If your firmware requires custom owner-management keys, use separate keys that
+you control, not the image-signing key. Keep device-specific enrollment files and
+private keys outside the source checkout.
 
 If your manufacturer's instructions request a DER certificate, convert the
 **public** certificate, not the private key:
@@ -254,9 +299,11 @@ openssl x509 -in out/release-pair/thunderden-signing.pem -outform DER \
   -out out/release-pair/thunderden-signing.cer
 ```
 
-Some firmware instead requires a prepared database file or a particular USB
-folder. Renaming a certificate to `.bin` is not a conversion. Follow instructions
-for your exact device. **Setup Mode** is not enforced Secure Boot.
+Some firmware instead requires prepared EFI signature lists or signed variable
+updates, sometimes named `.bin`, in a particular USB folder. These are public
+enrollment files, not private keys. Renaming a certificate to `.bin` is not a
+conversion. Prepare them for the exact firmware and import them before enabling
+Secure Boot; check that import succeeded. **Setup Mode** is not enforced Secure Boot.
 
 A replacement certificate does not revoke an old one. If a signing key is
 compromised, remove or revoke its trust on affected laptops. Thunder Den does

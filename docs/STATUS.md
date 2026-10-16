@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-10-15, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-16, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
@@ -12,8 +12,9 @@ below. See the guide for current limitations.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.8`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.8),
-with its checksum and installed-file inventory. BIOS/UEFI boot checks passed;
+[`v0.0.1-preview.9`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9),
+with unsigned/signed images, public signing material, checksums and installed-file
+inventory. BIOS/UEFI boot checks passed;
 USB write/read-back checks are recorded per image below. Broader laptop/camera
 coverage remains outstanding; this branch's clean-build comparison is recorded
 under authenticated UEFI boot below.
@@ -26,7 +27,7 @@ The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
 separate from the automated checks below.
 
-## Fee verification (unreleased)
+## Fee verification (preview 9)
 
 Current source rejects insufficiently verified fees in `ReviewedTransaction::Sign`
 before approval or signature generation. The former warning override is removed;
@@ -34,20 +35,23 @@ the error directs Sparrow users to its setup guide. Single-input SegWit/multisig
 sufficiently binding Taproot signatures and authenticated multi-input requests
 remain supported. See [TD-001](../audits/FINDINGS.md#td-001).
 
-All 18 rebuilt native suites passed without skips in 193.19 seconds. Regressions
-cover both attack requests, no approval/signing calls, empty command error replies,
-blocking interactive errors at 40/80 columns and successful safe compact signing.
+Initial fix verification passed all 18 rebuilt native suites without skips in
+193.19 seconds. Regressions cover both attack requests, no approval/signing calls,
+empty command error replies, blocking interactive errors at 40/80 columns and
+successful safe compact signing.
 
 The recommended Sparrow setup is now **2.5.5+ with Krux**. A user-supplied recording
 of its normal Show QR output decoded to a two-input PSBT with both valid previous
-transactions. A physical scan/signing test of the new policy remains pending.
+transactions. On 2026-10-16, the maintainer also confirmed physical validation of
+the fee-policy QR signing workflow during the current candidate session; see
+[the current scope](#current-release-candidate-2026-10-16).
 Keeper v2.6.3 source exports compact PSBTs through the ordinary Jade QR route;
 general multi-input SegWit compatibility therefore needs a full-data export route.
 
-This change is not included in preview 8 or the previously flashed USB image.
+This change is not included in preview 8, but is included in the current candidate.
 The integration records below retain their original test scope and signing policy.
 
-## Authenticated UEFI boot (unreleased)
+## Authenticated UEFI boot (preview 9)
 
 The `feature/authenticated-boot` branch provides optional signing of the complete
 EFI kernel and its embedded runtime. UEFI no longer loads GRUB. Fixed built-in
@@ -58,9 +62,15 @@ the signing certificate and reconstruct the signed disk exactly from the unsigne
 image and detached EFI signature. See [the guide](SECURE_BOOT.md).
 
 Production signing keys are generated and used manually by the owner, outside
-the build/agent workflow. Current tests use disposable keys only; no production
-certificate or signed release exists. Firmware trust, legacy BIOS and rollback
-remain explicit limits under [TD-005](../audits/FINDINGS.md#td-005).
+the build/agent workflow. Automated signing regressions use disposable keys; the
+maintainer has also manually signed the current candidate with a locally held
+encrypted image-signing key. Tools accessed only its public certificate/signatures.
+The maintainer approved that tested certificate as the project's release-signing
+certificate; preview 9 includes its public certificate and detached signature.
+Firmware trust, legacy BIOS and rollback remain explicit limits under
+[TD-005](../audits/FINDINGS.md#td-005).
+
+### Initial implementation verification (2026-10-15)
 
 All 18 native suites passed without skips (193.21 seconds). The first rebuilt
 64 MiB image passed content and repeat-assembly checks; BIOS and direct-UEFI
@@ -86,7 +96,59 @@ image SHA-256 is
 Attaching the retained public test signature to a fresh build reconstructed the
 same signed image exactly. The existing legacy-path guest-isolation probe also
 passed with the rebuilt kernel and toolchain, including real JPEG/QR/UR decoding.
-Physical enrollment/boot validation and a fresh independent audit remain pending.
+This initial lab checkpoint predates the maintainer's physical follow-up below.
+
+### Current release candidate (2026-10-16)
+
+The candidate uses runtime source `e85d560a69eee6d6ec7a37f35cb8928d27ba5fae`, including
+the camera assessment progress/stop controls and completion-or-manual-stop policy
+cherry-picked from `master`. Both images are 67,108,864 bytes. Their SHA-256 hashes are:
+
+- Unsigned: `1d1b2d0dbfa8b69c587baecd99c9e70342531469939ed567c48fb031878821dc`
+- Signed: `ee39a4c03f4ee53783f15ddc227aa5163d4192b606332f4953b9fdca87b38344`
+
+All 19 native suites passed without skips in 255.46 seconds. The source actually
+compiled matches the frozen commit. Installed-file/kernel restrictions and
+repeat-assembly checks passed, including fixed boot arguments and `noinitrd`.
+BIOS and authenticated-UEFI account-QR/session workflows passed. Current-kernel
+OVMF regressions passed unsigned/wrong-key/modified-runtime refusal, external
+startup-input isolation and the 100-year-certificate/future-clock checks.
+
+The maintainer manually produced a new signature for these runtime bytes. Public
+tools verified it and reconstructed the signed disk byte-for-byte. The exact
+signed image completed the account-QR/session workflow under an OVMF trust store
+enrolled through the actual authenticated import packages; the matching unsigned
+image was refused. Each candidate-runtime USB write had a full 64 MiB read-back
+comparison and an EFI-file/signature-state check. The image-signing private key was
+never accessed by the agent, build or verification containers.
+
+The maintainer enrolled the public trust configuration on an **HP ProBook x360
+11 G5 EE, BIOS S96 01.12.00**, then reported signed UEFI boot acceptance and matching
+unsigned-image refusal with the instructed unchanged Secure Boot-enabled,
+Legacy-disabled settings. This pair provides reported physical enforcement
+evidence beyond the initial import screen's Audit Mode message. The maintainer
+also confirmed physical camera behaviour and the fee-policy QR signing workflow
+during this candidate session. These are user reports, not independently observed
+tests; camera formats/geometry, individual reconnect/slow-device cases, wallet
+application/version and broadcast outcome were not separately recorded. They do
+not establish cross-device compatibility or measured camera entropy.
+
+The candidate was first built using the pinned builder/toolchain cache. A new,
+empty output volume then rebuilt the cross-toolchain, kernel and application.
+Its `boot.img`, `grub.img`, `rootfs.cpio`, `bzImage`, complete disk image, checksum
+and installed-file inventory matched the tested cached build byte-for-byte.
+Applying the retained public signature to that fresh unsigned image reconstructed
+the same signed image exactly, without access to the private key. This comparison
+shared the pinned Docker builder and verified source/download caches; it was not
+an independently rebuilt Docker environment. The earlier two-clean-build result
+above retains its original source-revision scope.
+
+At the maintainer's request, a fresh independent review of the corrected/current
+source is deferred until after preview 9 and planned further improvements.
+See [the review plan](../audits/README.md#follow-up-status-2026-10-16). Preview 9
+remains a development preview, not a security certification. TD-005 remains open
+with conditional mitigation. Laptop-specific ownership/enrollment material stays
+outside the repository and is not part of release assets.
 
 ## Architecture
 
@@ -102,8 +164,8 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-preview 8 Buildroot executables are a 2,685,616-byte signer, a 100,464-byte QR scanner,
-a 30,808-byte camera entropy worker and a 211,848-byte NIST assessment worker, with
+current-candidate executables are a 2,697,904-byte signer, a 100,464-byte QR scanner,
+a 30,808-byte camera entropy worker and a 220,040-byte NIST assessment worker, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.
 
@@ -126,9 +188,10 @@ shared libraries installed separately. The hybrid disk image is 64 MiB. See
 - [x] Record real-device Sparrow multisig testing and release approval.
 - [x] Record user-tested physical address verification across all 13 demo cases.
 - [x] Record user-tested Keeper Jade QR multisig signing on iOS/testnet4.
+- [x] Record user-reported HP signed acceptance/unsigned refusal and camera/fee-policy QR validation.
 - [x] Publish a development USB image with its checksum and installed-file inventory.
-- [ ] Validate physical webcams and supported laptops, including reconnects and slow cameras.
-- [ ] Complete verification of a release image built from the final source revision.
+- [ ] Extend physical laptop/webcam coverage beyond the reported HP, including reconnects and slow cameras.
+- [x] Verify release images against the recorded runtime source and pinned build inputs.
 
 `platform/` defines the Buildroot application package, runtime launch, kernel
 and bootloader configuration. `build/image.py` assembles the hybrid disk image.
@@ -330,8 +393,8 @@ in the published preview 5 image.
 
 ## Verified native behavior
 
-`docker compose run --build --rm test` runs eighteen suites on this branch on Linux/amd64:
-`entropy`, `mnemonic-cleanup`, `entropy-camera`, `entropy-capture`,
+`docker compose run --build --rm test` runs nineteen suites on this branch on Linux/amd64:
+`entropy`, `assessment-progress`, `mnemonic-cleanup`, `entropy-camera`, `entropy-capture`,
 `entropy-confinement`, `entropy-assessment`,
 `address-check`, `qr-commands`, `foundation`, `transactions`, `core-keys`, `native-runtime`, `transport`,
 `application`, `export-compat`, `terminal`, `camera` and `isolation`.
