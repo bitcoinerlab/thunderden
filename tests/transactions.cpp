@@ -635,6 +635,14 @@ void CompactFees(const td::Keys& alice, const td::Keys& bob)
         compact.inputs[0].non_witness_utxo.reset();
         td::ReviewedTransaction safe(policy, alice, td::Digest{}, Serialize(compact));
         Check(!safe.Review().fee_unverified, "Single input failed fee assurance");
+        const auto summary = td::TransactionLines(safe.Review());
+        Check(Contains(summary, "Fee: " + td::Amount(safe.Review().fee))
+            && std::any_of(summary.begin(), summary.end(), [](const auto& line) { return line.starts_with("Estimated fee rate: "); }),
+            "Compact review lost its fee or fee rate");
+        for (const auto& lines : {summary, td::TransactionDetails(safe.Review())}) {
+            Check(std::none_of(lines.begin(), lines.end(), [](const auto& line) { return line.starts_with("Compact input data:"); }),
+                "Compact input explanation appeared in transaction review");
+        }
         Verify(*safe.Sign(alice, [](const auto&) { return true; }));
         compact.inputs[0].witness_utxo.nValue += 500;
         td::ReviewedTransaction false_amount(policy, alice, td::Digest{}, Serialize(compact));

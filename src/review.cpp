@@ -165,8 +165,6 @@ ReviewLines TransactionLines(const TransactionReview& review)
     if (change_count) lines.push_back("Verified change: " + Amount(change) + " (" + std::to_string(change_count)
         + (change_count == 1 ? " output)" : " outputs)"));
     if (review.fee_unverified) lines.push_back("The actual fee may be higher than shown. Signing is blocked until the fee can be verified.");
-    else if (std::any_of(review.inputs.begin(), review.inputs.end(), [](const auto& input) { return !input.full_previous; }))
-        lines.push_back("Compact input data: incorrect amounts would make the signatures added here invalid.");
     const bool all_final = std::all_of(review.inputs.begin(), review.inputs.end(), [](const auto& input) { return input.sequence == 0xffffffff; });
     bool timed = review.locktime && !all_final;
     if (timed) lines.push_back("Transaction locktime: " + (review.locktime < 500000000
