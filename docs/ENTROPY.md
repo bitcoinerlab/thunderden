@@ -133,12 +133,13 @@ At T=64 the assessed prefix contains the first 16,384 component histories; it is
 not assumed to represent all positions or the rest of the capture.
 
 Starting parameters are provisional: 8 warm-up frames, T=64, 1,048,576 assessed
-samples, up to 64 MiB hashed, a 20-second acquisition window after device setup
-and a 120-second total camera/assessment limit. Frames returned at or after the
-acquisition cutoff are discarded. Already acquired complete batches may finish
+samples, up to 64 MiB hashed and a 20-second acquisition window after device setup.
+There is no application-imposed wall-clock or CPU deadline for the assessment.
+Frames returned at or after the acquisition cutoff are discarded. Already acquired
+complete batches may finish
 serialization afterward; the parent has a separate 30-second capture watchdog
-covering startup and draining. No frame-time guarantee applies to a hung kernel
-driver. Never select a profile or retry a block to maximize the
+covering startup, draining and camera-worker exit. No frame-time guarantee applies
+to a hung kernel driver. Never select a profile or retry a block to maximize the
 score. Whole batches are serialized; the byte cap may stop at a complete temporal
 history. No differences, filters, LSB extraction or bias correction are applied.
 Device exposure/gain remain at driver defaults; no characterized control profile
@@ -164,11 +165,15 @@ instead of a fabricated sample percentage.
 
 During capture, **Esc: stop camera** discards the attempt. After complete,
 fault-free capture and a successful camera-worker exit, **Esc: stop checks** stops
-and reaps every worker before offering a choice. Reaching the unchanged total
-deadline after valid capture uses the same incomplete-assessment flow. The chooser
-defaults to **Continue without camera data**. **Use unchecked camera data** is an
+and reaps every worker before offering a choice. Checks continue until completion,
+manual stop or a resource/data failure; a two-minute timer does not stop them. The
+chooser defaults to **Continue without camera data**. **Use unchecked camera data** is an
 explicit opt-in; the final generation confirmation also labels that contribution
 unchecked. Fresh Core randomness remains mandatory and is requested only afterward.
+The chooser explains that camera data may add useful randomness but never replaces
+or weakens Core's protection. This describes the cryptographic mixing design under
+the existing Core RNG/SHA-256 assumptions, not a quantified credit for unchecked
+data or a guarantee about compromised software or hardware.
 
 The stopped-checks screen states that there is no final randomness estimate.
 Details show only finished individual results, with the warning that unfinished
@@ -195,7 +200,7 @@ values. NIST's `-t` option limits the separate bitstring assessment to the first
 branch's workload and coverage; it is not an equivalent full-bitstring assessment
 or a guarantee of completion on slow hardware. The fixed prefix must not be
 selected or retried to improve an estimate. Camera acquisition, sample selection,
-hashing, resource limits and mandatory system randomness are unchanged. Details
+hashing, memory/output limits and mandatory system randomness are unchanged. Details
 show the bitstring limit alongside the original-symbol sample count.
 It runs as a fresh executable, separate from the signer and camera, using sealed
 sample input and a bounded anonymous JSON output. No sample hash or full JSON is
@@ -215,8 +220,10 @@ unavailable compression, tuple or predictor estimate; that produces a warning,
 not an unqualified complete result. Missing mandatory results are rejected.
 Schema checks do not prove that a compromised worker ran the estimators.
 One OpenMP thread is allowed in production; process limits forbid additional
-threads/processes. The assessment has a separate memory/CPU/output budget; scanner
-confinement is not weakened. Cancellation kills and waits for every worker.
+threads/processes. The assessment has a separate memory/output budget; scanner
+confinement is not weakened. It does not install a CPU limit or override inherited
+OS CPU limits. Capture and stall watchdogs remain enforced. Cancellation kills and
+waits for every worker.
 
 Pins, runtime dependencies, measured timings and physical-test limitations are
 recorded in [dependencies](DEPENDENCIES.md) and [benchmarks](ENTROPY_BENCHMARKS.md). Estimates from synthetic

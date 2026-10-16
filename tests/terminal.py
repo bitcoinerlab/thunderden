@@ -801,8 +801,8 @@ assert b"Write down your recovery words" not in p.all_text, "RNG failure exposed
 print("PASS: manual outcomes, corrections, private backup verification, cancellation and fatal RNG failure")
 
 for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant", 40, 80), ("frozen", 40, 80),
-                               ("bad-header", 40, 80), ("stalled-capture", 40, 80), ("cancel-assessment", 40, 80),
-                               ("cancel-assessment", 12, 40), ("timeout-assessment", 40, 80), ("bad-progress-assessment", 40, 80)):
+                               ("bad-header", 40, 80), ("stalled-capture", 40, 80), ("stalled-exit-assessment", 40, 80), ("cancel-assessment", 40, 80),
+                               ("cancel-assessment", 12, 40), ("long-assessment", 40, 80), ("bad-progress-assessment", 40, 80)):
     # Build-time hardlinks keep fixtures executable on the read-only test image;
     # the writable /tmp mount deliberately remains noexec.
     probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
@@ -810,13 +810,19 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
     start_generation(p, camera=True, manual=b"3" if scenario == "valid" else b"\r")
     address_action(p, b"Enter: start")
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
-    if scenario == "cancel-assessment":
+    if scenario in ("cancel-assessment", "long-assessment"):
         p.wait(b"Esc: stop checks")
         p.wait(b"Values: 655360/1048576 (62%)")
         assert b"Check: 8 of 9" in p.all_text and b"Elapsed:" in p.all_text
         assert b"Esc: Cancel" not in p.all_text.rsplit(b"\x1b[2J", 1)[-1]
         pids = children.read_text().split()
         assert pids
+        if scenario == "long-assessment":
+            # Drain real tty output while waiting: a full pty must not hide a
+            # parent timeout by blocking its elapsed-time updates.
+            p.wait(b"Elapsed: 123 seconds", timeout=135)
+            assert p.process.poll() is None and children.read_text().split() == pids
+            assert b"Camera checks did not finish" not in p.all_text
         p.send(b"\x1b")
         p.wait(b"Camera checks stopped early")
         address_action(p, b"Enter/1-2: Select", b"d")
@@ -824,12 +830,20 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
         rendered = b" ".join(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b" ", p.all_text).split())
         assert b"7 of 9 checks finished." in rendered
         assert b"There is no final randomness estimate" in rendered
+        # Exclude headers, footers and page instructions between wrapped lines.
+        body = 6 if rows >= 20 else 5
+        copy = b" ".join(text for row, text in re.findall(
+            rb"\x1b\[(\d+);\d+H(?:\x1b\[[0-9;]*[mK])*([^\x1b\r\n]*)", p.all_text)
+            if body <= int(row) < rows - 2 and not text.startswith(b"Press Enter"))
+        copy = b" ".join(copy.split())
+        assert b"Fresh randomness from Bitcoin Core is used either way." in copy
+        assert b"Camera data may add useful randomness, but it never replaces or weakens Bitcoin Core's protection." in copy
         assert b"Completed checks only." in rendered and b"Unfinished checks could lower" in rendered
         assert b"Most Common Value (camera values):" in rendered and b"0.000000 bits per value" in rendered
         assert b"Estimated randomness in checked data:" not in rendered
         assert all(not Path(f"/proc/{pid}").exists() for pid in pids), "Cancelled assessment left a worker alive"
         assert not children.read_text().strip(), "Workers survived into the stopped-checks choice"
-        if columns == 40:
+        if columns == 40 or scenario == "long-assessment":
             # The safe default discards the optional camera contribution.
             address_action(p, b"Enter/1-2: Select", b"\r")
             p.wait(b"Camera readings: not included")
@@ -877,29 +891,25 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
             word(p, index, 12, value)
         output, _ = p.finish(0)
         assert b"BACKUP VERIFIED" in output
-    elif scenario == "timeout-assessment":
-        p.wait(b"Camera checks did not finish", timeout=135)
-        assert not children.read_text().strip(), "Timed-out assessment left a worker alive"
-        address_action(p, b"Enter/1-2: Select", b"1")
-        p.wait(b"Camera readings: not included")
-        address_action(p, b"Enter: generate words", b"\x1b")
-        p.finish(2)
     else:
         p.wait(b"Camera data cannot be used", timeout=135)
         assert not children.read_text().strip(), "Failed camera attempt left a worker alive"
         assert b"Use unchecked camera data" not in p.all_text, "Capture fault offered an unchecked contribution"
+        if scenario == "stalled-exit-assessment":
+            assert b"Camera collection took too long" in p.all_text
         address_action(p, b"Enter/1-2: Select", b"1")
         p.wait(b"Camera readings: not included")
         address_action(p, b"Enter: generate words", b"\x1b")
         p.finish(2)
     assert b"sha256" not in p.all_text and b"commandline" not in p.all_text, "Estimator metadata leaked onto the terminal"
-print("PASS: complete and unchecked camera generation, partial-result warnings, progress, malformed streams, faults and total timeout")
+print("PASS: complete and unchecked camera generation, partial-result warnings, progress, faults and manual stop beyond two minutes")
 
 # Stopping before capture completes cannot offer an unchecked contribution.
 p = Probe("entropy-generate", executable=str(Path(sys.argv[1]).resolve().parent / "entropy-fixtures/stalled-capture/terminal-probe"))
 start_generation(p, camera=True)
 address_action(p, b"Enter: start")
 p.wait(b"Esc: stop camera")
+p.wait(b"Check: 0 of 9")
 p.send(b"\x1b")
 p.finish(2)
 assert b"Use unchecked camera data" not in p.all_text

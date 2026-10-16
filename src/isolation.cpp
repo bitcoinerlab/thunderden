@@ -86,8 +86,8 @@ void ConfineScanner()
 
 void ConfineAssessment()
 {
-    const rlimit cpu{120, 120}, output{65536, 65536};
-    Require(setrlimit(RLIMIT_CPU, &cpu) == 0 && setrlimit(RLIMIT_FSIZE, &output) == 0, "Cannot bound assessment resources");
+    const rlimit output{65536, 65536};
+    Require(setrlimit(RLIMIT_FSIZE, &output) == 0, "Cannot bound assessment output");
     ConfineWorker(512 * 1024 * 1024);
 }
 }

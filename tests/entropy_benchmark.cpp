@@ -92,7 +92,7 @@ int main(int argc, char** argv)
         td::Require(total >= td::ENTROPY_TEST_SAMPLES, "Not enough lab samples");
         if (!assessment) assess();
         while (!status) {
-            td::Require(!stopped && Seconds(started) < td::ENTROPY_TOTAL_SECONDS, "Assessment cancelled or timed out");
+            td::Require(!stopped, "Assessment cancelled");
             status = assessment->PollExit(); assessment_time = Seconds(assessment_start);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }

@@ -42,7 +42,11 @@ int main(int argc, char** argv)
             return 0;
         }
         if (mode.find("confined") != mode.npos) {
+            rlimit cpu_before{}, cpu_after{};
+            td::Require(getrlimit(RLIMIT_CPU, &cpu_before) == 0, "Cannot read inherited CPU limit");
             td::ConfineAssessment();
+            td::Require(getrlimit(RLIMIT_CPU, &cpu_after) == 0 && cpu_before.rlim_cur == cpu_after.rlim_cur
+                && cpu_before.rlim_max == cpu_after.rlim_max, "Assessment imposed a CPU timeout");
             for (const auto* path : {"/etc/passwd", "/dev/tty", "/proc/self/exe"}) td::Require(open(path, O_RDONLY) < 0, "Worker opened filesystem/terminal");
             const auto parent = "/proc/" + std::to_string(getppid()) + "/mem";
             td::Require(open(parent.c_str(), O_RDONLY) < 0 && getenv("ENTROPY_TEST_SECRET") == nullptr, "Worker inherited parent access");
@@ -52,7 +56,7 @@ int main(int argc, char** argv)
             try { std::thread extra([] {}); extra.join(); } catch (const std::system_error&) { thread_denied = true; }
             td::Require(thread_denied, "Worker created another thread");
             td::Require(mmap(nullptr, 513UL * 1024 * 1024, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) == MAP_FAILED, "Worker escaped memory budget");
-            for (const auto& [kind, bound] : {std::pair{RLIMIT_AS, 512UL * 1024 * 1024}, {RLIMIT_NPROC, 0UL}, {RLIMIT_CPU, 120UL}, {RLIMIT_FSIZE, 65536UL}}) {
+            for (const auto& [kind, bound] : {std::pair{RLIMIT_AS, 512UL * 1024 * 1024}, {RLIMIT_NPROC, 0UL}, {RLIMIT_FSIZE, 65536UL}}) {
                 rlimit value{}; td::Require(getrlimit(kind, &value) == 0 && value.rlim_max == bound, "Worker resource budget changed");
             }
             const unsigned char ok = 1; td::Require(write(1, &ok, 1) == 1, "No confinement reply");
@@ -93,6 +97,7 @@ int main(int argc, char** argv)
         unsigned char flags[4]{};
         if (mode.find("frozen") != mode.npos) WriteBE32(flags, 1);
         Send(4, flags);
+        if (mode.find("stalled-exit") != mode.npos) { while (true) pause(); }
         return 0;
     } catch (...) { return 1; }
 }
