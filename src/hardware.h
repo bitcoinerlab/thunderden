@@ -13,8 +13,8 @@ void ConfigureConsole(int tty);
 // repeat signing/registration or change the reply being shown.
 void ShowQR(Terminal& terminal, const QRMessage& message, const ReviewScreen* review = nullptr);
 void ShowQR(Terminal& terminal, const std::string& text, const ReviewScreen* review = nullptr);
-bool ShowRecoveryWords(Terminal& terminal, std::span<const unsigned char> mnemonic);
-void ShowSeedQR(Terminal& terminal, std::span<const unsigned char> mnemonic);
+bool ShowRecoveryWords(Terminal& terminal, std::span<const unsigned char> mnemonic, bool reviewing = false);
+bool ShowSeedQR(Terminal& terminal, std::span<const unsigned char> mnemonic, bool reviewing = false);
 
 class Display {
     int fd_{-1}, tty_;
@@ -40,6 +40,6 @@ public:
     Display& operator=(const Display&) = delete;
     void Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress, bool seed = false);
     void QR(const QRImage& image, std::string_view caption, std::string_view instruction = "Use your wallet app to scan this QR code.");
-    bool RecoveryWords(std::span<const unsigned char> mnemonic, const QRImage* qr, SeedQRFormat format);
+    bool RecoveryWords(std::span<const unsigned char> mnemonic, const QRImage* qr, SeedQRFormat format, bool reviewing = false);
 };
 }

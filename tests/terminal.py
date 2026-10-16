@@ -709,6 +709,63 @@ def export_review(p):
 
 
 for mode in ("seed-standard", "seed-compact"):
+    for rows, columns in ((12, 40), (24, 80)):
+        p = Probe(mode, rows=rows, columns=columns)
+        p.enter(b"Enter/1-3: Select", b"1")
+        p.wait(b"Recovery words scanned")
+        address_action(p, b"S: Show words/QR", b"s")
+        assert b"abandon" not in p.all_text and b"Private recovery backup" not in p.all_text
+        for attempt in range(2):
+            p.wait(b"Private recovery backup")
+            p.wait(b"3. abandon" if rows == 12 else b"12. about")
+            assert b"Passphrase: " not in p.all_text and b"Check your backup" not in p.all_text
+            p.send(b"\r" if attempt and rows == 24 else b"\x1b")
+            p.wait(b"Recovery words scanned")
+            p.wait(b"S: Show words/QR")
+            last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+            assert b"abandon" not in last and b"about" not in last
+            assert b"Make sure your screen is private" not in p.all_text
+            if not attempt:
+                for _ in range(4):
+                    p.send(b"\x1b")
+                    time.sleep(0.02)
+                assert p.process.poll() is None and b"Passphrase: " not in p.all_text
+                p.send(b"S")
+        p.send(b"\r")
+        address_number(p, b"Passphrase: ")
+        output, _ = p.finish(0)
+        assert b"LOADED 73c5da0a SCANS 1" in output
+
+for choice, count, last in ((1, 12, "about"), (2, 15, "address"), (3, 18, "agent"), (4, 21, "admit"), (5, 24, "art")):
+    p = Probe("seed-typed")
+    p.enter(b"Enter/1-3: Select", b"2")
+    p.enter(b"1: 12 words", str(choice).encode())
+    for index in range(1, count):
+        word(p, index, count, "abandon")
+    # A Show key queued with the final word must not expose the validated phrase.
+    p.enter(f"Word {count} of {count}: ".encode(), last.encode() + b"\rS")
+    p.wait(b"Recovery words entered")
+    label = b"S: Show words/QR" if count in (12, 24) else b"S: Show words"
+    p.wait(label)
+    assert b"abandon" not in p.all_text and b"Private recovery backup" not in p.all_text
+    p.send(b"s")
+    p.wait(b"Private recovery backup")
+    p.wait(b"3. abandon")
+    if count not in (12, 24):
+        p.wait(b"Seed QR supports 12 or 24 words.")
+        assert b"Q: Seed QR" not in p.all_text
+    p.send(b"\x1b")
+    p.wait(b"Recovery words entered")
+    p.wait(label)
+    p.send(b"\r")
+    p.enter(b"Passphrase: ", b"\r")
+    output, _ = p.finish(0)
+    assert output.startswith(b"LOADED ") and b"SCANS 0" in output
+    assert b"Check your backup" not in p.all_text
+print("PASS: optional typed/scanned backup views, Show words/QR label, no default/queued disclosure, hide/back and all import lengths")
+
+
+for mode in ("seed-standard", "seed-compact"):
     p = Probe(mode)
     p.wait(b"3: Create a new wallet")
     assert b"Share a public key" not in p.all_text
@@ -999,6 +1056,7 @@ for choice, network, coin in [(b"\r", b"Bitcoin mainnet", 0), (b"2", b"Signet", 
     p.wait(b"Start a session")
     assert b"Share a public key" not in p.all_text and b"End session" not in p.all_text
     mnemonic(p, MNEMONIC)
+    address_action(p, b"Enter: continue")
     p.enter(b"Passphrase: ", b"\r")
     p.enter(b"3: End session (clear keys)", b"2")
     p.enter(b"Enter a custom path (advanced)", b"8")
@@ -1022,6 +1080,7 @@ p.wait(b"These words do not make a valid recovery phrase.")
 assert b"Passphrase: " not in p.all_text, "Passphrase requested before mnemonic validation"
 for index, value in enumerate(MNEMONIC, 1):
     word(p, index, 12, value)
+address_action(p, b"Enter: continue")
 p.enter(b"Passphrase: ", b"\r")
 for attempt in range(2):
     p.wait(b"3: End session (clear keys)")
@@ -1189,6 +1248,7 @@ print("PASS: hidden recovery words, opt-in visibility, rejected replacements, ov
 p = Probe(executable=sys.argv[2], controlling=True, rows=24)
 p.enter(b"5: Legacy testnet3", b"4")
 mnemonic(p, MNEMONIC)
+address_action(p, b"Enter: continue")
 p.enter(b"Passphrase: ", b" A Case  \r")
 p.enter(b"Repeat passphrase: ", b" A Case\r")
 p.wait(b"Press Enter to continue.")
@@ -1248,6 +1308,7 @@ with tempfile.TemporaryDirectory() as temporary:
         p.send(network)
         p.wait(b"Regtest" if network == b"4" else b"Testnet4")
         mnemonic(p, words)
+        address_action(p, b"Enter: continue")
         p.enter(b"Passphrase: ", passphrase + b"\r")
         if passphrase:
             p.enter(b"Repeat passphrase: ", passphrase + b"\r")

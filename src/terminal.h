@@ -34,7 +34,8 @@ class Terminal {
     void Draw(const Layout& view, std::string_view title, const ReviewLines& rows,
         std::string_view footer, int selected = -1, std::string_view pager = {}, bool warning = false);
     bool Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
-        const ReviewLines& details, PageMode mode, bool warning = false, std::string_view summary_prompt = {});
+        const ReviewLines& details, PageMode mode, bool warning = false, std::string_view summary_prompt = {},
+        const std::function<void()>& show_backup = {}, std::string_view show_label = {});
 public:
     Terminal();
     explicit Terminal(int owned_fd);
@@ -55,7 +56,8 @@ public:
         std::string_view help = {});
     SecretBytes Mnemonic(unsigned count = 0);
     SecretBytes ManualEntropy(ManualSource source, unsigned words);
-    void BackupWords(std::span<const unsigned char> mnemonic);
+    void BackupWords(std::span<const unsigned char> mnemonic, bool reviewing = false);
+    bool ReviewRecoveryWords(std::span<const unsigned char> mnemonic, const ReviewScreen& review);
     SecretBytes CameraEntropy(bool& unchecked);
     std::optional<Position> SearchAddress(const Policy& policy, const CScript& script,
         std::string_view wallet, uint32_t& next, uint32_t end);

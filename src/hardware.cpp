@@ -51,26 +51,28 @@ void ShowQR(Terminal& terminal, const std::string& text, const ReviewScreen* rev
     ShowFrames(terminal, text, nullptr, review);
 }
 
-void ShowSeedQR(Terminal& terminal, std::span<const unsigned char> mnemonic)
+bool ShowSeedQR(Terminal& terminal, std::span<const unsigned char> mnemonic, bool reviewing)
 {
     auto format = SeedQRFormat::Standard;
     Display display(terminal);
     while (true) {
         const auto data = EncodeSeedQR(mnemonic, format);
         const QRImage image(data, format == SeedQRFormat::Standard);
-        display.QR(image, format == SeedQRFormat::Standard ? "Standard SeedQR   F: Compact   Esc: Words"
-            : "CompactSeedQR   F: Standard   Esc: Words", "Private recovery backup. Keep it private like your words.");
+        const std::string caption = std::string(format == SeedQRFormat::Standard ? "Standard SeedQR   F: Compact" : "CompactSeedQR   F: Standard")
+            + (reviewing ? "   Q: Words   Esc: Back" : "   Esc: Words");
+        display.QR(image, caption, "Private recovery backup. Keep it private like your words.");
         terminal.Flush();
         while (true) {
             const int key = terminal.Key();
-            if (key == 27 || key == 3 || key == 'q' || key == 'Q') return;
+            if (key == 27 || key == 3 || (reviewing && (key == '\r' || key == '\n'))) return reviewing;
+            if (key == 'q' || key == 'Q') return false;
             if (key == 'f' || key == 'F') break;
         }
         format = format == SeedQRFormat::Standard ? SeedQRFormat::Compact : SeedQRFormat::Standard;
     }
 }
 
-bool ShowRecoveryWords(Terminal& terminal, std::span<const unsigned char> mnemonic)
+bool ShowRecoveryWords(Terminal& terminal, std::span<const unsigned char> mnemonic, bool reviewing)
 {
     // Text-only development consoles retain the existing paginated word backup.
     const int fd = open("/dev/fb0", O_RDWR | O_CLOEXEC);
@@ -82,11 +84,14 @@ bool ShowRecoveryWords(Terminal& terminal, std::span<const unsigned char> mnemon
     while (true) {
         const auto data = EncodeSeedQR(mnemonic, format);
         const QRImage image(data, format == SeedQRFormat::Standard);
-        if (!display.RecoveryWords(mnemonic, visible ? &image : nullptr, format)) return false;
+        if (!display.RecoveryWords(mnemonic, visible ? &image : nullptr, format, reviewing)) return false;
         terminal.Flush();
         while (true) {
             const int key = terminal.Key();
-            if (key == 27 || key == 3) throw Cancelled{};
+            if (key == 27 || key == 3) {
+                if (reviewing) return true;
+                throw Cancelled{};
+            }
             if (key == '\r' || key == '\n') return true;
             if (key == 'q' || key == 'Q') { visible = !visible; break; }
             if (visible && (key == 'f' || key == 'F')) {
@@ -277,7 +282,7 @@ void Display::Code(const QRImage& image, unsigned x, unsigned y, unsigned scale)
     }
 }
 
-bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRImage* qr, SeedQRFormat format)
+bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRImage* qr, SeedQRFormat format, bool reviewing)
 {
     const std::string_view words(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
     const size_t count = 1 + std::count(words.begin(), words.end(), ' ');
@@ -289,7 +294,7 @@ bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRIma
     Clear();
     Text(16, 16, "THUNDER DEN");
     Text(variable_.xres - 16 - network_.size() * font_width_, 16, network_);
-    Text(16, 16 + 2 * row, "Write down your recovery words");
+    Text(16, 16 + 2 * row, reviewing ? "Private recovery backup" : "Write down your recovery words");
     // Render secrets directly from the secure mnemonic, never through ReviewLines
     // or a normal std::string screen cache.
     size_t start = 0;
@@ -309,8 +314,9 @@ bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRIma
         Text(qr_x, top + modules * scale, format == SeedQRFormat::Standard ? "Standard SeedQR" : "CompactSeedQR");
         Text(qr_x, top + modules * scale + row, "F: Switch format");
     } else Text(qr_x, top, "Seed QR hidden");
-    Text(16, bottom, "Copy every word in order.");
-    Text(16, bottom + row, qr ? "Q: Hide QR   Enter: Check backup   Esc: Cancel" : "Q: Show QR   Enter: Check backup   Esc: Cancel");
+    if (!reviewing) Text(16, bottom, "Copy every word in order.");
+    Text(16, bottom + row, reviewing ? qr ? "Q: Hide QR   Enter: Back   Esc: Back" : "Q: Show QR   Enter: Back   Esc: Back"
+        : qr ? "Q: Hide QR   Enter: Check backup   Esc: Cancel" : "Q: Show QR   Enter: Check backup   Esc: Cancel");
     return true;
 }
 }

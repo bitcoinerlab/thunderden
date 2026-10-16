@@ -328,7 +328,7 @@ int main()
             setup_width = width; setup_height = height;
             display_font_width = font_width; display_font_height = font_height;
             framebuffer.resize(width * height * 4);
-            for (const unsigned bytes : {16, 32}) for (const bool cancel : {false, true}) {
+            for (const unsigned bytes : {16, 32}) for (const bool cancel : {false, true}) for (const bool reviewing : {false, true}) {
                 winsize size{30, 80, 0, 0};
                 Check(openpty(&master, &slave, nullptr, nullptr, &size) == 0, "Cannot open seed backup tty");
                 Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain seed backup tty");
@@ -369,12 +369,57 @@ int main()
                 bool cancelled = false;
                 {
                     td::Terminal terminal(slave); terminal.SetNetwork("Bitcoin mainnet");
-                    try { terminal.BackupWords(words); } catch (const td::Cancelled&) { cancelled = true; }
+                    try { terminal.BackupWords(words, reviewing); } catch (const td::Cancelled&) { cancelled = true; }
                 }
-                Check(cancelled == cancel && step == (cancel ? 1U : 4U) && display_mode == KD_TEXT, "Seed backup navigation failed");
+                Check(cancelled == (cancel && !reviewing) && step == (cancel ? 1U : 4U) && display_mode == KD_TEXT, "Seed backup navigation failed");
                 for (size_t i = 0; i < framebuffer.size(); i += 4) Check(framebuffer[i] == 25, "Recovery pixels survived completion/cancellation");
                 close(master); display_input = {};
             }
+        }
+        setup_width = 640; setup_height = 480; display_font_width = 8; display_font_height = 16;
+        framebuffer.resize(640 * 480 * 4);
+        for (const unsigned bytes : {16, 32}) for (const bool show : {false, true}) {
+            winsize size{24, 80, 0, 0};
+            Check(openpty(&master, &slave, nullptr, nullptr, &size) == 0, "Cannot open import review tty");
+            Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain import review tty");
+            const auto words = td::EntropyMnemonic(td::SecretBytes(bytes));
+            unsigned step = 0;
+            framebuffer[0] = 17;
+            display_input = [&](pollfd* descriptors, int timeout) {
+                if (timeout == 30) return __real_poll(descriptors, 1, 0);
+                std::string text;
+                char buffer[4096];
+                for (ssize_t count; (count = read(master, buffer, sizeof(buffer))) > 0;) text.append(buffer, count);
+                if (step == 1 || step == 2 || step == 4) {
+                    Check(display_mode == KD_GRAPHICS, "Show did not open the private backup");
+                    std::vector<uint8_t> gray(640 * 480);
+                    for (size_t i = 0; i < gray.size(); ++i) gray[i] = framebuffer[i * 4];
+                    td::QRScanner scanner; const auto frames = scanner.Scan(gray, 640, 480);
+                    Check(frames.size() == 1, "Imported seed QR was unreadable");
+                    td::URReceiver receiver; receiver.Receive(frames[0]);
+                    Check(td::DecodeSeedQR(*receiver.Result()) == words, "Showing the imported backup changed its words");
+                    Check(receiver.Result()->type == (step == 2 ? "compact-seedqr" : "seedqr"), "Imported seed QR format was not reset/toggled");
+                } else {
+                    Check(display_mode == KD_TEXT && text.find("Recovery words scanned") != text.npos
+                        && text.find("S: Show words/QR") != text.npos
+                        && text.find("Show recovery words and QR on this screen") != text.npos, "Import review lost the Show action");
+                    if (step == 0) Check(framebuffer[0] == 17, "Import displayed the backup before Show");
+                    else for (size_t i = 0; i < framebuffer.size(); i += 4)
+                        Check(framebuffer[i] == 25, "Private pixels remained on the import review");
+                }
+                const std::string keys[]{"s", "f", "\033", "S", "\r", "\r"};
+                Check(step < 6, "Imported backup review did not finish");
+                const auto key = show ? keys[step] : "\r";
+                ++step;
+                Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send import review key");
+                return __real_poll(descriptors, 1, 1000);
+            };
+            {
+                td::Terminal terminal(slave);
+                Check(terminal.ReviewRecoveryWords(words, {"Recovery words scanned", {"Recovery words are ready."}, {}}), "Backup inspection cancelled the import");
+            }
+            Check(step == (show ? 6U : 1U) && display_mode == KD_TEXT, "Import review skipped or repeated approval");
+            close(master); display_input = {};
         }
         setup_width = WIDTH; setup_height = HEIGHT; display_font_width = 8; display_font_height = 16;
         framebuffer.resize(WIDTH * HEIGHT * 4);
@@ -385,38 +430,40 @@ int main()
         }
         Check(display_mode == KD_TEXT, "Small-screen fallback retained graphics mode");
         close(master);
-        winsize small_size{15, 40, 0, 0};
-        Check(openpty(&master, &slave, nullptr, nullptr, &small_size) == 0, "Cannot open paged backup tty");
-        Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain paged backup tty");
-        const auto small_words = td::EntropyMnemonic(td::SecretBytes(16));
-        unsigned small_step = 0;
-        display_input = [&](pollfd* descriptors, int timeout) {
-            if (timeout == 30) return __real_poll(descriptors, 1, 0);
-            std::string text;
-            char buffer[4096];
-            for (ssize_t count; (count = read(master, buffer, sizeof(buffer))) > 0;) text.append(buffer, count);
-            if (small_step == 1 || small_step == 2) {
-                Check(display_mode == KD_GRAPHICS, "Small seed QR did not open separately");
-                std::vector<uint8_t> gray(WIDTH * HEIGHT);
-                for (size_t i = 0; i < gray.size(); ++i) gray[i] = framebuffer[i * 4];
-                td::QRScanner scanner; const auto frames = scanner.Scan(gray, WIDTH, HEIGHT);
-                Check(frames.size() == 1, "Separate seed QR was unreadable");
-                td::URReceiver receiver; receiver.Receive(frames[0]);
-                Check(td::DecodeSeedQR(*receiver.Result()) == small_words, "Separate QR changed the seed");
-                Check(receiver.Result()->type == (small_step == 1 ? "seedqr" : "compact-seedqr"), "Separate QR format did not toggle");
-            } else {
-                Check(display_mode == KD_TEXT && text.find(small_step == 4 ? "7. " : "1. ") != text.npos,
-                    "Returning from separate QR skipped a word page");
-            }
-            const std::string keys[]{"q", "f", "\033", "\r", "\r"};
-            Check(small_step < 5, "Paged seed backup did not finish");
-            const auto& key = keys[small_step++];
-            Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send paged backup key");
-            return __real_poll(descriptors, 1, 1000);
-        };
-        { td::Terminal terminal(slave); terminal.BackupWords(small_words); }
-        Check(small_step == 5 && display_mode == KD_TEXT, "Separate QR did not return to word backup");
-        close(master); display_input = {};
+        for (const bool reviewing : {false, true}) {
+            winsize small_size{15, 40, 0, 0};
+            Check(openpty(&master, &slave, nullptr, nullptr, &small_size) == 0, "Cannot open paged backup tty");
+            Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain paged backup tty");
+            const auto small_words = td::EntropyMnemonic(td::SecretBytes(16));
+            unsigned small_step = 0;
+            display_input = [&](pollfd* descriptors, int timeout) {
+                if (timeout == 30) return __real_poll(descriptors, 1, 0);
+                std::string text;
+                char buffer[4096];
+                for (ssize_t count; (count = read(master, buffer, sizeof(buffer))) > 0;) text.append(buffer, count);
+                if (small_step == 1 || small_step == 2) {
+                    Check(display_mode == KD_GRAPHICS, "Small seed QR did not open separately");
+                    std::vector<uint8_t> gray(WIDTH * HEIGHT);
+                    for (size_t i = 0; i < gray.size(); ++i) gray[i] = framebuffer[i * 4];
+                    td::QRScanner scanner; const auto frames = scanner.Scan(gray, WIDTH, HEIGHT);
+                    Check(frames.size() == 1, "Separate seed QR was unreadable");
+                    td::URReceiver receiver; receiver.Receive(frames[0]);
+                    Check(td::DecodeSeedQR(*receiver.Result()) == small_words, "Separate QR changed the seed");
+                    Check(receiver.Result()->type == (small_step == 1 ? "seedqr" : "compact-seedqr"), "Separate QR format did not toggle");
+                } else {
+                    Check(display_mode == KD_TEXT && text.find(small_step == 4 ? "7. " : "1. ") != text.npos,
+                        "Returning from separate QR skipped a word page");
+                }
+                const std::string keys[]{"q", "f", "\033", "\r", "\r"};
+                Check(small_step < 5, "Paged seed backup did not finish");
+                const auto& key = keys[small_step++];
+                Check(write(master, key.data(), key.size()) == ssize_t(key.size()), "Cannot send paged backup key");
+                return __real_poll(descriptors, 1, 1000);
+            };
+            { td::Terminal terminal(slave); terminal.BackupWords(small_words, reviewing); }
+            Check(small_step == (reviewing ? 3U : 5U) && display_mode == KD_TEXT, "Separate QR did not return to word backup/review");
+            close(master); display_input = {};
+        }
         std::puts("PASS: 12/24-word VGA/high-DPI backups, visible Standard QR default, compact toggle, hide/show, unchanged words and pixel clearing");
         return 0;
     } catch (const std::exception& error) {

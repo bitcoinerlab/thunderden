@@ -337,8 +337,11 @@ the deployed legacy registry tags and shares the HD-key encoder with modern
 `hdkey` exports.
 
 Before loading keys, the start menu offers scanning a seed QR, entering recovery
-words or creating a new wallet. Scanned words need local confirmation before the
-normal optional-passphrase flow. The active menu then has three actions: scan a
+words or creating a new wallet. Both typed and scanned imports have a local review
+before the normal optional-passphrase flow. S optionally shows the private words
+and seed QR without changing them; Enter/Esc returns to the review, while ordinary
+Continue never displays the backup. Words are not retained in the active session
+for later export. The active menu then has three actions: scan a
 QR, share a public key and end the session. A subsequent seed scan offers keeping
 the session (default) or ending the signer process and rescanning in a fresh
 session; no in-place replacement or persistent secret handoff is used.

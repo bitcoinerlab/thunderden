@@ -37,18 +37,22 @@ SecretBytes Terminal::ManualEntropy(ManualSource source, unsigned words)
     }
 }
 
-void Terminal::BackupWords(std::span<const unsigned char> mnemonic)
+void Terminal::BackupWords(std::span<const unsigned char> mnemonic, bool reviewing)
 {
     ValidateMnemonic(mnemonic);
-    if (ShowRecoveryWords(*this, mnemonic)) return;
     const std::string_view text(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
+    const size_t count = 1 + std::count(text.begin(), text.end(), ' ');
+    const bool qr = count == 12 || count == 24;
+    if (qr && ShowRecoveryWords(*this, mnemonic, reviewing)) return;
     const auto view = View();
-    const size_t count = 1 + std::count(text.begin(), text.end(), ' '), per_page = view.height - 2;
+    const size_t per_page = view.height - 2;
     for (size_t first = 0; first < count; first += per_page) {
         const bool last = first + per_page >= count;
         const auto draw = [&] {
             Flush();
-            Draw(view, "Write down your recovery words", {}, last ? "Q: Seed QR   Enter: Check backup   Esc: Cancel" : "Q: Seed QR   Enter: Next   Esc: Cancel");
+            const std::string footer = std::string(qr ? "Q: Seed QR   " : "") + (last ? reviewing ? "Enter: Back" : "Enter: Check backup" : "Enter: Next")
+                + (reviewing ? "   Esc: Back" : "   Esc: Cancel");
+            Draw(view, reviewing ? "Private recovery backup" : "Write down your recovery words", {}, footer);
             size_t start = 0;
             for (size_t i = 0; i < std::min(count, first + per_page); ++i) {
                 const auto end = text.find(' ', start);
@@ -59,14 +63,20 @@ void Terminal::BackupWords(std::span<const unsigned char> mnemonic)
                 }
                 start = end + 1;
             }
-            Row(view, view.height - 1, "Copy every word in order.");
+            Row(view, view.height - 1, !qr ? "Seed QR supports 12 or 24 words." : reviewing ? "" : "Copy every word in order.");
         };
         draw();
         while (true) {
             const int key = Key();
             Require(View() == view, "The screen changed. Start backup again.");
-            if (key == 27 || key == 3) throw Cancelled{};
-            if (key == 'q' || key == 'Q') { ShowSeedQR(*this, mnemonic); draw(); }
+            if (key == 27 || key == 3) {
+                if (reviewing) return;
+                throw Cancelled{};
+            }
+            if (qr && (key == 'q' || key == 'Q')) {
+                if (ShowSeedQR(*this, mnemonic, reviewing)) return;
+                draw();
+            }
             if (key == '\r' || key == '\n') break;
         }
     }

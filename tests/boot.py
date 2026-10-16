@@ -98,6 +98,11 @@ with (args.output / "qemu.log").open("wb") as log:
         for word in ["abandon"] * 11 + ["about"]:
             text(word + "\n")
         time.sleep(1)
+        screenshot("import-review.ppm")
+        for _ in range(8):
+            key("right")  # Read import review without showing the private backup.
+        key("ret")  # Continue to the optional passphrase.
+        time.sleep(1)
         screenshot("passphrase.ppm")
         key("ret")  # Empty passphrase
         time.sleep(2)

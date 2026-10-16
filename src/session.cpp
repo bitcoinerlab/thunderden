@@ -5,6 +5,16 @@
 #include <algorithm>
 
 namespace td {
+bool Terminal::ReviewRecoveryWords(std::span<const unsigned char> mnemonic, const ReviewScreen& review)
+{
+    const auto count = 1 + std::count(mnemonic.begin(), mnemonic.end(), ' ');
+    const bool qr = count == 12 || count == 24;
+    auto lines = review.summary;
+    lines.insert(lines.end(), {"", qr ? "S: Show recovery words and QR on this screen" : "S: Show recovery words on this screen"});
+    return Pages(review.title, lines, "continue", review.details, PageMode::Confirm, false, {},
+        [&] { BackupWords(mnemonic, true); }, qr ? "S: Show words/QR" : "S: Show words");
+}
+
 std::unique_ptr<Keys> StartSession(Terminal& terminal, const std::function<QRMessage()>& scan)
 {
     while (true) {
@@ -12,17 +22,24 @@ std::unique_ptr<Keys> StartSession(Terminal& terminal, const std::function<QRMes
             const auto choice = terminal.Menu("Start a session", {"Scan a seed QR", "Enter recovery words", "Create a new wallet"},
                 "Load your recovery words, or create a new wallet.", false);
             SecretBytes mnemonic;
+            ReviewScreen review;
             if (choice == 0) {
                 const auto message = scan();
                 Require(IsSeedQR(message), "This isn't a seed QR. Scan a SeedQR or CompactSeedQR backup, or enter your recovery words instead.");
                 mnemonic = DecodeSeedQR(message);
                 const auto count = 1 + std::count(mnemonic.begin(), mnemonic.end(), ' ');
-                if (!terminal.Confirm("Recovery words scanned", {
+                review = {"Recovery words scanned", {
                     "This QR contains " + std::to_string(count) + " recovery words. They are the secret used to restore your wallet.", "",
-                    "Continue to use them for this session.", "", "If your wallet uses a passphrase, you'll enter it next."}, "continue",
+                    "Continue to use them for this session.", "", "If your wallet uses a passphrase, you'll enter it next."},
                     {message.type == "seedqr" ? "Format: Standard SeedQR" : "Format: CompactSeedQR", "Language: English BIP39",
-                        "A seed QR does not include your wallet passphrase or multisig wallet setup."})) continue;
+                        "A seed QR does not include your wallet passphrase or multisig wallet setup."}};
             } else mnemonic = choice == 1 ? terminal.Mnemonic() : NewMnemonic(terminal);
+            if (choice == 1) {
+                const auto count = 1 + std::count(mnemonic.begin(), mnemonic.end(), ' ');
+                review = {"Recovery words entered", {"You entered " + std::to_string(count) + " recovery words.", "",
+                    "Continue to use them for this session.", "", "If your wallet uses a passphrase, you'll enter it next."}, {}};
+            }
+            if (choice != 2 && !terminal.ReviewRecoveryWords(mnemonic, review)) continue;
             while (true) {
                 SecretInput visibility;
                 const auto passphrase = terminal.Input("Wallet passphrase (optional)", {

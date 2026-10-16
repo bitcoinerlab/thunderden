@@ -41,15 +41,26 @@ view without skipping word pages. A second seed scan cannot replace an active
 session: the user keeps the session or explicitly ends its process and rescans.
 The [seed QR guide](SEED_QR.md) records format ambiguity and secret-handling limits.
 
-All 20 rebuilt native suites passed without skips in 201.54 seconds (two parallel
-test slots). Coverage
-includes all nine published SeedSigner vectors, numeric/binary optical round
+Typed and scanned imports now offer an optional **S: Show words/QR** action before
+the passphrase. The private view uses the same words, supports format/visibility
+controls and returns to the import review with Enter or Esc. It does not trigger
+generation's backup-reentry check or retain the phrase in the loaded session.
+Manual 15/18/21-word imports have a words-only view. Normal Continue and queued
+input do not display the secret backup.
+
+All 20 rebuilt native suites passed without skips in 203.71 seconds (two parallel
+test slots). Coverage includes all nine published SeedSigner vectors,
+numeric/binary optical round
 trips (including NUL/CR/LF), strict seed validation, address precedence, confined
 seed IPC, full VGA previews and large request records. Framebuffer tests decode
 12/24-word backups at 640×480, 1280×800 and 2560×1600, switch/hide/restore the QR,
 check unchanged word pixels and clear the framebuffer on completion/cancellation.
 Terminal tests cover local scan confirmation, passphrases, fingerprint spacing
-and compact-menu scrolling; launcher tests retain fresh-process session clearing.
+and compact-menu scrolling. Import-view regressions cover typed/scanned seeds,
+all manual word counts, queued-Show rejection, default privacy, repeated viewing,
+held-Escape isolation, readable Standard/Compact QR output and private-pixel
+clearing before returning to review. Launcher tests retain fresh-process session
+clearing.
 
 Preview 9 images and their recorded physical/reproducibility results are unchanged.
 This feature has not yet been checked with a physical camera or a newly assembled

@@ -13,10 +13,23 @@ Thunder Den detects the format, closes the camera and explains what it scanned.
 Press Enter to use those recovery words, or Esc to discard the scan. The words
 are not automatically displayed. Enter your wallet passphrase next if you use one.
 
+After either scanning or typing recovery words, the import review also offers
+**S: Show recovery words and QR on this screen**; the bottom bar abbreviates this
+to **S: Show words/QR**. This optional view is labelled **Private recovery backup**.
+It shows the same words and their QR together, with **F** for Standard/Compact and
+**Q** to hide/show the QR. Enter or Esc returns from the combined view to the
+import review. On small screens, Enter advances word pages until the final Back
+action; Esc returns immediately, including from a separate QR view. You still
+press Enter on the review to proceed. Showing a backup does not require re-entering it,
+and reopening the view requires another explicit S. Keys queued during entry or
+scanning cannot open the view.
+
 Both QR formats support 12 or 24 English BIP39 words. Manual entry continues to
 support 12, 15, 18, 21 or 24 words. These are unencrypted backups: anyone with the
 QR has the recovery words. Neither format includes a passphrase or multisig setup.
 Keep those backups separately as appropriate for your wallet.
+For 15/18/21-word manual imports, **S: Show words** opens a words-only view and
+explains that seed QR support is limited to 12/24 words.
 
 The active menu shows the seed fingerprint after applying the optional passphrase,
 and any loaded multisig setup. The network remains in the top-right. A fingerprint
@@ -41,7 +54,9 @@ The QR is another copy of the recovery secret, not a public wallet-request QR.
 Do not photograph it or scan it with an online wallet app, phone or website.
 Use only a trusted offline device. The QR pixels are cleared when leaving the view.
 This feature does not keep the recovery phrase throughout the session merely to
-offer a later export; backup display happens during creation.
+offer a later export; backup display happens during creation or at the import
+review before the optional passphrase. The phrase is discarded after deriving
+the session keys.
 
 ## Formats and detection
 

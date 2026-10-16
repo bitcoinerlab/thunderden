@@ -409,7 +409,8 @@ SecretBytes Terminal::Mnemonic(unsigned count)
 }
 
 bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::string_view action,
-    const ReviewLines& details, PageMode mode, bool warning, std::string_view summary_prompt)
+    const ReviewLines& details, PageMode mode, bool warning, std::string_view summary_prompt,
+    const std::function<void()>& show_backup, std::string_view show_label)
 {
     const auto view = View();
     const auto wrapped = Wrap(lines, view.width);
@@ -446,6 +447,7 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
         visible.insert(visible.end(), instruction.begin(), instruction.end());
         const std::string pager = pages > 1 ? "Page " + std::to_string(page + 1) + "/" + std::to_string(pages) : "";
         std::string footer = (last ? "Enter: " + (inspecting ? std::string("Return to review") : std::string(action)) : "Right/n/Enter: Next")
+            + (last && show_backup ? "  " + std::string(show_label) : "")
             + (page ? "  Left/b: Back" : "") + (details.empty() ? "" : detailed ? "  d: Summary" : "  d: Details")
             + (mode == PageMode::Idle ? "" : mode == PageMode::Completed ? "  Esc: Finish" : "  Esc: Cancel");
         Flush();
@@ -457,6 +459,10 @@ bool Terminal::Pages(std::string_view title, const ReviewLines& lines, std::stri
         if (mode == PageMode::Idle) {
             if (key == 4) return false; // EOF stops the launcher rather than starting a session.
         } else if (key == 27 || key == 3 || key == 'q') return false;
+        if (last && show_backup && (key == 's' || key == 'S')) {
+            show_backup();
+            continue; // Repaint the same public page, clearing the private view.
+        }
         if ((key == 'd' || key == 'D') && !details.empty()) { detailed = !detailed; continue; }
         if ((key == 'b' || key == KEY_LEFT) && page) --page;
         if (key == 'n' || key == KEY_RIGHT || key == '\r' || key == '\n') {
