@@ -45,18 +45,28 @@ def extract(unsigned, root):
     (root / "boot.img").write_bytes(raw[:512])
     (root / "grub.img").write_bytes(raw[512:START])
     for source, target in (("/EFI/BOOT/BOOTX64.EFI", "thunderden.efi"),
-                           ("/bzImage", "bzImage"), ("/boot/grub/grub.cfg", "grub.cfg"),
+                           ("/boot/grub/grub.cfg", "grub.cfg"),
                            ("/boot/boot-policy.json", "boot-policy.json")):
         subprocess.run(["mcopy", "-i", f"{snapshot}@@{START}", "::" + source, root / target], check=True)
     policy = json.loads((root / "boot-policy.json").read_text())
-    require(set(policy) == {"format", "epoch"} and policy["format"] == 1
+    require(set(policy) == {"format", "epoch"} and type(policy["format"]) is int and policy["format"] == 2
             and type(policy["epoch"]) is int, "Unsupported boot-image format")
     require(315532800 <= policy["epoch"] <= 4354819199, "Invalid image timestamp")
     efi = (root / "thunderden.efi").read_bytes()
-    require(efi.startswith(b"MZ") and efi == (root / "bzImage").read_bytes(),
-            "Unsigned EFI payload must be the same self-contained kernel as the BIOS payload")
+    require(len(efi) >= 64 and efi.startswith(b"MZ"), "Expected a self-contained EFI kernel")
+    pe = int.from_bytes(efi[60:64], "little")
+    optional = pe + 24
+    require(efi[pe:pe + 4] == b"PE\0\0" and optional + 152 <= len(efi)
+            and int.from_bytes(efi[pe + 20:pe + 22], "little") >= 152
+            and efi[optional:optional + 2] == b"\x0b\x02"
+            and int.from_bytes(efi[optional + 108:optional + 112], "little") >= 5,
+            "Unsupported EFI PE header")
+    # PE32+ directory entry 4 holds the Authenticode certificate offset and size.
+    # There is no separate unsigned BIOS copy to detect signed input by comparison.
+    require(efi[optional + 144:optional + 152] == bytes(8),
+            "Expected an unsigned EFI kernel, not one with a certificate table")
     canonical = root / "canonical.img"
-    assemble(root, root / "grub.cfg", canonical, policy["epoch"])
+    assemble(root, root / "grub.cfg", canonical, policy["epoch"], root / "thunderden.efi")
     require(canonical.read_bytes() == raw,
             "Image is not the canonical unsigned layout (or packaging tools differ)")
     return policy["epoch"]

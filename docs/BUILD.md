@@ -140,7 +140,13 @@ repeatable disk-image assembly. It also creates `installed-files.json`, a list o
 the files and hashes inside the boot system, copied alongside the image above.
 
 Current source builds an unsigned image with a self-contained EFI kernel and a
-separate legacy BIOS path. Optional signing happens **after the build**, without
+legacy BIOS GRUB path that loads the same file at `/EFI/BOOT/BOOTX64.EFI`.
+The single-payload layout is image format 2 (unreleased; planned for preview 11),
+not the duplicated layout in preview 10. The disk remains 64 MiB; its used payload
+is approximately halved. Current packaging tools accept only format 2. Use the
+matching tagged tools to reconstruct older releases.
+
+Optional signing happens **after the build**, without
 giving the build a private key. See [signed images and Secure Boot](SECURE_BOOT.md)
 for manual developer/user signing, paired release assets and exact reconstruction
 of the signed image from the unsigned one and public signature material.

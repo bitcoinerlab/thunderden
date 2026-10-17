@@ -3,12 +3,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "build"))
-from secure_boot import certificate_fingerprint
+from secure_boot import START, certificate_fingerprint
 
 tool = Path(__file__).resolve().parents[1] / "build/secure_boot.py"
 unsigned = Path(sys.argv[1]).resolve()
@@ -36,6 +37,35 @@ with tempfile.TemporaryDirectory() as directory:
     efi = root / "unsigned.efi"
     run(sys.executable, "-B", tool, "prepare", unsigned, efi)
     run(sys.executable, "-B", tool, "prepare", unsigned, efi, success=False)  # Never overwrite.
+    policy = json.loads(run("mtype", "-i", f"{unsigned}@@{START}", "::/boot/boot-policy.json").stdout)
+    assert type(policy["format"]) is int and policy["format"] == 2
+    assert b"linux /EFI/BOOT/BOOTX64.EFI " in run("mtype", "-i", f"{unsigned}@@{START}", "::/boot/grub/grub.cfg").stdout
+    run("mdir", "-i", f"{unsigned}@@{START}", "::/bzImage", success=False)
+    kernel = efi.read_bytes()
+    pe = int.from_bytes(kernel[60:64], "little")
+    optional = pe + 24
+    mutations = []
+    for version in (1, 3, True, 2.0):
+        mutations.append(("/boot/boot-policy.json", json.dumps({**policy, "format": version}).encode(), b"Unsupported boot-image format"))
+    mutations.append(("/EFI/BOOT/BOOTX64.EFI", b"MZ" + bytes(30), b"Expected a self-contained EFI kernel"))
+    for offset, replacement in [(60, len(kernel).to_bytes(4, "little")), (optional, b"\x0b\x01"),
+                                (optional + 108, (4).to_bytes(4, "little"))]:
+        damaged = bytearray(kernel)
+        damaged[offset:offset + len(replacement)] = replacement
+        mutations.append(("/EFI/BOOT/BOOTX64.EFI", damaged, b"Unsupported EFI PE header"))
+    damaged = bytearray(kernel)
+    damaged[optional + 144:optional + 152] = (1024).to_bytes(4, "little") + (8).to_bytes(4, "little")
+    mutations.append(("/EFI/BOOT/BOOTX64.EFI", damaged, b"Expected an unsigned EFI kernel"))
+    mutations.append(("/bzImage", kernel, b"Image is not the canonical unsigned layout"))
+    for index, (target, data, reason) in enumerate(mutations):
+        image, replacement, output = root / f"invalid-{index}.img", root / "replacement", root / "rejected.efi"
+        shutil.copyfile(unsigned, image)
+        replacement.write_bytes(data)
+        run("mcopy", "-o", "-i", f"{image}@@{START}", replacement, "::" + target)
+        failure = run(sys.executable, "-B", tool, "prepare", image, output, success=False)
+        assert reason in failure.stderr and not output.exists(), (target, failure.stderr)
+        image.unlink()
+    print("PASS: format-2 shared payload; old/unknown formats, malformed/signed EFI and extra BIOS payload rejected")
     signature = root / "boot.pk7"
     run("sbsign", "--detached", "--key", root / "test.key", "--cert", certificate, "--output", signature, efi)
     # Disposable password only: confirm the manual tool supports an encrypted key prompt.
@@ -58,6 +88,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert metadata["certificate_sha256"] == fingerprint
         assert metadata["unsigned_efi_sha256"] == hashlib.sha256(efi.read_bytes()).hexdigest()
         assert (output / "thunderden.img").read_bytes() == unsigned.read_bytes()
+        run("mdir", "-i", f"{output / 'thunderden-signed.img'}@@{START}", "::/bzImage", success=False)
         assert not any(p.suffix == ".key" for p in output.iterdir())
         run(sys.executable, "-B", tool, "verify", output / "thunderden.img", output / "thunderden-signed.img",
             output / "thunderden-boot.pk7", output / "thunderden-signing.pem", "--fingerprint", fingerprint)

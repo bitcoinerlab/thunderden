@@ -198,7 +198,7 @@ with tempfile.TemporaryDirectory() as directory:
     image = root / "hostile-config.img"
     shutil.copyfile(signed_image, image)
     config = root / "grub.cfg"
-    config.write_text('menuentry "EVIL" { linux /bzImage rdinit=/bin/sh; initrd /evil.cpio; }\n')
+    config.write_text('menuentry "EVIL" { linux /EFI/BOOT/BOOTX64.EFI rdinit=/bin/sh; initrd /evil.cpio; }\n')
     copy_into(image, config, "/boot/grub/grub.cfg")
     copy_into(image, config, "/EFI/BOOT/grub.cfg")
     screenshot, _ = boot(image, "unsigned-grub-config-ignored", firmware, secure_variables)

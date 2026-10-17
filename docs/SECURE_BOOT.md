@@ -174,6 +174,11 @@ Run them from a reviewed checkout of the release you intend to use. The build
 and public verification tools use Docker; manual signing uses OpenSSL and
 `sbsign` from the Linux `sbsigntool` package on your trusted host.
 
+Current source uses only the single-payload image format 2 (planned for preview
+11). To reconstruct preview 9 or 10, use the tools from that release's tag instead.
+The disk-layout version is recorded in `/boot/boot-policy.json`; it is packaging
+metadata, not a firmware trust decision.
+
 <details>
 <summary>Compare your build with a published signed release</summary>
 
@@ -245,7 +250,8 @@ docker compose run --build --rm boot-tools python3 -B /work/build/secure_boot.py
   /out/latest/thunderden.img /out/latest/thunderden.efi
 ```
 
-This requires the new image layout; it cannot retrofit preview 8. Check that
+This requires an unsigned format-2 image; older layouts and already-signed EFI
+payloads are rejected. Check that
 the build is the one you intend to authorize, and record the reported EFI hash.
 
 **3. Sign it yourself on the host**, not through an agent or a key-mounted container:
@@ -313,7 +319,9 @@ not enforce a minimum release version: older validly signed software may boot.
 The protected executable is a directly booted EFI Linux kernel with its complete
 built-in initramfs. `CONFIG_CMDLINE_OVERRIDE` fixes its command line; built-in
 `noinitrd` disables the EFI stub's external initramfs loaders. BIOS GRUB remains
-a separate unauthenticated path. Neither signature checking nor byte-for-byte
+a separate unauthenticated path, loading that same EFI kernel through the Linux
+boot protocol without verifying its EFI signature. Sharing the file does not
+make BIOS authenticated. Neither signature checking nor byte-for-byte
 reconstruction makes compromised firmware trustworthy.
 
 </details>

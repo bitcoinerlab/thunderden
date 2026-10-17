@@ -70,11 +70,10 @@ def assemble(images, config, output, epoch, efi=None):
         subprocess.run(["mkfs.fat", "--invariant", "-F", "32", "-i", "54445532", "-n", "THUNDERDEN", "-h", str(start), fat], check=True)
         subprocess.run(["mmd", "-i", fat, "::/EFI", "::/EFI/BOOT", "::/boot", "::/boot/grub"], check=True)
         policy = Path(temporary) / "boot-policy.json"
-        policy.write_text(json.dumps({"format": 1, "epoch": epoch}, sort_keys=True) + "\n")
+        policy.write_text(json.dumps({"format": 2, "epoch": epoch}, sort_keys=True) + "\n")
         for source, destination in [
             (efi or images / "bzImage", "::/EFI/BOOT/BOOTX64.EFI"),
             (config, "::/boot/grub/grub.cfg"),
-            (images / "bzImage", "::/bzImage"),
             (policy, "::/boot/boot-policy.json"),
         ]:
             subprocess.run(["mcopy", "-i", fat, source, destination], check=True)

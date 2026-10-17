@@ -419,9 +419,14 @@ libraries, workers and startup configuration together. UEFI does not execute GRU
 or read its configuration. `CONFIG_CMDLINE_OVERRIDE` fixes the kernel command
 line; its built-in `noinitrd` is parsed by the EFI stub before either external
 initrd loader. Runtime networking/storage/module restrictions remain unchanged.
-Legacy BIOS retains its separate, unauthenticated GRUB path.
+Legacy BIOS retains its separate, unauthenticated GRUB path, which loads the same
+`/EFI/BOOT/BOOTX64.EFI` file through the Linux boot protocol. It does not verify
+the EFI signature; direct UEFI authentication is unchanged.
 
-Unsigned images are deterministic and contain identical EFI/BIOS kernel payloads.
+Image format 2 stores one shared EFI/BIOS kernel payload instead of two copies.
+Current tools accept only that format; earlier releases retain their tagged tools.
+Unsigned images remain deterministic, and preparation explicitly rejects EFI
+payloads with an existing certificate table rather than comparing duplicate files.
 Public-only post-processing verifies a detached EFI signature against an explicit
 certificate fingerprint and deterministically assembles the signed image. It can
 reconstruct and compare the entire signed disk byte-for-byte, without a private
