@@ -27,8 +27,8 @@ std::string NetworkName(ChainType network)
 ReviewLines PublicKeyReview(const Keys& keys, const Path& path)
 {
     return {
-        "This public key lets your wallet app find addresses and follow this account's activity.",
-        "", "It contains no private keys. Anyone who has it may be able to follow this account's activity.",
+        "This public key lets your wallet app find addresses and follow this account's activity. "
+        "It contains no private keys, but anyone who has it may also be able to follow that activity.",
         "", "Network: " + NetworkName(Params().GetChainType()),
         "Master fingerprint: " + HexStr(keys.RootFingerprint()), "Path: " + PathText(path),
     };

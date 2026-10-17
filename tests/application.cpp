@@ -267,6 +267,16 @@ UniValue Addresses(const td::Policy& policy)
 
 void PublicKeyImages(const td::Keys& keys)
 {
+    const td::Path account{0x80000030, 0x80000001, 0x80000064, 0x80000001};
+    auto review = td::PublicKeyReview(keys, account);
+    Check(review.size() == 5 && review[1].empty(), "Public-key explanation must be one paragraph");
+    Check(review.front().find("no private keys") != std::string::npos
+        && review.front().find("anyone who has it") != std::string::npos, "Public-key privacy explanation was lost");
+    review.insert(review.end(), {"Address type: Nested SegWit multisig (P2SH-P2WSH)", "Account: 100", "",
+        "Extended public key:", td::EncodePublic(keys.PublicAt(account), false)});
+    // An 80x24 console has 78 text columns and 14 review rows after its frame
+    // and final instruction. A standard export must not spill onto a second page.
+    Check(td::Wrap(review, 78).size() <= 14, "Public-key export does not fit one standard screen");
     td::QRScanner scanner;
     for (const auto& path : std::vector<td::Path>{{}, fixture::Path(0), fixture::Path(1, 7), fixture::Path(2, 7), td::Path(32, 0xffffffffU)}) {
         const auto text = td::PublicKeyText(keys, path);
