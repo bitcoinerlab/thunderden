@@ -2,9 +2,9 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img.sha256)
-from [v0.0.1-preview.9](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.10/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.10/thunderden.img.sha256)
+from [v0.0.1-preview.10](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.10).
 The release also includes `installed-files.json` for reviewing the built system.
 
 For optional Secure Boot, choose `thunderden-signed.img` and its matching checksum
@@ -84,11 +84,11 @@ while the project is under development.
 The menu order is Bitcoin mainnet, Signet, Testnet4, Regtest and legacy testnet3.
 Mainnet is initially highlighted, so choose the test network explicitly.
 
-Current source then offers **Scan a seed QR**, **Enter recovery words**, or
+Preview 10 offers **Scan a seed QR**, **Enter recovery words**, or
 **Create a new wallet** before showing wallet actions. The active menu identifies
 the loaded seed by its fingerprint and shows any loaded multisig setup. See
 [seed QR backups](SEED_QR.md) for the new backup display and format controls.
-These screens are not included in the published preview 9 images.
+These screens are included from preview 10.
 
 Use the arrow keys and Enter to choose an option, or press its number. Text size
 is selected automatically. The console uses a dark background and built-in

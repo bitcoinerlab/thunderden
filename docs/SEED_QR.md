@@ -1,6 +1,6 @@
 # Recovery words as QR codes
 
-**Current source; not included in the published preview 9 images.**
+**Included from `v0.0.1-preview.10`.**
 
 After choosing the Bitcoin network, Thunder Den offers **Scan a seed QR**,
 **Enter recovery words**, or **Create a new wallet**. Wallet actions become

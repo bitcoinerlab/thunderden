@@ -21,9 +21,9 @@ Available as a preview, with support for [Sparrow](#use-with-sparrow) and
 
 ## Download and boot
 
-**[Download the unsigned USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img)**
-· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden.img.sha256)
-· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9)
+**[Download the unsigned USB image (64 MiB)](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.10/thunderden.img)**
+· [SHA-256 checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.10/thunderden.img.sha256)
+· [Preview release notes and file inventory](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.10)
 
 This image boots x86-64 (Intel/AMD) laptops with BIOS or UEFI. You can prepare the
 USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot it.
@@ -34,8 +34,8 @@ USB on macOS, Linux or Windows; Apple Silicon Macs can write it but cannot boot 
 3. Wait for verification, eject the drive and boot the laptop from USB. Disable
    Secure Boot to boot this unsigned image.
 
-For optional Secure Boot, use the [signed image](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden-signed.img)
-([checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.9/thunderden-signed.img.sha256))
+For optional Secure Boot, use the [signed image](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.10/thunderden-signed.img)
+([checksum](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.10/thunderden-signed.img.sha256))
 and follow the [enrollment, verification and self-signing guide](docs/SECURE_BOOT.md).
 Both images contain the same runtime; the signed one requires the matching public
 certificate enrolled in enforcing UEFI firmware.
@@ -64,7 +64,7 @@ image.
 
 - English BIP39 recovery words with an optional printable ASCII passphrase.
 - [SeedQR and CompactSeedQR backups](docs/SEED_QR.md) for 12/24 words, with explicit
-  import confirmation and a seed-first menu (current source; not preview 9).
+  import confirmation and a seed-first menu (included from preview 10).
 - [Generate 12 or 24 recovery words](docs/ENTROPY.md) using Bitcoin Core randomness,
   with optional camera, coin or dice input and full backup re-entry.
 - Descriptor-based wallets, including SegWit and Taproot Miniscript.

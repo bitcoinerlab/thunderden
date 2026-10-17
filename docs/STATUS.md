@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-10-16, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-17, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
@@ -12,13 +12,12 @@ below. See the guide for current limitations.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.9`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.9),
+[`v0.0.1-preview.10`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.10),
 with unsigned/signed images, public signing material, checksums and installed-file
-inventory. BIOS/UEFI boot checks passed;
-USB write/read-back checks are recorded per image below. Broader laptop/camera
-coverage remains outstanding; this branch's clean-build comparison is recorded
-under authenticated UEFI boot below.
-Current executable sizes refer to the latest recorded build below.
+inventory. Verification is revision-scoped below: earlier boot, USB read-back and
+clean-build results do not automatically apply to this latest image. Broader
+laptop/camera coverage remains outstanding. Current executable sizes refer to
+preview 10; earlier verification records retain their original image scope.
 Preview 8 adds recovery-word generation with mandatory Bitcoin Core randomness,
 optional camera/coin/dice input and full backup re-entry. It includes the
 [seed-generation audit fixes](../audits/FINDINGS.md) and clearer generation screens.
@@ -27,7 +26,7 @@ The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
 separate from the automated checks below.
 
-## Seed QR sessions (unreleased)
+## Seed QR sessions (preview 10)
 
 Current source starts with scanning a seed QR, entering recovery words or creating
 a new wallet. SeedQR and CompactSeedQR support 12/24 English words, explicit local
@@ -48,8 +47,8 @@ generation's backup-reentry check or retain the phrase in the loaded session.
 Manual 15/18/21-word imports have a words-only view. Normal Continue and queued
 input do not display the secret backup.
 
-All 20 rebuilt native suites passed without skips in 203.71 seconds (two parallel
-test slots). Coverage includes all nine published SeedSigner vectors,
+At `6d1d09b4d7a6e39143c2d28feb36823f6dcea34b`, all 20 rebuilt native suites passed
+without skips in 203.71 seconds (two parallel test slots). Coverage includes all nine published SeedSigner vectors,
 numeric/binary optical round
 trips (including NUL/CR/LF), strict seed validation, address precedence, confined
 seed IPC, full VGA previews and large request records. Framebuffer tests decode
@@ -62,10 +61,41 @@ held-Escape isolation, readable Standard/Compact QR output and private-pixel
 clearing before returning to review. Launcher tests retain fresh-process session
 clearing.
 
-Preview 9 images and their recorded physical/reproducibility results are unchanged.
-This feature has not yet been checked with a physical camera or a newly assembled
-boot image; current coverage is native automated testing, including framebuffer
-rendering/decoding at VGA and high-DPI sizes.
+### Preview 10 image and follow-up checks (2026-10-17)
+
+The released runtime is built from `499f9abe99fcfca7b360b85a98d84e0413c7cf84`.
+The release tag adds documentation only above that revision; runtime/build inputs
+match the archived build. Both images are 67,108,864 bytes:
+
+- Unsigned: `e681941fadd1131fac8c234300ffc3b305e671632fefa8c4ed19208556476500`
+- Signed: `b82acb92955809c2d4513d250afcf02b224cfd72bead3afdd4f58c52a8a7313b`
+
+The `6d1d09b` image passed BIOS at 640×480 and unsigned UEFI at 1280×800,
+including decoding Standard/Compact backup QRs, hiding/restoring the QR, returning
+to the import review, public-account export and fresh-session restart. Secure Boot
+was not enforcing in those UEFI checks.
+
+Later UI changes at `a1929ca` passed the SeedQR, terminal and camera/framebuffer
+suites without skips. These check the shared header, orange network label,
+dividers, footer, centered QR captions and 12/24-word layouts at 640×480,
+1024×768, 1280×800, 1366×768 and 2560×1600, including format/visibility controls
+and private-pixel clearing. At `499f9ab`, the application suite passed, including a
+regression that keeps the standard public-key review on one 80×24 screen while
+retaining its privacy explanation. The final image build reused that matching
+passing evidence; the full 20-suite run above was not repeated on this revision.
+
+The final image uses the compatible pinned development build cache. Frozen source
+matches the compiled application, installed runtime hashes match the inventory,
+and kernel/image-content, repeat-assembly and canonical-layout checks passed.
+Manual signing remained separate from compilation. Public-only packaging verified
+the approved certificate and both detached and attached EFI signatures.
+
+No fresh empty-output build comparison, final-image VM boot matrix or final-image
+physical hardware confirmation is recorded for preview 10. Preview 9's signed-boot,
+camera, fee-policy, USB read-back and clean-build results below remain valid for
+their original revisions; they are not reclassified as pending or claimed for this
+new image. Further independent review remains deferred, and TD-005 remains open
+with conditional authenticated-boot mitigation.
 
 ## Fee verification (preview 9)
 
@@ -140,6 +170,8 @@ This initial lab checkpoint predates the maintainer's physical follow-up below.
 
 ### Current release candidate (2026-10-16)
 
+This subsection records preview 9, not the preview 10 image above.
+
 The candidate uses runtime source `e85d560a69eee6d6ec7a37f35cb8928d27ba5fae`, including
 the camera assessment progress/stop controls and completion-or-manual-stop policy
 cherry-picked from `master`. Both images are 67,108,864 bytes. Their SHA-256 hashes are:
@@ -204,7 +236,7 @@ The signing path runs in-process without a daemon, RPC server or node database.
 Core's RNG, allocation, logging support and shared MuSig helpers remain linked
 dependencies. MuSig policies and input metadata are rejected. Camera/QR decoding
 runs in an isolated process, separate from keys and local approval. The stripped
-current-candidate executables are a 2,697,904-byte signer, a 100,464-byte QR scanner,
+preview-10 executables are a 2,722,544-byte signer, a 116,848-byte QR scanner,
 a 30,808-byte camera entropy worker and a 220,040-byte NIST assessment worker, with
 shared libraries installed separately. The hybrid disk image is 64 MiB. See
 [Scanner isolation](ISOLATION.md) for the threat model and enforced boundary.

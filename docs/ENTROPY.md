@@ -4,12 +4,13 @@ Included in `v0.0.1-preview.8`, merged into `master` on 2026-10-14.
 The implementation follows the supplied entropy-generation specification v0.1,
 with manual input simplified to ordinary coin tosses or dice rolls.
 Independent AI review reports and fixes are recorded in the
-[audit findings](../audits/FINDINGS.md). Physical-camera validation and a fresh
-independent review of the corrected revision remain pending.
+[audit findings](../audits/FINDINGS.md). User-reported physical camera checks are
+recorded in [implementation status](STATUS.md#current-release-candidate-2026-10-16).
+Broader camera measurements and further independent review remain separate work.
 
 ## Sources and backup
 
-In current source, choose **Create a new wallet** on the initial **Start a session**
+From preview 10, choose **Create a new wallet** on the initial **Start a session**
 menu, then choose the length and optional sources. To use an existing wallet,
 choose **Enter recovery words** or **Scan a seed QR** instead. End the current
 session before generating another wallet. Preview 9 still asks for recovery words
@@ -41,7 +42,7 @@ All camera/assessment workers finish before manual input or final randomness.
 Re-enter the generated words to verify the backup before a key session is created.
 Before revealing the words, the interface asks the user to keep other people and
 cameras from seeing the screen and to write every word down in order.
-Current source shows a private [seed QR backup](SEED_QR.md) beside the words by
+From preview 10, a private [seed QR backup](SEED_QR.md) is shown beside the words by
 default; **F** switches Standard/Compact and **Q** hides/shows it. The QR is the
 same recovery secret: only scan it with a trusted offline device. The written-word
 check remains required. Contributions are not exported; neither words nor
