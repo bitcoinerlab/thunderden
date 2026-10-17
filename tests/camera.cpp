@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <stdexcept>
@@ -39,6 +40,21 @@ std::function<int(pollfd*, int)> display_input;
 void Check(bool ok, const char* message)
 {
     if (!ok) throw std::runtime_error(message);
+}
+
+void CheckPixel(unsigned x, unsigned y, std::array<uint8_t, 3> color, const char* message)
+{
+    const auto* pixel = framebuffer.data() + (y * setup_width + x) * 4;
+    Check(pixel[0] == color[2] && pixel[1] == color[1] && pixel[2] == color[0] && pixel[3] == 255, message);
+}
+
+void CheckText(unsigned x, unsigned y, std::string_view text, std::array<uint8_t, 3> color)
+{
+    // The fake font identifies each glyph with its ASCII bits in its first row.
+    for (size_t i = 0; i < text.size(); ++i) for (unsigned bit = 0; bit < 8; ++bit)
+        CheckPixel(x + i * display_font_width + bit, y,
+            text[i] != ' ' && (text[i] & (0x80 >> bit)) ? color : std::array<uint8_t, 3>{25, 26, 24},
+            "Backup text, alignment or color did not match the console frame");
 }
 }
 
@@ -163,6 +179,9 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
             font.height = display_font_height;
             font.charcount = 256;
             std::memset(font.data, 0xff, font.charcount * 64 * ((font.width + 7) / 8));
+            const unsigned stride = (font.width + 7) / 8;
+            for (unsigned ch = 0; ch < font.charcount; ++ch) font.data[ch * 64 * stride] = ch;
+            std::memset(font.data + ' ' * 64 * stride, 0, 64 * stride);
         }
     } else {
         Check(request == KDGETMODE, "Unexpected display ioctl");
@@ -253,11 +272,11 @@ int main()
             Check(framebuffer[image_pixel] == 255, "Unchanged progress prevented preview updates");
             Check(framebuffer[marker] == 17, "Unchanged preview caption was erased and redrawn");
             display.Preview(black, 2, 2, 0.5);
-            Check(framebuffer[marker] == 25, "Changed progress did not redraw the caption");
+            Check(framebuffer[marker] == 24, "Changed progress did not redraw the caption");
             display.QR(td::QRImage("public test"), "QR code");
             framebuffer[marker] = 17;
             display.Preview(black, 2, 2, 0.5);
-            Check(framebuffer[marker] == 25, "Clearing the display did not invalidate the preview caption");
+            Check(framebuffer[marker] == 24, "Clearing the display did not invalidate the preview caption");
         }
         close(master);
         Check(display_mode == KD_TEXT, "Display did not return to text mode");
@@ -324,12 +343,13 @@ int main()
         }
         std::puts("PASS: static/animated QR pixels, Enter/Space handling, repeated review, identical replies and Finish");
         for (const auto& [width, height, font_width, font_height] : {
-                std::tuple{640U, 480U, 8U, 16U}, {1280U, 800U, 16U, 32U}, {2560U, 1600U, 32U, 64U}}) {
+                std::tuple{640U, 480U, 8U, 16U}, {1024U, 768U, 10U, 18U}, {1280U, 800U, 16U, 32U},
+                {1366U, 768U, 16U, 32U}, {2560U, 1600U, 32U, 64U}}) {
             setup_width = width; setup_height = height;
             display_font_width = font_width; display_font_height = font_height;
             framebuffer.resize(width * height * 4);
             for (const unsigned bytes : {16, 32}) for (const bool cancel : {false, true}) for (const bool reviewing : {false, true}) {
-                winsize size{30, 80, 0, 0};
+                winsize size{static_cast<unsigned short>(height / font_height), static_cast<unsigned short>(width / font_width), 0, 0};
                 Check(openpty(&master, &slave, nullptr, nullptr, &size) == 0, "Cannot open seed backup tty");
                 Check(fcntl(master, F_SETFL, O_NONBLOCK) == 0, "Cannot drain seed backup tty");
                 const auto words = td::EntropyMnemonic(td::SecretBytes(bytes, 0x42));
@@ -339,6 +359,21 @@ int main()
                     if (timeout == 30) return __real_poll(descriptors, 1, 0);
                     char buffer[4096]; while (read(master, buffer, sizeof(buffer)) > 0) {}
                     Check(display_mode == KD_GRAPHICS, "Seed backup left graphics unexpectedly");
+                    const unsigned columns = std::min(80U, width / font_width - 2), left = (width / font_width - columns) / 2 * font_width;
+                    const unsigned right = left + columns * font_width, top = 5 * font_height;
+                    const unsigned divider = (height / font_height - 3) * font_height;
+                    CheckText(left, font_height, "THUNDER DEN", {255, 255, 250});
+                    CheckText(right - 15 * font_width, font_height, "Bitcoin mainnet", {247, 147, 26});
+                    CheckText(left, 2 * font_height, std::string(columns, '-'), {168, 171, 163});
+                    CheckText(left, 3 * font_height, reviewing ? "Private recovery backup" : "Write down your recovery words", {255, 255, 250});
+                    CheckText(left, divider, std::string(columns, '-'), {168, 171, 163});
+                    const std::string footer = std::string(step == 2 ? "Q: Show QR" : "Q: Hide QR")
+                        + (reviewing ? "   Enter: Back   Esc: Back" : "   Enter: Check backup   Esc: Cancel");
+                    CheckText(left, divider + font_height, footer, {168, 171, 163});
+                    CheckPixel(left, top - font_height, {25, 26, 24}, "Backup lost its title/body spacing");
+                    CheckPixel(left - 1, font_height, {25, 26, 24}, "Backup header lost its outer padding");
+                    if (!reviewing) CheckText(left, divider - 2 * font_height, "Copy every word in order.", {239, 239, 233});
+                    const unsigned qr_x = left + (bytes == 32 ? 33 : 18) * font_width, available = right - qr_x;
                     const unsigned factor = width > 1920 ? 2 : 1, w = width / factor, h = height / factor;
                     std::vector<uint8_t> gray(w * h);
                     for (unsigned y = 0; y < h; ++y) for (unsigned x = 0; x < w; ++x)
@@ -351,14 +386,31 @@ int main()
                         td::URReceiver receiver; receiver.Receive(frames[0]);
                         Check(receiver.Result() && td::DecodeSeedQR(*receiver.Result()) == words, "Displayed QR contained different recovery words");
                         Check(receiver.Result()->type == (step == 0 ? "seedqr" : "compact-seedqr"), "Wrong default/toggled seed QR format");
+                        unsigned x0 = width, y0 = height, x1 = 0, y1 = 0;
+                        for (unsigned y = top; y < divider; ++y) for (unsigned x = qr_x; x < right; ++x) {
+                            if (framebuffer[(y * width + x) * 4] != 255) continue;
+                            x0 = std::min(x0, x); y0 = std::min(y0, y);
+                            x1 = std::max(x1, x); y1 = std::max(y1, y);
+                        }
+                        Check(y0 == top && x1 - x0 == y1 - y0 && x0 >= qr_x && x1 < right,
+                            "Seed QR lost its square quiet border or body alignment");
+                        Check(std::abs(int(x0 + x1 + 1) - int(qr_x + right)) <= 1, "Seed QR was not centered in its column");
+                        const std::string_view label = step == 0 ? "Standard SeedQR" : "CompactSeedQR";
+                        const std::string_view action = step == 0 ? "F: Switch to Compact" : "F: Switch to Standard";
+                        const unsigned caption_y = y1 + 1 + font_height / 2, row = font_height + std::max(4U, font_height / 8);
+                        CheckText(qr_x + (available - label.size() * font_width) / 2, caption_y, label, {239, 239, 233});
+                        CheckText(qr_x + (available - action.size() * font_width) / 2, caption_y + row, action, {168, 171, 163});
+                        Check(caption_y + row + font_height <= divider - (reviewing ? 1 : 2) * font_height,
+                            "Seed QR captions overlapped the footer");
                     }
+                    if (step == 2) CheckText(qr_x + (available - 14 * font_width) / 2, top, "Seed QR hidden", {168, 171, 163});
                     // Left-side word pixels must be identical across format/hide changes.
-                    std::vector<uint8_t> left;
-                    for (unsigned y = 16 + 4 * (font_height + 4); y < height - 16 - 2 * (font_height + 4); ++y)
-                        left.insert(left.end(), framebuffer.begin() + (y * width + 16) * 4,
-                            framebuffer.begin() + (y * width + 16 + (bytes == 32 ? 30 : 15) * font_width) * 4);
-                    if (step == 0) original_words = left;
-                    else Check(left == original_words, "Toggling seed QR changed or erased recovery words");
+                    std::vector<uint8_t> word_pixels;
+                    for (unsigned y = top; y < divider - 2 * font_height; ++y)
+                        word_pixels.insert(word_pixels.end(), framebuffer.begin() + (y * width + left) * 4,
+                            framebuffer.begin() + (y * width + left + (bytes == 32 ? 30 : 15) * font_width) * 4);
+                    if (step == 0) original_words = word_pixels;
+                    else Check(word_pixels == original_words, "Toggling seed QR changed or erased recovery words");
                     const std::string keys[]{"f", "q", "Q", "\r"};
                     Check(step < 4, "Seed backup did not finish");
                     const std::string key = cancel ? "\033" : keys[step];
@@ -372,7 +424,8 @@ int main()
                     try { terminal.BackupWords(words, reviewing); } catch (const td::Cancelled&) { cancelled = true; }
                 }
                 Check(cancelled == (cancel && !reviewing) && step == (cancel ? 1U : 4U) && display_mode == KD_TEXT, "Seed backup navigation failed");
-                for (size_t i = 0; i < framebuffer.size(); i += 4) Check(framebuffer[i] == 25, "Recovery pixels survived completion/cancellation");
+                for (unsigned y = 0; y < height; ++y) for (unsigned x = 0; x < width; ++x)
+                    CheckPixel(x, y, {25, 26, 24}, "Recovery pixels survived completion/cancellation");
                 close(master); display_input = {};
             }
         }
@@ -402,10 +455,10 @@ int main()
                 } else {
                     Check(display_mode == KD_TEXT && text.find("Recovery words scanned") != text.npos
                         && text.find("S: Show words/QR") != text.npos
-                        && text.find("Show recovery words and QR on this screen") != text.npos, "Import review lost the Show action");
+                        && text.find("Press S to show recovery words and QR on this screen.") != text.npos, "Import review lost the Show action");
                     if (step == 0) Check(framebuffer[0] == 17, "Import displayed the backup before Show");
-                    else for (size_t i = 0; i < framebuffer.size(); i += 4)
-                        Check(framebuffer[i] == 25, "Private pixels remained on the import review");
+                    else for (unsigned y = 0; y < 480; ++y) for (unsigned x = 0; x < 640; ++x)
+                        CheckPixel(x, y, {25, 26, 24}, "Private pixels remained on the import review");
                 }
                 const std::string keys[]{"s", "f", "\033", "S", "\r", "\r"};
                 Check(step < 6, "Imported backup review did not finish");

@@ -5,6 +5,7 @@
 #include "seed_qr.h"
 
 #include <linux/fb.h>
+#include <array>
 
 namespace td {
 // Configure the local console before dropping privileges or loading recovery words.
@@ -29,8 +30,9 @@ class Display {
     std::string network_;
     void Close();
     void Pixel(unsigned x, unsigned y, uint8_t gray);
+    void Pixel(unsigned x, unsigned y, std::array<uint8_t, 3> color);
     void Clear();
-    void Text(unsigned x, unsigned y, std::string_view text);
+    void Text(unsigned x, unsigned y, std::string_view text, std::array<uint8_t, 3> color = {239, 239, 233});
     void Code(const QRImage& image, unsigned x, unsigned y, unsigned scale);
     unsigned Caption(const ReviewLines& lines);
 public:

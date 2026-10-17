@@ -10,7 +10,7 @@ bool Terminal::ReviewRecoveryWords(std::span<const unsigned char> mnemonic, cons
     const auto count = 1 + std::count(mnemonic.begin(), mnemonic.end(), ' ');
     const bool qr = count == 12 || count == 24;
     auto lines = review.summary;
-    lines.insert(lines.end(), {"", qr ? "S: Show recovery words and QR on this screen" : "S: Show recovery words on this screen"});
+    lines.insert(lines.end(), {"", qr ? "Press S to show recovery words and QR on this screen." : "Press S to show recovery words on this screen."});
     return Pages(review.title, lines, "continue", review.details, PageMode::Confirm, false, {},
         [&] { BackupWords(mnemonic, true); }, qr ? "S: Show words/QR" : "S: Show words");
 }

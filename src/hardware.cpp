@@ -12,6 +12,8 @@
 
 namespace td {
 namespace {
+constexpr std::array<uint8_t, 3> BACKGROUND{25, 26, 24}, BRIGHT{255, 255, 250}, ACCENT{247, 147, 26}, MUTED{168, 171, 163};
+
 void ShowFrames(Terminal& terminal, std::string frame, URSender* sender, const ReviewScreen* review)
 {
     const bool animated = sender && sender->Parts() > 1;
@@ -196,9 +198,15 @@ Display::~Display() { Close(); }
 
 void Display::Pixel(unsigned x, unsigned y, uint8_t gray)
 {
+    Pixel(x, y, {gray, gray, gray});
+}
+
+void Display::Pixel(unsigned x, unsigned y, std::array<uint8_t, 3> color)
+{
     uint32_t value = 0;
+    size_t i = 0;
     for (const auto channel : {variable_.red, variable_.green, variable_.blue}) {
-        value |= (uint32_t(gray) >> (8 - channel.length)) << channel.offset;
+        value |= (uint32_t(color[i++]) >> (8 - channel.length)) << channel.offset;
     }
     if (variable_.transp.length) value |= ((1U << variable_.transp.length) - 1) << variable_.transp.offset;
     auto* pixel = memory_ + (y + variable_.yoffset) * size_t(fixed_.line_length)
@@ -209,7 +217,7 @@ void Display::Pixel(unsigned x, unsigned y, uint8_t gray)
 void Display::Clear()
 {
     preview_progress_ = -1;
-    for (unsigned y = 0; y < variable_.yres; ++y) for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, 25);
+    for (unsigned y = 0; y < variable_.yres; ++y) for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, BACKGROUND);
 }
 
 unsigned Display::Caption(const ReviewLines& lines)
@@ -218,7 +226,7 @@ unsigned Display::Caption(const ReviewLines& lines)
     const unsigned height = wrapped.size() * (font_height_ + 4) + 16;
     Require(height < variable_.yres / 2, "Not enough room for the camera or QR code.");
     for (unsigned y = variable_.yres - height; y < variable_.yres; ++y) {
-        for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, 25);
+        for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, BACKGROUND);
     }
     for (size_t row = 0; row < wrapped.size(); ++row) {
         Text(16, variable_.yres - height + 8 + row * (font_height_ + 4), wrapped[row]);
@@ -226,7 +234,7 @@ unsigned Display::Caption(const ReviewLines& lines)
     return height;
 }
 
-void Display::Text(unsigned xoff, unsigned yoff, std::string_view text)
+void Display::Text(unsigned xoff, unsigned yoff, std::string_view text, std::array<uint8_t, 3> color)
 {
     Require(xoff + text.size() * font_width_ <= variable_.xres && yoff + font_height_ <= variable_.yres, "Display text does not fit");
     const unsigned stride = (font_width_ + 7) / 8;
@@ -235,7 +243,7 @@ void Display::Text(unsigned xoff, unsigned yoff, std::string_view text)
         Require(ch >= 32 && ch <= 126, "Invalid display text");
         const auto* glyph = font_.data() + ch * 64 * stride;
         for (unsigned y = 0; y < font_height_; ++y) for (unsigned x = 0; x < font_width_; ++x)
-            Pixel(xoff + i * font_width_ + x, yoff + y, (glyph[y * stride + x / 8] & (0x80 >> (x % 8))) ? 239 : 25);
+            Pixel(xoff + i * font_width_ + x, yoff + y, (glyph[y * stride + x / 8] & (0x80 >> (x % 8))) ? color : BACKGROUND);
     }
 }
 
@@ -286,37 +294,54 @@ bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRIma
 {
     const std::string_view words(reinterpret_cast<const char*>(mnemonic.data()), mnemonic.size());
     const size_t count = 1 + std::count(words.begin(), words.end(), ' ');
-    const unsigned row = font_height_ + 4, top = 16 + 4 * row, bottom = variable_.yres - 16 - 2 * row;
+    // Match Terminal::View/Draw's centered console grid, including its blank
+    // title/body row and two bottom rows. Only the private body uses pixel layout.
+    const unsigned screen_columns = variable_.xres / font_width_, screen_rows = variable_.yres / font_height_;
+    if (screen_columns < 40 || screen_rows < 12) return false;
+    const unsigned width = std::min(80U, screen_columns - 2), left = (screen_columns - width) / 2 * font_width_;
+    const unsigned body = screen_rows >= 20 ? 6 : 5, top = (body - 1) * font_height_;
+    const unsigned divider = (screen_rows - 3) * font_height_, bottom = divider - (reviewing ? 1 : 2) * font_height_;
+    const unsigned row = font_height_ + std::max(4U, font_height_ / 8), gap = font_height_ / 2;
     const unsigned columns = count == 24 ? 2 : 1, per_column = (count + columns - 1) / columns;
-    const unsigned words_width = columns * 15 * font_width_, qr_x = 16 + words_width + 24;
-    if (top >= bottom || per_column * row > bottom - top || qr_x + 29 * 3 + 16 > variable_.xres
-        || 2 * row + 29 * 3 > bottom - top) return false;
+    const unsigned words_width = columns * 15 * font_width_, qr_x = left + words_width + 3 * font_width_;
+    const unsigned right = left + width * font_width_;
+    if (top >= bottom || per_column * row > bottom - top || qr_x >= right) return false;
+    const unsigned available = right - qr_x;
+    if (available < 21 * font_width_ || available < 37 * 3 || 2 * row + gap + 37 * 3 > bottom - top) return false;
     Clear();
-    Text(16, 16, "THUNDER DEN");
-    Text(variable_.xres - 16 - network_.size() * font_width_, 16, network_);
-    Text(16, 16 + 2 * row, reviewing ? "Private recovery backup" : "Write down your recovery words");
+    Text(left, (body - 5) * font_height_, "THUNDER DEN", BRIGHT);
+    Text(right - network_.size() * font_width_, (body - 5) * font_height_, network_, ACCENT);
+    const std::string rule(width, '-');
+    Text(left, (body - 4) * font_height_, rule, MUTED);
+    Text(left, (body - 3) * font_height_, reviewing ? "Private recovery backup" : "Write down your recovery words", BRIGHT);
+    Text(left, divider, rule, MUTED);
     // Render secrets directly from the secure mnemonic, never through ReviewLines
     // or a normal std::string screen cache.
     size_t start = 0;
     for (size_t i = 0; i < count; ++i) {
         const auto end = words.find(' ', start);
-        const unsigned x = 16 + (i / per_column) * 15 * font_width_, y = top + (i % per_column) * row;
+        const unsigned x = left + (i / per_column) * 15 * font_width_, y = top + (i % per_column) * row;
         Text(x, y, std::to_string(i + 1) + ".");
         Text(x + 4 * font_width_, y, words.substr(start, end == words.npos ? end : end - start));
         start = end + 1;
     }
     if (qr) {
-        const unsigned available = variable_.xres - qr_x - 16, modules = qr->width + 8;
-        const unsigned scale = std::min(available, bottom - top - 2 * row) / modules;
-        Require(scale >= 2, "Seed QR does not fit");
+        const unsigned modules = qr->width + 8;
+        const unsigned scale = std::min(available, bottom - top - 2 * row - gap) / modules;
+        Require(scale >= 3, "Seed QR does not fit");
         const unsigned x = qr_x + (available - modules * scale) / 2;
         Code(*qr, x, top, scale);
-        Text(qr_x, top + modules * scale, format == SeedQRFormat::Standard ? "Standard SeedQR" : "CompactSeedQR");
-        Text(qr_x, top + modules * scale + row, "F: Switch format");
-    } else Text(qr_x, top, "Seed QR hidden");
-    if (!reviewing) Text(16, bottom, "Copy every word in order.");
-    Text(16, bottom + row, reviewing ? qr ? "Q: Hide QR   Enter: Back   Esc: Back" : "Q: Show QR   Enter: Back   Esc: Back"
-        : qr ? "Q: Hide QR   Enter: Check backup   Esc: Cancel" : "Q: Show QR   Enter: Check backup   Esc: Cancel");
+        const std::string_view label = format == SeedQRFormat::Standard ? "Standard SeedQR" : "CompactSeedQR";
+        const std::string_view action = format == SeedQRFormat::Standard ? "F: Switch to Compact" : "F: Switch to Standard";
+        Text(qr_x + (available - label.size() * font_width_) / 2, top + modules * scale + gap, label);
+        Text(qr_x + (available - action.size() * font_width_) / 2, top + modules * scale + gap + row, action, MUTED);
+    } else {
+        constexpr std::string_view hidden = "Seed QR hidden";
+        Text(qr_x + (available - hidden.size() * font_width_) / 2, top, hidden, MUTED);
+    }
+    if (!reviewing) Text(left, bottom, "Copy every word in order.");
+    Text(left, divider + font_height_, reviewing ? qr ? "Q: Hide QR   Enter: Back   Esc: Back" : "Q: Show QR   Enter: Back   Esc: Back"
+        : qr ? "Q: Hide QR   Enter: Check backup   Esc: Cancel" : "Q: Show QR   Enter: Check backup   Esc: Cancel", MUTED);
     return true;
 }
 }

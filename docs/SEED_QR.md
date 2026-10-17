@@ -14,7 +14,7 @@ Press Enter to use those recovery words, or Esc to discard the scan. The words
 are not automatically displayed. Enter your wallet passphrase next if you use one.
 
 After either scanning or typing recovery words, the import review also offers
-**S: Show recovery words and QR on this screen**; the bottom bar abbreviates this
+**Press S to show recovery words and QR on this screen.** The bottom bar abbreviates this
 to **S: Show words/QR**. This optional view is labelled **Private recovery backup**.
 It shows the same words and their QR together, with **F** for Standard/Compact and
 **Q** to hide/show the QR. Enter or Esc returns from the combined view to the
@@ -49,6 +49,10 @@ or **Q** to hide/show the QR. Switching format does not change the words.
 The screen supports 12 and 24 words at VGA resolution. Smaller screens retain
 paged words with **Q: Seed QR** opening a separate QR view. The written-word
 backup check is still required.
+
+The combined view uses the same centered header, orange network label, dividers
+and footer as text screens. Twelve words occupy one column; 24 words use two
+columns of twelve. The format and next-format shortcut are centered below the QR.
 
 The QR is another copy of the recovery secret, not a public wallet-request QR.
 Do not photograph it or scan it with an online wallet app, phone or website.
