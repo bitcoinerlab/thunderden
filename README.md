@@ -15,9 +15,9 @@ Inspired by SeedSigner's stateless approach and descriptor-based hardware-wallet
 designs, including Ledger, BitBox02 and Jade. Bitcoin Core provides key
 derivation, descriptor handling and transaction signing.
 
-**Status: Under active development. Use at your own risk.** The signer is usable
-with [Sparrow](#use-with-sparrow) and [our Liana fork](#use-with-liana).
-See [implementation status](docs/STATUS.md) for completed checks and remaining work.
+Available as a preview, with support for [Sparrow](#use-with-sparrow) and
+[our Liana fork](#use-with-liana). See [security reviews](audits/README.md) and
+[implementation status](docs/STATUS.md) for details.
 
 ## Download and boot
 
@@ -40,8 +40,8 @@ and follow the [enrollment, verification and self-signing guide](docs/SECURE_BOO
 Both images contain the same runtime; the signed one requires the matching public
 certificate enrolled in enforcing UEFI firmware.
 
-**Flashing erases the selected USB drive.** See the
-[build and USB guide](docs/BUILD.md) for more detail or to build your own image.
+See the [build and USB guide](docs/BUILD.md) for more detail or to build your own
+image.
 
 ## Design claims
 
