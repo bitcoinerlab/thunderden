@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-10-17, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-20, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
@@ -12,12 +12,12 @@ below. See the guide for current limitations.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.10`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.10),
+[`v0.0.1-preview.11`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.11),
 with unsigned/signed images, public signing material, checksums and installed-file
 inventory. Verification is revision-scoped below: earlier boot, USB read-back and
 clean-build results do not automatically apply to this latest image. Broader
-laptop/camera coverage remains outstanding. Current executable sizes refer to
-preview 10; earlier verification records retain their original image scope.
+laptop/camera coverage remains outstanding. Executable sizes and verification
+records below refer to their named revisions, not automatically to the latest image.
 Preview 8 adds recovery-word generation with mandatory Bitcoin Core randomness,
 optional camera/coin/dice input and full backup re-entry. It includes the
 [seed-generation audit fixes](../audits/FINDINGS.md) and clearer generation screens.
@@ -25,6 +25,48 @@ optional camera/coin/dice input and full backup re-entry. It includes the
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
 separate from the automated checks below.
+
+## Preview 11 startup, camera and QR updates (2026-10-20)
+
+The runtime source is `7a642b562235e9e30a6177aa76e3ca8af0abacaf`. The image was
+built from byte-identical source files before that commit; release documentation
+does not change its runtime/build inputs. Both images are 67,108,864 bytes:
+
+- Unsigned: `e9c9e622ae3c129d85c636b8c2421e432130e78c063caadf61126931fb317242`
+- Signed: `122729796b7466a6db455bda984e1de075c21fd95176f989ebe611108897002f`
+
+Animated QR frames are prepared offscreen, then copied into the QR rectangle
+without clearing the existing code or captions. The shared static/SeedQR path
+securely wipes staging pixels. This is not an atomic, refresh-synchronized swap;
+tearing remains possible. **Change network** is offered only before loading keys.
+Camera collection and review now finish before choosing coins or dice. Cancelling
+capture discards the attempt, with continuing without camera data as the default
+and retrying as an explicit choice. Mandatory Core randomness is unchanged.
+
+Image format 2 stores one self-contained EFI payload, shared by BIOS and UEFI.
+Legacy BIOS does not authenticate its EFI signature. Current packaging tools
+accept only format 2; use matching tagged tools for older releases. Thunder Den's
+own code is now explicitly MIT-licensed; dependencies retain their own licenses.
+
+The camera/display, SeedQR and transport suites passed for this runtime, covering
+optical decoding, 16/24/32-bit RGB/BGR layouts, padded strides, viewport offsets,
+quiet zones, integer scaling, staging-buffer cleansing and review navigation.
+The actual unsigned image booted in QEMU TCG at 1024×768. Its animated public-fixture
+hdkey export produced 160 consecutive captures over about eight seconds: no blank
+or undecodable frames, no caption changes and exact payload reconstruction.
+This was an export test, not a new signing walkthrough or browser-emulator test.
+
+The preceding network change passed terminal and application suites; camera reflow
+passed five focused terminal/entropy suites at its recorded revision. Those results
+retain their original scope. Source-integrity, frozen/compiled-source matching,
+installed-content/kernel, repeat-assembly and canonical-layout checks passed.
+Signing remained manual and separate from compilation. Public-only packaging
+verified the trusted certificate and both detached and attached EFI signatures.
+
+The full native suite and broad VM matrix were not rerun for this final revision.
+No new empty-output clean-build comparison, physical confirmation or independent
+audit of this exact image is recorded. Earlier evidence retains its original scope;
+TD-005 remains open with conditional authenticated-boot mitigation.
 
 ## Seed QR sessions (preview 10)
 

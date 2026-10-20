@@ -30,7 +30,7 @@ rather than being silently hidden.
 
 Current source completes the camera preparation, collection, checks and review
 before asking about coins or dice. The still-scene hint appears directly above
-the Start instruction. These flow changes are planned for preview 11.
+the Start instruction. These flow changes are included from preview 11.
 
 **System randomness is the main source.** Bitcoin Core's strong random number
 generator (RNG) gets fresh randomness from the operating system. It can also use
