@@ -6,6 +6,10 @@ After choosing the Bitcoin network, Thunder Den offers **Scan a seed QR**,
 **Enter recovery words**, or **Create a new wallet**. Wallet actions become
 available after recovery words and the optional passphrase have been loaded.
 
+Current source also offers **Change network** on this menu (planned for preview
+11). It returns directly to network selection before a wallet is loaded. After
+loading a wallet, end the session first to choose another network.
+
 ## Load a backup
 
 Choose **Scan a seed QR** and show the camera your SeedQR or CompactSeedQR backup.

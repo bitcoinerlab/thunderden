@@ -8,6 +8,7 @@ namespace td {
 using WalletApproval = std::function<bool(const ReviewLines&, const ReviewLines&)>;
 std::optional<Digest> ApproveWallet(const Policy& policy, const Keys& keys, const WalletApproval& approve);
 class Terminal;
+// Returns no keys when the user chooses to change network before loading a wallet.
 std::unique_ptr<Keys> StartSession(Terminal& terminal, const std::function<QRMessage()>& scan);
 bool EndSessionForSeed(Terminal& terminal, const QRMessage& message);
 bool LoadWallet(Terminal& terminal, const Keys& keys, std::optional<ApprovedWallet>& loaded, const QRMessage& message);

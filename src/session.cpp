@@ -19,8 +19,9 @@ std::unique_ptr<Keys> StartSession(Terminal& terminal, const std::function<QRMes
 {
     while (true) {
         try {
-            const auto choice = terminal.Menu("Start a session", {"Scan a seed QR", "Enter recovery words", "Create a new wallet"},
+            const auto choice = terminal.Menu("Start a session", {"Scan a seed QR", "Enter recovery words", "Create a new wallet", "Change network"},
                 "Load your recovery words, or create a new wallet.", false);
+            if (choice == 3) return {};
             SecretBytes mnemonic;
             ReviewScreen review;
             if (choice == 0) {

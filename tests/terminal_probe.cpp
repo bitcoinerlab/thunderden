@@ -48,7 +48,8 @@ int main(int argc, char** argv)
                     if (mode == "seed-invalid" && scans == 1) return td::QRMessage{"seedqr", {}, td::SecretBytes(48, '0')};
                     return message;
                 });
-                std::printf("LOADED %s SCANS %u\n", HexStr(keys->RootFingerprint()).c_str(), scans);
+                if (keys) std::printf("LOADED %s SCANS %u\n", HexStr(keys->RootFingerprint()).c_str(), scans);
+                else std::printf("CHANGE NETWORK SCANS %u\n", scans);
             }
             return 0;
         }

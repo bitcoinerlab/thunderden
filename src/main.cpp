@@ -73,12 +73,14 @@ QRMessage Scan(Terminal& terminal, bool seed = false)
     }
 }
 
-ChainType Network(Terminal& terminal)
+void Network(Terminal& terminal)
 {
+    terminal.SetNetwork({});
     const int choice = terminal.Menu("Choose a Bitcoin network", {"Bitcoin mainnet", "Signet", "Testnet4", "Regtest", "Legacy testnet3"},
         "Welcome. Choose the same Bitcoin network as your wallet app. Mainnet uses real bitcoin; the others are for testing.", false);
     constexpr ChainType networks[]{ChainType::MAIN, ChainType::SIGNET, ChainType::TESTNET4, ChainType::REGTEST, ChainType::TESTNET};
-    return networks[choice];
+    SelectParams(networks[choice]);
+    terminal.SetNetwork(td::NetworkName(Params().GetChainType()));
 }
 }
 
@@ -98,11 +100,13 @@ int main(int argc, char** argv)
             td::PrepareSigner();
             return terminal.SessionEnded() ? 0 : 1;
         }
-        SelectParams(Network(terminal));
-        terminal.SetNetwork(td::NetworkName(Params().GetChainType()));
+        Network(terminal);
         td::PrepareSigner(); // Before any recovery input or private key exists.
         ECC_Context context;
-        const auto session = td::StartSession(terminal, [&] { return Scan(terminal, true); });
+        std::unique_ptr<td::Keys> session;
+        while (!(session = td::StartSession(terminal, [&] { return Scan(terminal, true); }))) {
+            Network(terminal);
+        }
         const auto& keys = *session;
         std::optional<td::ApprovedWallet> loaded_wallet;
         while (true) {

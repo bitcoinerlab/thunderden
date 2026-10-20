@@ -688,7 +688,7 @@ def word(p, index, count, value):
 
 def mnemonic(p, words, choice=b"\r"):
     if p.controlling:
-        p.enter(b"3: Create a new wallet", b"2")
+        p.enter(b"Enter/1-4: Select", b"2")
     p.enter(b"1: 12 words", choice)
     for index, value in enumerate(words, 1):
         word(p, index, len(words), value)
@@ -708,10 +708,21 @@ def export_review(p):
         p.send(b"\r")
 
 
+for rows, columns in ((12, 40), (24, 80)):
+    for cancelled_scan in (False, True):
+        p = Probe("seed-standard", rows=rows, columns=columns)
+        if cancelled_scan:
+            p.enter(b"Enter/1-4: Select", b"1")
+            address_action(p, b"Enter: continue", b"\x1b")
+        p.enter(b"Enter/1-4: Select", b"4")
+        output, _ = p.finish(0)
+        assert b"CHANGE NETWORK SCANS " + (b"1" if cancelled_scan else b"0") in output
+        assert b"Passphrase: " not in p.all_text and b"Private recovery backup" not in p.all_text
+
 for mode in ("seed-standard", "seed-compact"):
     for rows, columns in ((12, 40), (24, 80)):
         p = Probe(mode, rows=rows, columns=columns)
-        p.enter(b"Enter/1-3: Select", b"1")
+        p.enter(b"Enter/1-4: Select", b"1")
         p.wait(b"Recovery words scanned")
         address_action(p, b"S: Show words/QR", b"s")
         assert b"abandon" not in p.all_text and b"Private recovery backup" not in p.all_text
@@ -738,7 +749,7 @@ for mode in ("seed-standard", "seed-compact"):
 
 for choice, count, last in ((1, 12, "about"), (2, 15, "address"), (3, 18, "agent"), (4, 21, "admit"), (5, 24, "art")):
     p = Probe("seed-typed")
-    p.enter(b"Enter/1-3: Select", b"2")
+    p.enter(b"Enter/1-4: Select", b"2")
     p.enter(b"1: 12 words", str(choice).encode())
     for index in range(1, count):
         word(p, index, count, "abandon")
@@ -1119,6 +1130,66 @@ assert p.process.returncode == 91 and not output and b"Write down your recovery 
 # Exercise the actual application with a controlling tty. The test container has
 # no framebuffer; a failed display must return to the menu and preserve the seed
 # session, rather than prompt again or export through an alternate channel.
+for rows, columns in ((12, 40), (24, 80)):
+    for create in (False, True):
+        p = Probe(executable=sys.argv[2], controlling=True, rows=rows, columns=columns)
+        p.enter(b"Enter/1-5: Select", b"1")
+        if not create:
+            # A cancelled import must not retain a phrase or block changing network.
+            p.enter(b"Enter/1-4: Select", b"2")
+            p.enter(b"1: 12 words", b"\r")
+            word(p, 1, 12, "abandon")
+            p.enter(b"Word 2 of 12: ", b"\x1b")
+        route = [(b"2", b"Signet"), (b"3", b"Testnet4"), (b"4", b"Regtest"),
+                 (b"5", b"Testnet3"), (b"1", b"Bitcoin mainnet")]
+        if not create:
+            route.append((b"2", b"Signet"))
+        for choice, network in route:
+            p.wait(b"Enter/1-4: Select")
+            assert b"> 1: Scan a seed QR" in p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+            if columns == 40:
+                for label in (b"> 2: Enter recovery words", b"> 3: Create a new wallet", b"> 4: Change network"):
+                    p.send(b"\x1b[B")
+                    p.wait(label)
+                p.send(b"\r")
+            else:
+                p.send(b"4")
+            p.wait(b"Enter/1-5: Select")
+            chooser = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+            assert b"\x1b[33m" not in chooser, "Old network label remained on the network chooser"
+            assert b"Passphrase: " not in p.all_text and b"Session ended" not in p.all_text
+            assert p.process.poll() is None, "Changing network ended the signer"
+            p.send(choice)
+            p.wait(b"\x1b[33m" + network)
+            p.wait(b"Start a session")
+        if create:
+            p.enter(b"Enter/1-4: Select", b"3")
+            start_generation(p)
+            address_action(p, b"Enter: generate words")
+            backup = copy_backup(p)
+            assert len(backup) == 12
+            address_action(p, b"Enter: enter your words")
+            for index, value in enumerate(backup, 1):
+                word(p, index, 12, value)
+        else:
+            mnemonic(p, MNEMONIC)
+            address_action(p, b"Enter: continue")
+        address_number(p, b"Passphrase: ")
+        p.wait(b"Enter/1-3: Select")
+        active = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+        assert b"Change network" not in active and b"Start a session" not in active
+        assert b"\x1b[33m" + network in active
+        p.send(b"4")  # The former pre-wallet action is not available with keys loaded.
+        public_key_export(p)
+        export_review(p)
+        assert b"Path: m/84h/" + (b"0" if create else b"1") + b"h/0h" in p.all_text
+        assert (b"xpub" if create else b"tpub") in p.all_text, "Export used the previous network"
+        p.send(b"q")
+        p.enter(b"Enter/1-3: Select", b"3")
+        p.finish(0)
+        assert p.all_text.count(b"Choose a Bitcoin network") == len(route) + 1
+print("PASS: pre-wallet network changes across all five networks, compact navigation, cancelled imports and no network changes after import/create")
+
 for choice, network, coin in [(b"\r", b"Bitcoin mainnet", 0), (b"2", b"Signet", 1)]:
     p = Probe(executable=sys.argv[2], controlling=True)
     p.enter(b"5: Legacy testnet3", choice)
