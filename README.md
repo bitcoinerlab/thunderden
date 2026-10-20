@@ -166,3 +166,8 @@ Thanks to **SeedSigner** for inspiration, **Salvatore Ingala (Ledger)** for the
 wallet-policy and registration design and **Bitcoin Core's contributors** for
 the Bitcoin engine. Thunder Den also builds on Linux, Buildroot and the other
 upstream projects listed in its dependency documentation.
+
+## License
+
+Thunder Den's own code is licensed under the [MIT License](LICENSE).
+Third-party dependencies retain their respective licenses.
