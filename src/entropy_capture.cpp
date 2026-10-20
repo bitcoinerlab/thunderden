@@ -7,13 +7,13 @@
 #include <memory>
 
 namespace td {
-SecretBytes Terminal::CameraEntropy(bool& unchecked)
+std::optional<SecretBytes> Terminal::CameraEntropy(bool& unchecked)
 {
     unchecked = false;
-    if (!Confirm("Collect camera randomness", {"A still scene is fine; movement is not required.", "",
-        "We'll collect camera readings and check part of the data for patterns using statistical software from NIST, "
+    if (!Confirm("Collect camera randomness", {"We'll collect camera readings and check part of the data for patterns using statistical software from NIST, "
         "the US National Institute of Standards and Technology. This helps estimate how unpredictable the checked data is.", "",
-        "The checks run until they finish or you stop them. Once collection finishes, press Esc to stop the checks and choose whether to use the data unchecked."}, "start")) throw Cancelled{};
+        "The checks run until they finish or you stop them.", "",
+        "A still scene is fine; movement is not required."}, "start")) throw Cancelled{};
     SecretBytes digest(32);
     std::array<unsigned char, 17> profile{};
     size_t total = 0;
@@ -56,7 +56,7 @@ SecretBytes Terminal::CameraEntropy(bool& unchecked)
             }
             const int key = Key(0);
             if (key == 27 || key == 3) {
-                if (!ready) throw Cancelled{};
+                if (!ready) return std::nullopt; // Discard the attempt and reap both workers before offering retry/skip.
                 stopped = true; break;
             }
             Require(captured || now - last_frame < std::chrono::seconds(10), "The camera stopped sending images");
@@ -78,7 +78,7 @@ SecretBytes Terminal::CameraEntropy(bool& unchecked)
             if (captured) {
                 const int waiting = Key(20);
                 if (waiting == 27 || waiting == 3) {
-                    if (!ready) throw Cancelled{};
+                    if (!ready) return std::nullopt;
                     stopped = true; break;
                 }
                 continue;
@@ -131,7 +131,7 @@ SecretBytes Terminal::CameraEntropy(bool& unchecked)
             std::to_string(progress.Finished()) + " of 9 checks finished. There is no final randomness estimate. "
             "You can leave the camera data out or add it as an unchecked extra. Fresh randomness from Bitcoin Core is used either way. "
             "Camera data may add useful randomness, but it never replaces or weakens Bitcoin Core's protection.",
-            true, {}, true, progress.Details()) == 0) return {};
+            true, {}, true, progress.Details()) == 0) return SecretBytes{};
         unchecked = true;
         return CameraContribution(profile, total, digest);
     }

@@ -94,6 +94,7 @@ int main(int argc, char** argv)
             if (mode.find("constant") != mode.npos) std::fill(bytes.begin(), bytes.end(), 0);
             Send(3, bytes);
         }
+        if (mode.find("partial-capture") != mode.npos) { while (true) pause(); }
         unsigned char flags[4]{};
         if (mode.find("frozen") != mode.npos) WriteBE32(flags, 1);
         Send(4, flags);

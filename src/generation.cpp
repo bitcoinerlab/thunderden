@@ -95,21 +95,27 @@ SecretBytes NewMnemonic(Terminal& terminal)
     const bool use_camera = terminal.Menu("Add randomness from your camera?", {"Use camera", "Skip camera"},
         "Camera images contain tiny variations, including noise from the sensor. Thunder Den can mix these readings into the randomness used to create your recovery words.",
         true, {}, true) == 0;
+    SecretBytes camera, manual;
+    bool camera_unchecked = false;
+    while (use_camera) {
+        try {
+            auto contribution = terminal.CameraEntropy(camera_unchecked);
+            if (contribution) { camera = std::move(*contribution); break; }
+            if (terminal.Menu("Camera collection stopped", {"Continue without camera data", "Try camera again"},
+                "The captured data has been discarded. Fresh randomness from Bitcoin Core will still be used.",
+                true, {}, true) == 0) break;
+        }
+        catch (const std::exception& error) {
+            if (terminal.Menu("Camera data cannot be used", {"Continue without camera", "Try camera again"},
+                std::string(error.what()) + ". No camera data will be added. Fresh randomness from Bitcoin Core will still be used.", true, {}, true) == 0) break;
+        }
+    }
     constexpr ManualSource sources[]{ManualSource::None, ManualSource::Coins, ManualSource::Dice};
     const auto source = sources[terminal.Menu("Add coin tosses or dice rolls?",
         {"Continue without coins or dice", "Coin tosses - " + std::to_string(ManualTarget(ManualSource::Coins, words)) + " tosses",
             "Dice rolls - " + std::to_string(ManualTarget(ManualSource::Dice, words)) + " rolls"},
         "You can add another source of randomness by tossing a coin or rolling a six-sided die and entering each result. This step is optional.",
         true, {}, true)];
-    SecretBytes camera, manual;
-    bool camera_unchecked = false;
-    while (use_camera) {
-        try { camera = terminal.CameraEntropy(camera_unchecked); break; }
-        catch (const std::exception& error) {
-            if (terminal.Menu("Camera data cannot be used", {"Continue without camera", "Try camera again"},
-                std::string(error.what()) + ". No camera data will be added. Fresh randomness from Bitcoin Core will still be used.", true, {}, true) == 0) break;
-        }
-    }
     if (source != ManualSource::None) manual = ManualContribution(source, terminal.ManualEntropy(source, words));
     if (!terminal.Confirm("Ready to generate", {"Recovery words: " + std::to_string(words), "Random-number generator: Bitcoin Core",
         !camera.empty() ? camera_unchecked ? "Camera readings: included (unchecked)" : "Camera readings: included"

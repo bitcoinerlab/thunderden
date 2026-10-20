@@ -28,6 +28,10 @@ defaults to "Continue without coins or dice". Required toss/roll counts are show
 before selection. Instructions remain available on compact screens through paging
 rather than being silently hidden.
 
+Current source completes the camera preparation, collection, checks and review
+before asking about coins or dice. The still-scene hint appears directly above
+the Start instruction. These flow changes are planned for preview 11.
+
 **System randomness is the main source.** Bitcoin Core's strong random number
 generator (RNG) gets fresh randomness from the operating system. It can also use
 CPU hardware randomness when available.
@@ -169,7 +173,11 @@ values are separate passes, so their counters can restart within a check. These
 are not overall time percentages. Compression and suffix-array work show activity
 instead of a fabricated sample percentage.
 
-During capture, **Esc: stop camera** discards the attempt. After complete,
+During capture, **Esc: stop camera** stops and reaps the workers, discards the
+entire attempt and offers **Continue without camera data** (the default) or
+**Try camera again**, without automatically cancelling wallet creation. Partial
+captures cannot be included, even if some statistical checks have finished.
+After complete,
 fault-free capture and a successful camera-worker exit, **Esc: stop checks** stops
 and reaps every worker before offering a choice. Checks continue until completion,
 manual stop or a resource/data failure; a two-minute timer does not stop them. The

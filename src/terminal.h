@@ -58,7 +58,8 @@ public:
     SecretBytes ManualEntropy(ManualSource source, unsigned words);
     void BackupWords(std::span<const unsigned char> mnemonic, bool reviewing = false);
     bool ReviewRecoveryWords(std::span<const unsigned char> mnemonic, const ReviewScreen& review);
-    SecretBytes CameraEntropy(bool& unchecked);
+    // No value means interrupted capture; an empty value means a completed capture was omitted.
+    std::optional<SecretBytes> CameraEntropy(bool& unchecked);
     std::optional<Position> SearchAddress(const Policy& policy, const CScript& script,
         std::string_view wallet, uint32_t& next, uint32_t end);
     bool Approve(std::string_view title, const ReviewLines& lines, std::string_view confirmation, const ReviewLines& details = {},

@@ -845,12 +845,24 @@ for mode, entered, expected in (
     assert bytes.fromhex(output.decode().strip()) == expected
 
 
-def start_generation(p, words=12, camera=False, manual=b"\r"):
+def start_generation(p, words=12, camera=False):
     address_action(p, b"Enter/1-2: Select", b"1" if words == 12 else b"2")
     address_action(p, b"Enter: continue")
     address_action(p, b"Enter/1-2: Select", b"\r" if camera else b"2")
     assert b"> 1: Use camera" in p.all_text and b"2: Skip camera" in p.all_text
-    address_action(p, b"Enter/1-3: Select", manual)
+    if not camera:
+        address_action(p, b"Enter/1-3: Select")
+
+
+def start_camera(p):
+    address_action(p, b"Enter: start")
+    assert b"Add coin tosses or dice rolls?" not in p.all_text, "Manual-source selection interrupted the camera flow"
+    assert b"Once collection finishes" not in p.all_text, "Camera introduction instructs users to stop the checks"
+    p.spaced(b"Press Enter to start.")
+    rows = p.rows()
+    action_row, = [row for row, text in rows.items() if text.startswith(b"Press Enter to start.")]
+    preceding = b" ".join(text for row, text in sorted(rows.items()) if row < action_row - 1)
+    assert b" ".join(preceding.split()).endswith(b"A still scene is fine; movement is not required."), rows
 
 
 def copy_backup(p):
@@ -893,6 +905,8 @@ for count, rows, columns in ((12, 12, 40), (24, 24, 80)):
     assert b"no camera" in rendered and b"is pointed at it." in rendered
     backup = copy_backup(p)
     assert len(backup) == count
+    if count == 12:
+        core_only_backup = backup
     address_action(p, b"Enter: enter your words")
     if count == 12:
         for index, value in enumerate(MNEMONIC, 1):
@@ -927,8 +941,8 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
     # the writable /tmp mount deliberately remains noexec.
     probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
     p = Probe("entropy-generate", executable=str(probe), rows=rows, columns=columns)
-    start_generation(p, camera=True, manual=b"3" if scenario == "valid" else b"\r")
-    address_action(p, b"Enter: start")
+    start_generation(p, camera=True)
+    start_camera(p)
     children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
     if scenario in ("cancel-assessment", "long-assessment"):
         p.wait(b"Esc: stop checks")
@@ -966,11 +980,13 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
         if columns == 40 or scenario == "long-assessment":
             # The safe default discards the optional camera contribution.
             address_action(p, b"Enter/1-2: Select", b"\r")
+            address_action(p, b"Enter/1-3: Select")
             p.wait(b"Camera readings: not included")
             address_action(p, b"Enter: generate words", b"\x1b")
             p.finish(2)
         else:
             address_action(p, b"Enter/1-2: Select", b"2")
+            address_action(p, b"Enter/1-3: Select")
             p.wait(b"Camera readings: included (unchecked)")
             address_action(p, b"Enter: generate words")
             backup = copy_backup(p)
@@ -999,6 +1015,8 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
         assert b"Each camera value is an 8-bit" not in rendered
         assert b"final strength of your recovery words" not in rendered
         assert b"Samples hashed" not in rendered and b"Hashed / assessed" not in rendered
+        assert b"Add coin tosses or dice rolls?" not in p.all_text, "Manual sources were offered before camera review finished"
+        address_action(p, b"Enter/1-3: Select", b"3")
         address_action(p, b"Enter: start collecting")
         p.wait(b"Rolls entered:")
         assert not children.read_text().strip(), "Manual input began with a worker alive"
@@ -1018,29 +1036,81 @@ for scenario, rows, columns in (("valid", 12, 40), ("valid", 40, 80), ("constant
         if scenario == "stalled-exit-assessment":
             assert b"Camera collection took too long" in p.all_text
         address_action(p, b"Enter/1-2: Select", b"1")
+        address_action(p, b"Enter/1-3: Select")
         p.wait(b"Camera readings: not included")
         address_action(p, b"Enter: generate words", b"\x1b")
         p.finish(2)
     assert b"sha256" not in p.all_text and b"commandline" not in p.all_text, "Estimator metadata leaked onto the terminal"
 print("PASS: complete and unchecked camera generation, partial-result warnings, progress, faults and manual stop beyond two minutes")
 
-# Stopping before capture completes cannot offer an unchecked contribution.
+# Interrupted capture is discarded before retry/skip, including when assessment
+# has already started. Neither partial data nor workers may reach generation.
+for scenario, rows, columns, retry in (("stalled-capture", 12, 40, False), ("stalled-capture", 24, 80, True),
+                                      ("partial-capture-assessment", 12, 40, True), ("partial-capture-assessment", 24, 80, False)):
+    probe = Path(sys.argv[1]).resolve().parent / "entropy-fixtures" / scenario / "terminal-probe"
+    p = Probe("entropy-generate", executable=str(probe), rows=rows, columns=columns)
+    start_generation(p, camera=True)
+    children = Path(f"/proc/{p.process.pid}/task/{p.process.pid}/children")
+    previous_pids = set()
+    for attempt in range(2 if retry else 1):
+        start_camera(p)
+        p.wait(b"Esc: stop camera")
+        p.wait(b"Values: 655360/1048576 (62%)" if scenario.startswith("partial") else b"Check: 0 of 9")
+        pids = set(children.read_text().split())
+        assert len(pids) == (2 if scenario.startswith("partial") else 1), pids
+        assert not pids & previous_pids, "Retry reused an old camera/assessment worker"
+        p.send(b"\x1b")
+        p.wait(b"Camera collection stopped")
+        assert not children.read_text().strip(), "Workers survived into the interrupted-capture choice"
+        assert all(not Path(f"/proc/{pid}").exists() for pid in pids)
+        if scenario.startswith("partial") and columns == 80:
+            for _ in range(12):
+                p.send(b"\x1b")
+                time.sleep(0.1)
+            assert p.process.poll() is None, "Held Escape cancelled wallet creation behind the stop choice"
+        if retry and not attempt:
+            previous_pids = pids
+            address_action(p, b"Enter/1-2: Select", b"2")
+    address_action(p, b"Enter/1-2: Select")
+    address_action(p, b"Enter/1-3: Select")
+    p.wait(b"Camera readings: not included")
+    assert b"Use unchecked camera data" not in p.all_text, "Incomplete capture offered an unchecked contribution"
+    assert b"Camera data cannot be used" not in p.all_text, "User stop was treated as a camera fault"
+    address_action(p, b"Enter: generate words")
+    backup = copy_backup(p)
+    assert backup == core_only_backup, "Interrupted camera samples entered the generated mnemonic"
+    address_action(p, b"Enter: enter your words")
+    for index, value in enumerate(backup, 1):
+        word(p, index, 12, value)
+    output, _ = p.finish(0)
+    assert b"BACKUP VERIFIED" in output
+
+# Cancellation is still available before capture starts and from the stop choice.
+p = Probe("entropy-generate")
+start_generation(p, camera=True)
+address_action(p, b"Enter: start", b"\x1b")
+p.finish(2)
+assert b"Camera collection stopped" not in p.all_text
 p = Probe("entropy-generate", executable=str(Path(sys.argv[1]).resolve().parent / "entropy-fixtures/stalled-capture/terminal-probe"))
 start_generation(p, camera=True)
-address_action(p, b"Enter: start")
-p.wait(b"Esc: stop camera")
+start_camera(p)
 p.wait(b"Check: 0 of 9")
 p.send(b"\x1b")
+p.wait(b"Camera collection stopped")
+address_action(p, b"Enter/1-2: Select", b"\x1b[B")
+p.wait(b"> 2: Try camera again")
+p.send(b"\x1b")
 p.finish(2)
-assert b"Use unchecked camera data" not in p.all_text
+print("PASS: camera-first flow, still-scene hint, interrupted capture discard/retry, fresh workers, held Escape and mandatory Core-only generation")
 
 # Opting into unchecked camera data never permits an RNG failure fallback.
 p = Probe("entropy-rng-fail", executable=str(Path(sys.argv[1]).resolve().parent / "entropy-fixtures/cancel-assessment/terminal-probe"))
 start_generation(p, camera=True)
-address_action(p, b"Enter: start")
+start_camera(p)
 p.wait(b"Esc: stop checks")
 p.send(b"\x1b")
 address_action(p, b"Enter/1-2: Select", b"2")
+address_action(p, b"Enter/1-3: Select")
 address_action(p, b"Enter: generate words")
 output, _ = p.process.communicate(timeout=5)
 assert p.process.returncode == 91 and not output and b"Write down your recovery words" not in p.all_text
