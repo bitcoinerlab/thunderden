@@ -25,6 +25,8 @@ class Display {
     bool graphics_{false};
     int preview_progress_{-1};
     unsigned caption_height_{};
+    int qr_width_{};
+    ReviewLines qr_caption_;
     std::vector<uint8_t> font_;
     unsigned font_width_{}, font_height_{};
     std::string network_;

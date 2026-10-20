@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <stdexcept>
+#include <support/allocators/zeroafterfree.h>
 
 namespace td {
 namespace {
@@ -217,6 +219,7 @@ void Display::Pixel(unsigned x, unsigned y, std::array<uint8_t, 3> color)
 void Display::Clear()
 {
     preview_progress_ = -1;
+    qr_width_ = 0;
     for (unsigned y = 0; y < variable_.yres; ++y) for (unsigned x = 0; x < variable_.xres; ++x) Pixel(x, y, BACKGROUND);
 }
 
@@ -249,6 +252,7 @@ void Display::Text(unsigned xoff, unsigned yoff, std::string_view text, std::arr
 
 void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned height, double progress, bool seed)
 {
+    qr_width_ = 0;
     Require(width > 0 && width <= 1920 && height > 0 && height <= 1080
         && gray.size() == size_t(width) * height, "Invalid preview image");
     const int percent = int(progress * 100);
@@ -270,24 +274,48 @@ void Display::Preview(std::span<const uint8_t> gray, unsigned width, unsigned he
 void Display::QR(const QRImage& image, std::string_view caption, std::string_view instruction)
 {
     const unsigned modules = image.width + 8;
-    Clear();
-    const auto height = Caption({std::string(instruction), std::string(caption)});
-    const unsigned scale = std::min(variable_.xres, variable_.yres - height) / modules;
+    const ReviewLines lines{std::string(instruction), std::string(caption)};
+    if (image.width != qr_width_ || lines != qr_caption_) {
+        Clear();
+        caption_height_ = Caption(lines);
+        qr_width_ = image.width;
+        qr_caption_ = lines;
+    }
+    const unsigned scale = std::min(variable_.xres, variable_.yres - caption_height_) / modules;
     Require(scale >= 2, "This QR code is too large for the screen.");
-    Code(image, (variable_.xres - modules * scale) / 2, (variable_.yres - height - modules * scale) / 2, scale);
+    Code(image, (variable_.xres - modules * scale) / 2, (variable_.yres - caption_height_ - modules * scale) / 2, scale);
 }
 
 void Display::Code(const QRImage& image, unsigned x, unsigned y, unsigned scale)
 {
     Require(scale > 0 && x + (image.width + 8) * scale <= variable_.xres
         && y + (image.width + 8) * scale <= variable_.yres, "QR code does not fit");
-    const unsigned xoff = x + 4 * scale, yoff = y + 4 * scale;
-    for (unsigned y = yoff - 4 * scale; y < yoff + (image.width + 4) * scale; ++y)
-        for (unsigned x = xoff - 4 * scale; x < xoff + (image.width + 4) * scale; ++x) Pixel(x, y, 255);
-    for (int y = 0; y < image.width; ++y) for (int x = 0; x < image.width; ++x) {
-        if (!image.modules[y * image.width + x]) continue;
-        for (unsigned dy = 0; dy < scale; ++dy) for (unsigned dx = 0; dx < scale; ++dx) Pixel(xoff + x * scale + dx, yoff + y * scale + dy, 0);
+    const unsigned modules = image.width + 8, side = modules * scale, bytes = variable_.bits_per_pixel / 8;
+    const size_t stride = size_t(side) * bytes;
+    uint32_t black = variable_.transp.length ? ((1U << variable_.transp.length) - 1) << variable_.transp.offset : 0;
+    uint32_t white = black;
+    for (const auto channel : {variable_.red, variable_.green, variable_.blue})
+        white |= ((1U << channel.length) - 1) << channel.offset;
+    // Recovery QRs share this path. Wipe even on exceptions, without the locked
+    // allocator's small-allocation limit: scaled QR pixels can occupy megabytes.
+    std::vector<uint8_t, zero_after_free_allocator<uint8_t>> pixels(stride * side);
+    for (unsigned row = 0; row < modules; ++row) {
+        auto* line = pixels.data() + row * scale * stride;
+        auto* out = line;
+        for (unsigned column = 0; column < modules; ++column) {
+            const bool dark = row >= 4 && row < modules - 4 && column >= 4 && column < modules - 4
+                && image.modules[(row - 4) * image.width + column - 4];
+            const uint32_t value = dark ? black : white;
+            for (unsigned dx = 0; dx < scale; ++dx) for (unsigned byte = 0; byte < bytes; ++byte)
+                *out++ = (value >> (8 * byte)) & 0xff;
+        }
+        for (unsigned dy = 1; dy < scale; ++dy) std::memcpy(line + dy * stride, line, stride);
     }
+    // Keep the old QR visible throughout preparation. This short row copy is
+    // not a vblank-synchronized swap, but never exposes a white-fill stage.
+    for (unsigned row = 0; row < side; ++row)
+        std::memcpy(memory_ + (y + row + variable_.yoffset) * size_t(fixed_.line_length)
+            + (x + variable_.xoffset) * bytes, pixels.data() + row * stride, stride);
 }
 
 bool Display::RecoveryWords(std::span<const unsigned char> mnemonic, const QRImage* qr, SeedQRFormat format, bool reviewing)

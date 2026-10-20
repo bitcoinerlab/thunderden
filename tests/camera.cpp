@@ -36,6 +36,10 @@ std::string selected_font;
 bool doubled_font = false;
 unsigned display_font_width = 8, display_font_height = 16;
 std::function<int(pollfd*, int)> display_input;
+fb_var_screeninfo pixel_layout{};
+unsigned row_padding = 0;
+std::function<void(const uint8_t*, size_t)> cleanse_observer;
+bool staged_wiped = false;
 
 void Check(bool ok, const char* message)
 {
@@ -147,7 +151,8 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
         info = {};
         info.type = FB_TYPE_PACKED_PIXELS;
         info.visual = FB_VISUAL_TRUECOLOR;
-        info.line_length = setup_width * 4;
+        info.line_length = pixel_layout.bits_per_pixel
+            ? (pixel_layout.xoffset + setup_width) * (pixel_layout.bits_per_pixel / 8) + row_padding : setup_width * 4;
         info.smem_len = framebuffer.size();
     } else if (request == FBIOGET_VSCREENINFO) {
         auto& info = *static_cast<fb_var_screeninfo*>(argument);
@@ -159,6 +164,11 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...)
         info.green = {8, 8, 0};
         info.blue = {0, 8, 0};
         info.transp = {24, 8, 0};
+        if (pixel_layout.bits_per_pixel) {
+            info = pixel_layout;
+            info.xres = setup_width;
+            info.yres = setup_height;
+        }
     } else if (request == KDFONTOP) {
         auto& font = *static_cast<console_font_op*>(argument);
         if (font.op == KD_FONT_OP_SET_DEFAULT) {
@@ -209,6 +219,18 @@ extern "C" int __wrap_munmap(void* address, size_t length)
 extern "C" int __real_close(int);
 extern "C" int __wrap_close(int fd) { return fd == FRAMEBUFFER_FD ? 0 : __real_close(fd); }
 extern "C" int __real_poll(pollfd*, nfds_t, int);
+
+extern "C" void __real__Z14memory_cleansePvm(void*, size_t);
+extern "C" void __wrap__Z14memory_cleansePvm(void* pointer, size_t size)
+{
+    const bool watching = bool(cleanse_observer);
+    if (watching) cleanse_observer(static_cast<const uint8_t*>(pointer), size);
+    __real__Z14memory_cleansePvm(pointer, size);
+    if (watching) {
+        const auto* bytes = static_cast<const uint8_t*>(pointer);
+        staged_wiped = std::all_of(bytes, bytes + size, [](auto byte) { return byte == 0; });
+    }
+}
 
 int main()
 {
@@ -282,6 +304,73 @@ int main()
         Check(display_mode == KD_TEXT, "Display did not return to text mode");
         std::puts("PASS: live preview updates without erasing an unchanged controls banner");
 
+        for (const unsigned bits : {16, 24, 32}) for (const bool reversed : {false, true}) {
+            pixel_layout = {};
+            pixel_layout.bits_per_pixel = bits;
+            pixel_layout.xoffset = 3; pixel_layout.yoffset = 2; row_padding = 20;
+            pixel_layout.red = {bits == 16 ? 11U : 16U, bits == 16 ? 5U : 8U, 0};
+            pixel_layout.green = {bits == 16 ? 5U : 8U, bits == 16 ? 6U : 8U, 0};
+            pixel_layout.blue = {0, bits == 16 ? 5U : 8U, 0};
+            if (reversed) std::swap(pixel_layout.red, pixel_layout.blue);
+            if (bits == 32) pixel_layout.transp = {24, 8, 0};
+            const unsigned bytes = bits / 8, pitch = (WIDTH + pixel_layout.xoffset) * bytes + row_padding;
+            framebuffer.assign((HEIGHT + pixel_layout.yoffset + 1) * pitch, 0x91);
+            Check(openpty(&master, &slave, nullptr, nullptr, nullptr) == 0, "Cannot open packed QR tty");
+            td::Terminal terminal(slave);
+            for (const bool numeric : {false, true}) {
+                td::Display display(terminal);
+                const auto format = numeric ? td::SeedQRFormat::Standard : td::SeedQRFormat::Compact;
+                const td::QRImage first(td::EncodeSeedQR(td::EntropyMnemonic(td::SecretBytes(16)), format), numeric);
+                const td::QRImage next(td::EncodeSeedQR(td::EntropyMnemonic(td::SecretBytes(16, 0x42)), format), numeric);
+                Check(first.width == next.width, "Fixture QR versions differ");
+                display.QR(first, "Esc: Back", "Public seed fixture");
+                const unsigned scale = std::min(WIDTH, HEIGHT - 56) / (next.width + 8), side = (next.width + 8) * scale;
+                const unsigned x0 = (WIDTH - side) / 2, y0 = (HEIGHT - 56 - side) / 2;
+                const size_t stride = side * bytes, start = (y0 + pixel_layout.yoffset) * pitch + (x0 + pixel_layout.xoffset) * bytes;
+                std::vector<uint8_t> expected(stride * side);
+                for (unsigned y = 0; y < side; ++y) for (unsigned x = 0; x < side; ++x) {
+                    const unsigned mx = x / scale, my = y / scale;
+                    const bool dark = mx >= 4 && my >= 4 && mx < unsigned(next.width + 4) && my < unsigned(next.width + 4)
+                        && next.modules[(my - 4) * next.width + mx - 4];
+                    uint32_t value = bits == 32 ? 0xff000000 : 0;
+                    if (!dark) for (const auto channel : {pixel_layout.red, pixel_layout.green, pixel_layout.blue})
+                        value |= ((1U << channel.length) - 1) << channel.offset;
+                    for (unsigned byte = 0; byte < bytes; ++byte) expected[(y * side + x) * bytes + byte] = value >> (8 * byte);
+                }
+                auto visible = framebuffer;
+                for (unsigned y = 0; y < side; ++y)
+                    std::copy_n(expected.data() + y * stride, stride, visible.data() + start + y * pitch);
+                staged_wiped = false;
+                cleanse_observer = [&](const uint8_t* pixels, size_t size) {
+                    Check(size == expected.size() && std::equal(expected.begin(), expected.end(), pixels),
+                        "Staged QR pixels differed from the complete scaled QR and quiet zone");
+                    Check(framebuffer == visible, "QR update changed pixels outside its rectangle or ignored pitch/offsets");
+                };
+                display.QR(next, "Esc: Back", "Public seed fixture");
+                cleanse_observer = {};
+                Check(framebuffer == visible, "QR update omitted rows or changed its captions");
+                Check(staged_wiped, "Offscreen recovery QR pixels were not securely wiped");
+                // Caption and size changes must invalidate the old screen, as must a camera preview.
+                const auto marker = pixel_layout.yoffset * pitch + pixel_layout.xoffset * bytes;
+                framebuffer[0] = 17;
+                framebuffer[marker] = 17;
+                display.QR(next, "Different caption", "Public seed fixture");
+                Check(framebuffer[0] == 17, "QR clear overwrote memory outside the visible viewport");
+                Check(framebuffer[marker] != 17, "Changed caption retained the previous layout");
+                framebuffer[marker] = 17;
+                display.QR(td::QRImage(std::string(60, 'A')), "Different caption", "Public seed fixture");
+                Check(framebuffer[marker] != 17, "Changed QR size retained the previous layout");
+                display.Preview(std::array<uint8_t, 4>{}, 2, 2, 0);
+                framebuffer[marker] = 17;
+                display.QR(next, "Different caption", "Public seed fixture");
+                Check(framebuffer[marker] != 17, "Returning from preview retained a stale QR layout");
+            }
+            close(master);
+        }
+        pixel_layout = {}; row_padding = 0;
+        framebuffer.resize(WIDTH * HEIGHT * 4);
+        std::puts("PASS: complete staged QR and rectangle-only updates, 16/24/32-bit RGB/BGR pitch/offsets, quiet zones, integer scaling, layout invalidation and secure staging wipe");
+
         for (const size_t bytes : {8, 1200}) for (const bool revisitable : {false, true}) {
             winsize size{24, 80, 0, 0};
             Check(openpty(&master, &slave, nullptr, nullptr, &size) == 0, "Cannot open QR test tty");
@@ -299,7 +388,8 @@ int main()
                 for (ssize_t count; (count = read(master, buffer, sizeof(buffer))) > 0;) text.append(buffer, count);
                 if (display_mode == KD_GRAPHICS) {
                     Check(timeout == (bytes > 200 ? 250 : -1), "QR animation was paused");
-                    if (bytes <= 200 && (step == 1 || step == 2)) Check(framebuffer[0] == 17, "An ignored key redrew the static QR");
+                    if (step == 1 || step == 2) Check(framebuffer[0] == 17 && framebuffer[framebuffer.size() - 4] == 17,
+                        "QR frame update erased the unchanged background or captions");
                     Check(++frames < 128, "QR display did not complete the scripted navigation");
                     std::vector<uint8_t> gray(WIDTH * HEIGHT);
                     for (size_t i = 0; i < gray.size(); ++i) gray[i] = framebuffer[i * 4];
@@ -310,7 +400,7 @@ int main()
                     if (!receiver.Result()) return 0;
                     Check(receiver.Result()->type == message.type && receiver.Result()->cbor == original,
                         "Revisited QR changed the completed reply");
-                    if (step == 0) framebuffer[0] = 17;
+                    if (step == 0) framebuffer[0] = framebuffer[framebuffer.size() - 4] = 17;
                 }
                 std::string key;
                 if (!revisitable) {
