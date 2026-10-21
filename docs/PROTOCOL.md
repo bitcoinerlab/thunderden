@@ -306,7 +306,7 @@ strings. The reply always reports the signer's actual local network and master f
 Status 3 is unused.
 Malformed requests must not reach local approval or signing.
 
-Unreleased source explains statuses 2, 4 and 5 locally before showing the error
+From preview 12, statuses 2, 4 and 5 are explained locally before showing the error
 response QR. The same explanation can be revisited from that QR without retrying
 the operation. Explicit cancellation remains distinct from an error. These local
 messages do not change the wire status codes or add diagnostic text to replies.

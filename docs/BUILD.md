@@ -2,9 +2,9 @@
 
 ## Download a preview
 
-Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.11/thunderden.img)
-and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.11/thunderden.img.sha256)
-from [v0.0.1-preview.11](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.11).
+Download [thunderden.img](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.12/thunderden.img)
+and [thunderden.img.sha256](https://github.com/bitcoinerlab/thunderden/releases/download/v0.0.1-preview.12/thunderden.img.sha256)
+from [v0.0.1-preview.12](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.12).
 The release also includes `installed-files.json` for reviewing the built system.
 
 For optional Secure Boot, choose `thunderden-signed.img` and its matching checksum
@@ -106,7 +106,7 @@ through review pages; Esc cancels an operation before approval.
 Address checks, registration and signing show the wallet ID and full public
 descriptor in Details. Registration requires reviewing the spending rules and
 cosigner keys before typing `REGISTER`; signing requires typing `SIGN` after review.
-Unreleased source ignores capitalization and surrounding spaces for these two approval
+From preview 12, capitalization and surrounding spaces are ignored for these approval
 words. A typo stays at the confirmation prompt with feedback, rather than cancelling
 the request. Recovery words, passphrases, addresses and public keys are not changed
 by this rule. Command-request failures are explained locally before their error QR.

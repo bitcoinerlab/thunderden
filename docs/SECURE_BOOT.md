@@ -22,7 +22,7 @@ Thunder Den screen. The protected boot path also ignores outside startup setting
 and extra system files that could replace this system.
 
 *Signed images and public signing material are available from
-[v0.0.1-preview.11](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.11).
+[v0.0.1-preview.12](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.12).
 Signing was first included in preview 9; previews 8 and earlier are unsigned.
 Disposable test certificates are not release keys.*
 

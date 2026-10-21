@@ -1,6 +1,6 @@
 # Implementation status
 
-As of 2026-10-20, the signer, QR bridge and regular desktop Liana integration are
+As of 2026-10-21, the signer, QR bridge and regular desktop Liana integration are
 implemented. Thunder Den is usable with [our Liana fork](https://github.com/bitcoinerlab/wizardsardine-liana)
 using Bitcoin Core or Electrum. The Liana integration has not yet been submitted
 upstream. The [Sparrow multisig workflow](SPARROW.md) has been user-tested on a real
@@ -12,7 +12,7 @@ below. See the guide for current limitations.
 
 The QR bridge is published on npm as version `0.1.2`. The latest USB image is
 published as the development preview
-[`v0.0.1-preview.11`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.11),
+[`v0.0.1-preview.12`](https://github.com/bitcoinerlab/thunderden/releases/tag/v0.0.1-preview.12),
 with unsigned/signed images, public signing material, checksums and installed-file
 inventory. Verification is revision-scoped below: earlier boot, USB read-back and
 clean-build results do not automatically apply to this latest image. Broader
@@ -25,6 +25,42 @@ optional camera/coin/dice input and full backup re-entry. It includes the
 The [Thunder Den QR protocol](PROTOCOL.md) covers standard PSBT exchange, public
 exports and wallet-independent commands. Physical camera measurements remain
 separate from the automated checks below.
+
+## Preview 12 approval feedback (2026-10-21)
+
+The runtime source is `20827311dfb0bad100095544a309812d5c0e0363`. Release
+documentation is added above that revision without changing runtime/build inputs.
+Both images are 67,108,864 bytes:
+
+- Unsigned: `0c22d04d73a2f9c24cd35451bbeb9488c5efc732639b535573039b2d3cae0daf`
+- Signed: `7943afff3b158e36e30a11336f45ff111936da3852f5771b74e516d12ba6dea4`
+
+Typed `SIGN` and `REGISTER` approvals now ignore ASCII capitalization and outer
+spaces. Genuine typos and empty entries show feedback and allow correction without
+rescanning or restarting the required review. Fresh, explicit confirmation is still
+required: queued input, prefixes, misspellings and truncated overlong entries cannot
+approve. Explicit cancellation remains separate from invalid input. High-change
+recovery warnings remain visible after typos and overlong input. Passphrases,
+recovery words, addresses and public keys retain their existing handling.
+
+Command failures with statuses 2, 4 and 5 are explained locally before the error
+response QR. The explanation can be revisited from that QR without retrying the
+operation. The wire status codes and empty error result remain unchanged; no
+diagnostic text or request data is added to error replies.
+
+The terminal, application and QR-command suites passed for the runtime source.
+Regressions cover compact/wide screens, mixed-case and spaced keywords, correction
+and cancellation, queued-input rejection, warning retention, unchanged wallet/key
+state and empty error replies. This source-matched passing evidence was reused for
+the image build. Source-integrity, frozen/compiled-source matching, installed-content
+and kernel restrictions, repeatable disk assembly and canonical format-2 layout
+checks passed. Manual signing remained separate from compilation; public-only
+packaging verified the trusted certificate and detached/attached EFI signatures.
+
+No new VM run, physical confirmation, empty-output clean-build comparison or
+independent audit of this exact image is recorded. The full native suite was not
+rerun. Earlier verification retains its original revision scope; TD-005 remains
+open with conditional authenticated-boot mitigation.
 
 ## Preview 11 startup, camera and QR updates (2026-10-20)
 
