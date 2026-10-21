@@ -57,6 +57,15 @@ unsigned Status(const td::QRReply& reply)
     td::CborReader in(raw);
     const auto status = Header(in);
     Check(reply.status == status, "Local result status differs from the QR reply");
+    const auto review = td::QRFailureReview(status);
+    if (status) { in.Tuple(0); in.End(); }
+    if (status == 0 || status == 1) Check(!review, "Success or explicit cancellation became a local error");
+    else {
+        Check(review && review->warning && Contains(review->summary, "Nothing has been signed or registered."),
+            "Command failure has no local explanation");
+        Check(review->title == (status == 2 ? "Request rejected" : status == 4 ? "Wrong Bitcoin network" : "Unsupported request"),
+            "Command failure has the wrong local explanation");
+    }
     return status;
 }
 

@@ -3,6 +3,8 @@
 #include "entropy.h"
 #include "entropy_rng.h"
 #include "seed_qr.h"
+#include "qr_commands.h"
+#include "cbor.h"
 #include "multisig_fixture.h"
 #include <key_io.h>
 #include <util/strencodings.h>
@@ -14,6 +16,29 @@ int main(int argc, char** argv)
 {
     try {
         td::Terminal terminal(dup(STDIN_FILENO));
+        if (argc == 2 && std::string_view(argv[1]).starts_with("qr-failure-")) {
+            const std::string_view mode(argv[1]);
+            ECC_Context context; SelectParams(ChainType::REGTEST); terminal.SetNetwork("Regtest");
+            td::Keys keys(fixture::Bytes(fixture::WORDS), {});
+            const auto fingerprint = keys.RootFingerprint();
+            const bool cancelled = mode == "qr-failure-cancelled";
+            td::CborWriter request;
+            request.Array(5); request.UInt(3); request.Bytes(std::array<uint8_t, 16>{});
+            request.Text(mode == "qr-failure-network" ? "main" : "regtest");
+            request.UInt(mode == "qr-failure-unsupported" ? 99 : cancelled ? 1 : 0);
+            if (cancelled) { request.Array(2); request.Array(0); request.UInt(0); }
+            else { request.Array(1); request.UInt(0); } // GET_INFO requires an empty array.
+            unsigned approvals = 0;
+            const auto reply = td::HandleQRRequest({"bytes", td::CborBytes(request.data)}, keys,
+                {[&](const auto&) { ++approvals; return false; }, {}, {}, {}});
+            if (const auto review = td::QRFailureReview(reply.status)) {
+                terminal.Notice(review->title, review->summary);
+                terminal.Revisit(*review); // The same explanation remains available from the error QR.
+            }
+            td::Require(keys.RootFingerprint() == fingerprint && approvals == unsigned(cancelled), "Error handling changed keys or requested approval");
+            std::printf("ERROR RESPONSE %u\n", reply.status);
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]).starts_with("seed-")) {
             const std::string_view mode(argv[1]);
             ECC_Context context; SelectParams(ChainType::REGTEST); terminal.SetNetwork("Regtest");

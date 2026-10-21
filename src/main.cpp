@@ -165,7 +165,10 @@ int main(int argc, char** argv)
                                 completed = td::ReviewScreen{"Confirmed address - review", lines, details};
                                 return terminal.Confirm("Verify wallet address", lines, "confirm this address", details);
                             }, approve});
-                        if (result.status) completed.reset();
+                        if (result.status) {
+                            completed = td::QRFailureReview(result.status);
+                            if (completed) terminal.Notice(completed->title, completed->summary);
+                        }
                         response = std::move(result.message);
                     }
                     if (response) td::ShowQR(terminal, *response, completed ? &*completed : nullptr);

@@ -106,6 +106,10 @@ through review pages; Esc cancels an operation before approval.
 Address checks, registration and signing show the wallet ID and full public
 descriptor in Details. Registration requires reviewing the spending rules and
 cosigner keys before typing `REGISTER`; signing requires typing `SIGN` after review.
+Unreleased source ignores capitalization and surrounding spaces for these two approval
+words. A typo stays at the confirmation prompt with feedback, rather than cancelling
+the request. Recovery words, passphrases, addresses and public keys are not changed
+by this rule. Command-request failures are explained locally before their error QR.
 The signing review shows every non-change destination and amount, the fee, and
 each verified change output's amount and index. Unusually high change indices also
 show the full address and a recovery warning. All change addresses and input

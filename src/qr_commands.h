@@ -18,4 +18,6 @@ struct QRReply {
 };
 
 QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRApproval& approve);
+// Local explanations only; errors on the wire retain their fixed status and empty result.
+std::optional<ReviewScreen> QRFailureReview(unsigned status);
 }

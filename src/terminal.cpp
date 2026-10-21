@@ -301,9 +301,12 @@ SecretBytes Terminal::Input(std::string_view title, const ReviewLines& introduct
     size_t hint_row{}, input_row{}, overflow{};
     const auto erase = [&]() { At(input_row, view.left); Write("\033[2K\033[?25l"); };
     const auto draw = [&]() {
-        auto text = Wrap(error.empty() ? introduction : ReviewLines{error}, view.width);
+        auto context = error.empty() ? introduction : ReviewLines{error};
+        // Invalid consent must not hide the risk warning, including on overflow.
+        if (!error.empty() && warning) context.insert(context.end(), introduction.begin(), introduction.end());
+        auto text = Wrap(context, view.width);
         if (hint_rows + (hint_rows && !text.empty() ? 1 : 0) + text.size() + 2 > view.height) {
-            if (!Pages(title, error.empty() ? introduction : ReviewLines{error}, "continue", {},
+            if (!Pages(title, context, "continue", {},
                 error.empty() ? PageMode::Review : PageMode::Error, warning)) throw Cancelled{};
             text.clear();
         }
@@ -480,11 +483,21 @@ bool Terminal::Approve(std::string_view title, const ReviewLines& lines, std::st
 {
     if (!Pages(title, lines, "continue", details, PageMode::Review, warning)) return false;
     try {
-        const auto answer = Input(title, {"You have reached the end of this review.",
-            confirmation_note.empty() ? "Confirm only if the details match what you intended." : std::string(confirmation_note)},
-            "Type " + std::string(confirmation) + " then Enter: ", 32,
-            nullptr, {}, {}, warning);
-        return std::string_view(reinterpret_cast<const char*>(answer.data()), answer.size()) == confirmation;
+        std::string error;
+        while (true) {
+            const auto answer = Input(title, {"Case and outer spaces are ignored.",
+                confirmation_note.empty() ? "Confirm only if the details match." : std::string(confirmation_note)},
+                "Type " + std::string(confirmation) + " then Enter: ", 32,
+                nullptr, {}, error, warning);
+            std::string_view text(reinterpret_cast<const char*>(answer.data()), answer.size());
+            const auto first = text.find_first_not_of(' ');
+            text = first == text.npos ? std::string_view{} : text.substr(first, text.find_last_not_of(' ') - first + 1);
+            const auto upper = [](unsigned char c) { return c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c; };
+            if (std::equal(text.begin(), text.end(), confirmation.begin(), confirmation.end(),
+                [&](auto a, auto b) { return upper(a) == upper(b); })) return true;
+            error = confirmation == "SIGN" ? "Not confirmed. Nothing signed." : "Not confirmed. Nothing approved.";
+            if (!warning && !confirmation_note.empty()) error += " " + std::string(confirmation_note);
+        }
     } catch (const Cancelled&) { return false; }
 }
 

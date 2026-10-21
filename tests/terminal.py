@@ -103,7 +103,7 @@ class Probe:
         assert bytes.fromhex(output.decode().strip()) == expected
 
 
-for confirmation, code in [(b"SIGN\r", 0), (b"yes\r", 2), (b"\x1b", 2)]:
+for confirmation, code in [(b"SIGN\r", 0), (b"SiGN\r", 0), (b" sign \r", 0), (b"\x1b", 2)]:
     p = Probe(rows=13)
     p.wait(b"Page 1/4")
     p.send(b"SIGN\r")  # Cannot approve on a review page.
@@ -182,6 +182,62 @@ p.finish(3)
 pipe = subprocess.run([sys.argv[1]], input=b"nSIGN\n", capture_output=True, timeout=5)
 assert pipe.returncode == 3 and b"Input must be a terminal" in pipe.stderr
 print("PASS: tty-only input, full review traversal, explicit consent, queued-input rejection, cancellation, resize and masked ASCII entry")
+
+for rows, columns in ((12, 40), (24, 80)):
+    for mode, keyword, accepted, cancelled in (("workflow-one", b"SIGN", b"EMPTY SIGNED", b"EMPTY CANCELLED"),
+                                                ("workflow-replace", b"REGISTER", b"REPLACED", b"KEPT")):
+        for cancel in (False, True):
+            p = Probe(mode, rows=rows, columns=columns)
+            while True:
+                p.wait(b"Esc:")
+                last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+                p.send(b"\r")
+                if b"Enter: continue" in last:
+                    break
+            p.wait(b"Type " + keyword + b" then Enter: ")
+            marker = b"Check the destinations," if keyword == b"SIGN" else b"Check the spending rules"
+            reviews = p.all_text.count(marker)
+            assert reviews, "Required review context was not shown"
+            for invalid in (b"", b" ", b"yes", keyword[:-1], keyword + b"x", b"SING" if keyword == b"SIGN" else b"REGSITER"):
+                # A queued correction must not approve after invalid input.
+                p.send(invalid + b"\r" + keyword + b"\r")
+                p.wait(b"Not confirmed.")
+                p.wait(b"Type " + keyword + b" then Enter: ")
+                assert p.process.poll() is None, "Invalid or queued confirmation approved/abandoned the request"
+                assert (b"Nothing signed." if keyword == b"SIGN" else b"Nothing approved.") in p.all_text
+            p.send(keyword + b" " * 33 + b"\r" + keyword + b"\r")
+            p.wait(b"This entry is too long.")
+            p.wait(b"Type " + keyword + b" then Enter: ")
+            assert p.process.poll() is None, "An overlong keyword was truncated into approval"
+            mixed = b"sIgN" if keyword == b"SIGN" else b"rEgIsTeR"
+            p.send(b"\x1b" if cancel else b"  " + mixed + b"  \r")
+            output, _ = p.finish(0)
+            assert (cancelled if cancel else accepted) in output
+            assert p.all_text.count(marker) == reviews, "Correction restarted the required review"
+print("PASS: case/outer-space tolerant consent, visible typo feedback, correction without rescanning, fresh Enter and unchanged state on cancel")
+
+for rows, columns in ((12, 40), (24, 80)):
+    for mode, status, title in (("invalid", 2, b"Request rejected"), ("network", 4, b"Wrong Bitcoin network"),
+                                ("unsupported", 5, b"Unsupported request")):
+        p = Probe("qr-failure-" + mode, rows=rows, columns=columns)
+        p.wait(title)
+        p.wait(b"Nothing has been signed")
+        for action in (b"Enter: continue", b"Enter: show QR again"):
+            while True:
+                p.wait(b"Esc:")
+                last = p.all_text.rsplit(b"\x1b[2J", 1)[-1]
+                if action in last:
+                    break
+                p.send(b"\r")
+            p.send(b"\r" if action == b"Enter: continue" else b"\x1b")
+        output, _ = p.finish(0)
+        assert b"ERROR RESPONSE " + str(status).encode() in output
+        assert b"Type SIGN" not in p.all_text and b"Type REGISTER" not in p.all_text
+        assert b"Signed transaction" not in p.all_text and b"Registered wallet" not in p.all_text
+p = Probe("qr-failure-cancelled")
+output, _ = p.finish(0)
+assert b"ERROR RESPONSE 1" in output and b"Request rejected" not in p.all_text
+print("PASS: local command error explanations before error replies, revisitable failures, unchanged keys and distinct explicit cancellation")
 
 for columns in (40, 80, 160):
     p = Probe("menu", rows=14, columns=columns)
@@ -518,6 +574,18 @@ for columns in (40, 80):
             confirmation = b" ".join(p.rows().values())
             assert b"miss" in confirmation and b"recovery" in confirmation, "Final confirmation lost the recovery risk"
             assert b"Unverified fee:" not in p.all_text and b"unverified input amounts" not in confirmation
+            p.send(b"SING\rSIGN\r")
+            p.wait(b"Not confirmed.")
+            p.wait(b"Type SIGN then Enter: ")
+            assert p.process.poll() is None, "Queued correction approved a high-change transaction"
+            confirmation = b" ".join(p.rows().values())
+            assert b"miss" in confirmation and b"recovery" in confirmation, "Correction hid the recovery warning"
+            p.send(b"SIGN" + b" " * 33 + b"\rSIGN\r")
+            p.wait(b"This entry is too long.")
+            p.wait(b"Type SIGN then Enter: ")
+            assert p.process.poll() is None, "An overlong correction approved a high-change transaction"
+            confirmation = b" ".join(p.rows().values())
+            assert b"miss" in confirmation and b"recovery" in confirmation, "Overlong input hid the recovery warning"
             p.send(b"SIGN\r" if stop == "sign" else b"\x1b")
             if stop == "sign":
                 p.wait(b"\x1b[0;31;40mSigned - high change index")

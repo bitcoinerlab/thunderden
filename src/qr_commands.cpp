@@ -113,4 +113,28 @@ QRReply HandleQRRequest(const QRMessage& message, const Keys& keys, const QRAppr
     else out.data.insert(out.data.end(), body.data.begin(), body.data.end());
     return {{"bytes", CborBytes(out.data)}, status};
 }
+
+std::optional<ReviewScreen> QRFailureReview(unsigned status)
+{
+    if (status == 0 || status == 1) return {}; // Success and explicit cancellation are not errors.
+    ReviewScreen review;
+    if (status == 2) {
+        review = {"Request rejected", {
+            "The request, wallet setup, registration proof or transaction could not be validated.",
+            "Check the wallet setup and transaction data in your wallet app, including previous transactions."}, {}};
+    } else if (status == 4) {
+        review = {"Wrong Bitcoin network", {
+            "Your wallet app requested a different Bitcoin network from this session.",
+            "Choose the same network in your wallet app. To change it here, end this session first."}, {}};
+    } else {
+        Require(status == 5, "Unknown QR reply status");
+        review = {"Unsupported request", {
+            "Your wallet app requested an operation Thunder Den does not support.",
+            "Check that your wallet app supports Thunder Den's QR commands."}, {}};
+    }
+    review.summary.insert(review.summary.begin(), {"Nothing has been signed or registered.", ""});
+    review.summary.insert(review.summary.end(), {"", "Scan the error response with your wallet app to report this failed request."});
+    review.warning = true;
+    return review;
+}
 }
